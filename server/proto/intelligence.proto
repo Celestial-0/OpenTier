@@ -1,0 +1,409 @@
+syntax = "proto3";
+
+package opentier.intelligence.v1;
+
+// =============================================================================
+// PROTO VERSIONING STRATEGY
+// =============================================================================
+// 
+// Version: 1.0.0 (2026-01-29)
+// 
+// VERSIONING RULES:
+// 1. Package versioning: opentier.intelligence.v1, v2, etc. for breaking changes
+// 2. Field numbering: Reserve 1-15 for frequently used fields (1-byte encoding)
+// 3. Deprecation: Use [deprecated = true] annotation, maintain for 2 minor versions
+// 4. Reserved fields: When removing fields, mark them as reserved
+// 5. Backward compatibility: Only add optional fields, never remove required ones
+//
+// BREAKING CHANGE POLICY:
+// - Major version bump (v1 → v2): Breaking changes allowed
+// - Minor version: New messages/fields only, no removals
+// - Both old and new versions supported for 6 months during migration
+//
+// FIELD RESERVATION:
+// reserved 1000 to 1999; // Reserved for internal use
+// reserved 2000 to 2999; // Reserved for extensions
+// =============================================================================
+
+// ============================================================================
+// HEALTH SERVICE
+// ============================================================================
+
+service Health {
+  rpc Check(HealthCheckRequest) returns (HealthCheckResponse);
+  rpc Ready(ReadyCheckRequest) returns (ReadyCheckResponse);
+}
+
+message HealthCheckRequest {}
+
+message HealthCheckResponse {
+  string status = 1;
+  optional string version = 2;
+  optional int64 uptime_seconds = 3;
+}
+
+message ReadyCheckRequest {}
+
+message ReadyCheckResponse {
+  bool ready = 1;
+  repeated string dependencies = 2;
+  map<string, bool> dependency_status = 3;
+}
+
+// ============================================================================
+// CHAT SERVICE
+// ============================================================================
+
+service Chat {
+  // Send a message and get complete response
+  rpc SendMessage(ChatRequest) returns (ChatResponse);
+  
+  // Stream chat response in real-time
+  rpc StreamChat(ChatRequest) returns (stream ChatStreamChunk);
+  
+  // Retrieve conversation history (Persisted in API, but this RPC allows Intel to wrap it if needed, 
+  // though API usually handles this directly. include for completeness if Architecture shifts)
+  rpc GetConversation(GetConversationRequest) returns (ConversationResponse);
+  
+  // Delete conversation
+  rpc DeleteConversation(DeleteConversationRequest) returns (DeleteConversationResponse);
+}
+
+message ChatRequest {
+  string user_id = 1;
+  string conversation_id = 2;
+  string message = 3;
+  optional ChatConfig config = 4;
+  map<string, string> metadata = 5;
+}
+
+message ChatConfig {
+  optional float temperature = 1;
+  optional int32 max_tokens = 2;
+  optional bool use_rag = 3;
+  optional string model = 4;
+  optional int32 context_limit = 5;
+}
+
+message ChatResponse {
+  string conversation_id = 1;
+  string message_id = 2;
+  string response = 3;
+  repeated ContextChunk sources = 4;
+  optional ChatMetrics metrics = 5;
+  int64 created_at = 6;
+}
+
+message ChatStreamChunk {
+  string conversation_id = 1;
+  string message_id = 2;
+  oneof chunk_type {
+    string token = 3;
+    ContextChunk source = 4;
+    ChatMetrics metrics = 5;
+    string error = 6;
+  }
+  bool is_final = 7;
+}
+
+message ChatMetrics {
+  int32 tokens_used = 1;
+  int32 prompt_tokens = 2;
+  int32 completion_tokens = 3;
+  float latency_ms = 4; // Aligned with API f32
+  int32 sources_retrieved = 5;
+}
+
+message ContextChunk {
+  string chunk_id = 1;
+  string document_id = 2;
+  string content = 3;
+  float relevance_score = 4;
+  optional string document_title = 5;
+  optional string source_url = 6;
+  map<string, string> metadata = 7;
+}
+
+message GetConversationRequest {
+  string user_id = 1;
+  string conversation_id = 2;
+  optional int32 limit = 3;
+  optional string cursor = 4;
+}
+
+message ConversationResponse {
+  string conversation_id = 1;
+  repeated ChatMessage messages = 2;
+  optional string next_cursor = 3;
+  int64 created_at = 4;
+  int64 updated_at = 5;
+  map<string, string> metadata = 6;
+}
+
+message ChatMessage {
+  string message_id = 1;
+  MessageRole role = 2;
+  string content = 3;
+  repeated ContextChunk sources = 4;
+  int64 created_at = 5;
+}
+
+enum MessageRole {
+  MESSAGE_ROLE_UNSPECIFIED = 0;
+  MESSAGE_ROLE_USER = 1;
+  MESSAGE_ROLE_ASSISTANT = 2;
+  MESSAGE_ROLE_SYSTEM = 3;
+}
+
+message DeleteConversationRequest {
+  string user_id = 1;
+  string conversation_id = 2;
+}
+
+message DeleteConversationResponse {
+  bool success = 1;
+  string conversation_id = 2;
+}
+
+// ============================================================================
+// RESOURCE SERVICE
+// ============================================================================
+
+service ResourceService {
+  // Standard resource addition (for files < 100MB)
+  rpc AddResource(AddResourceRequest) returns (AddResourceResponse);
+  
+  // Chunked upload for large files (> 100MB)
+  // Client streams file chunks, server responds with final status
+  rpc ChunkedUpload(stream FileChunk) returns (ChunkedUploadResponse);
+  
+  rpc GetResourceStatus(GetResourceStatusRequest) returns (ResourceStatusResponse);
+  rpc ListResources(ListResourcesRequest) returns (ListResourcesResponse);
+  rpc DeleteResource(DeleteResourceRequest) returns (DeleteResourceResponse);
+  rpc CancelIngestion(CancelIngestionRequest) returns (CancelIngestionResponse);
+  
+  // Database synchronization - allows API layer to sync state with Intelligence
+  rpc SyncResourceMetadata(SyncMetadataRequest) returns (SyncMetadataResponse);
+}
+
+message AddResourceRequest {
+  string user_id = 1;
+  string resource_id = 2;
+  oneof content {
+    string text = 3;
+    string url = 4;
+    bytes file_content = 5;
+  }
+  ResourceType type = 6;
+  optional string title = 7;
+  map<string, string> metadata = 8;
+  optional IngestionConfig config = 9;
+}
+
+message IngestionConfig {
+  optional int32 chunk_size = 1;
+  optional int32 chunk_overlap = 2;
+  optional bool auto_clean = 3;
+  optional bool generate_embeddings = 4;
+  optional int32 max_depth = 5;
+  optional bool follow_links = 6;
+}
+
+message AddResourceResponse {
+  string job_id = 1;
+  string resource_id = 2;
+  ResourceStatus status = 3;
+}
+
+message GetResourceStatusRequest {
+  string job_id = 1;
+  string resource_id = 2;
+  string user_id = 3;
+}
+
+message ResourceStatusResponse {
+  string job_id = 1;
+  string resource_id = 2;
+  ResourceStatus status = 3;
+  int32 chunks_created = 4;
+  optional string error = 5;
+  float progress = 6;
+}
+
+message ListResourcesRequest {
+  string user_id = 1;
+  optional int32 limit = 2;
+  optional string cursor = 3;
+  optional ResourceType type_filter = 4;
+  optional ResourceStatus status_filter = 5;
+}
+
+message ListResourcesResponse {
+  repeated ResourceItem items = 1;
+  optional string next_cursor = 2;
+  int32 total_count = 3;
+}
+
+message ResourceItem {
+  string id = 1;
+  ResourceType type = 2;
+  string content = 3; // Short summary or snippet
+  ResourceStatus status = 4;
+  ResourceStats stats = 5;
+  int64 created_at = 6;
+  map<string, string> metadata = 7;
+}
+
+message ResourceStats {
+  int32 documents = 1;
+  int32 chunks = 2;
+}
+
+message DeleteResourceRequest {
+  string user_id = 1;
+  string resource_id = 2;
+}
+
+message DeleteResourceResponse {
+  bool success = 1;
+  string resource_id = 2;
+}
+
+message CancelIngestionRequest {
+  string user_id = 1;
+  string job_id = 2;
+}
+
+message CancelIngestionResponse {
+  bool success = 1;
+  string job_id = 2;
+  optional string message = 3;
+}
+
+// ============================================================================
+// CHUNKED UPLOAD MESSAGES (for files > 100MB)
+// ============================================================================
+
+message FileChunk {
+  // First chunk must include metadata
+  oneof payload {
+    ChunkMetadata metadata = 1;  // First message: file metadata
+    bytes data = 2;              // Subsequent messages: raw file bytes
+  }
+  int32 chunk_index = 3;         // 0-indexed chunk number
+  bool is_last = 4;              // True for final chunk
+}
+
+message ChunkMetadata {
+  string user_id = 1;
+  string resource_id = 2;        // Client-generated or empty for server-generated
+  string filename = 3;
+  string content_type = 4;       // MIME type (e.g., application/pdf)
+  int64 total_size = 5;          // Total file size in bytes
+  int32 total_chunks = 6;        // Expected number of chunks
+  ResourceType type = 7;
+  optional string title = 8;
+  map<string, string> metadata = 9;
+  optional IngestionConfig config = 10;
+  optional string checksum = 11; // SHA256 of complete file for integrity verification
+}
+
+message ChunkedUploadResponse {
+  string job_id = 1;
+  string resource_id = 2;
+  ResourceStatus status = 3;
+  int32 chunks_received = 4;     // Number of chunks successfully received
+  optional string error = 5;
+  optional string checksum = 6;  // Server-computed checksum for verification
+}
+
+// ============================================================================
+// DATABASE SYNCHRONIZATION MESSAGES
+// ============================================================================
+
+message SyncMetadataRequest {
+  string user_id = 1;
+  SyncDirection direction = 2;
+  optional int64 since_timestamp = 3;  // Unix timestamp for incremental sync
+  repeated string resource_ids = 4;    // Specific resources to sync (empty = all)
+}
+
+enum SyncDirection {
+  SYNC_DIRECTION_UNSPECIFIED = 0;
+  SYNC_DIRECTION_API_TO_INTELLIGENCE = 1;  // API pushes state to Intelligence
+  SYNC_DIRECTION_INTELLIGENCE_TO_API = 2;  // Intelligence pushes state to API
+  SYNC_DIRECTION_BIDIRECTIONAL = 3;        // Full reconciliation
+}
+
+message SyncMetadataResponse {
+  bool success = 1;
+  int32 resources_synced = 2;
+  int32 conflicts_found = 3;
+  repeated SyncConflict conflicts = 4;
+  int64 sync_timestamp = 5;           // Timestamp of this sync for next incremental
+  optional string next_cursor = 6;    // For paginated sync
+}
+
+message SyncConflict {
+  string resource_id = 1;
+  ConflictType type = 2;
+  string api_state = 3;         // State in API database
+  string intelligence_state = 4; // State in Intelligence database
+  ConflictResolution resolution = 5;
+}
+
+enum ConflictType {
+  CONFLICT_TYPE_UNSPECIFIED = 0;
+  CONFLICT_TYPE_MISSING_IN_API = 1;
+  CONFLICT_TYPE_MISSING_IN_INTELLIGENCE = 2;
+  CONFLICT_TYPE_STATUS_MISMATCH = 3;
+  CONFLICT_TYPE_METADATA_MISMATCH = 4;
+}
+
+enum ConflictResolution {
+  CONFLICT_RESOLUTION_UNSPECIFIED = 0;
+  CONFLICT_RESOLUTION_USE_API = 1;
+  CONFLICT_RESOLUTION_USE_INTELLIGENCE = 2;
+  CONFLICT_RESOLUTION_MERGE = 3;
+  CONFLICT_RESOLUTION_MANUAL = 4;  // Requires manual intervention
+}
+
+enum ResourceType {
+  RESOURCE_TYPE_UNSPECIFIED = 0;
+  RESOURCE_TYPE_TEXT = 1;
+  RESOURCE_TYPE_MARKDOWN = 2;
+  RESOURCE_TYPE_PDF = 3;
+  RESOURCE_TYPE_HTML = 4;
+  RESOURCE_TYPE_WEBSITE = 5;
+  RESOURCE_TYPE_CODE = 6;
+}
+
+enum ResourceStatus {
+  RESOURCE_STATUS_UNSPECIFIED = 0;
+  RESOURCE_STATUS_QUEUED = 1;
+  RESOURCE_STATUS_PROCESSING = 2;
+  RESOURCE_STATUS_COMPLETED = 3;
+  RESOURCE_STATUS_FAILED = 4;
+  RESOURCE_STATUS_PARTIAL = 5;
+}
+
+
+
+// Internal Document message for processing pipeline
+message Document {
+  string id = 1;
+  string title = 2;
+  string content = 3;
+  DocumentType type = 4;
+  string source_url = 5;
+  map<string, string> metadata = 6;
+}
+
+enum DocumentType {
+  DOCUMENT_TYPE_UNSPECIFIED = 0;
+  DOCUMENT_TYPE_TEXT = 1;
+  DOCUMENT_TYPE_MARKDOWN = 2;
+  DOCUMENT_TYPE_HTML = 3;
+  DOCUMENT_TYPE_PDF = 4;
+  DOCUMENT_TYPE_CODE = 5;
+}
