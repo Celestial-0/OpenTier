@@ -1,0 +1,42 @@
+# =========================
+# Rust / Cargo
+# =========================
+/target/
+**/target/
+
+# Cargo lock (binary only; keep if you ship libs)
+# Cargo.lock
+
+# =========================
+# Generated code
+# =========================
+# Protobuf / gRPC generated artifacts
+**/*.rs.bk
+
+# =========================
+# OS / Editor junk
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# IDEs
+# =========================
+.vscode/
+.idea/
+*.iml
+
+# =========================
+# Logs
+# =========================
+*.log
+
+# =========================
+# Environment
+# =========================
+.env
+.env.*
+!.env.example
+/migrations/_old_backup/*
+
+.sqlx

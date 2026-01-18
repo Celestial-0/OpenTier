@@ -137,6 +137,30 @@ docker-compose up -d
 
 ---
 
+## 📊 Status
+
+**Version**: v0.1.0 (MVP)  
+**Stability**: Pre-release
+
+### ✅ Implemented
+- Authentication (email/password, OAuth)
+- Chat with RAG support
+- Streaming responses (SSE)
+- Admin management
+- Rate limiting & observability
+
+### 🔄 In Progress
+- Clint Inerfaces (Web, Mobile)
+- WebSocket support
+- Multi-file upload
+
+
+### 📋 Planned
+- Vector DB abstraction (Qdrant, Milvus)
+- Advanced features
+
+---
+
 ## 📄 License
 
 MIT License
