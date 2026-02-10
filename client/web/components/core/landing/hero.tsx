@@ -1,6 +1,6 @@
 import { HeroBackground } from "@/components/core/landing/hero/background";
 import { HeroContent } from "@/components/core/landing/hero/content";
-import { HeroChatDemo } from "@/components/core/landing/hero/chat-demo-new";
+import { HeroChatDemo } from "@/components/core/landing/hero/chat-demo";
 
 export const Hero = () => {
     return (
