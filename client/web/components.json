@@ -30,6 +30,7 @@
     "@tailark": "https://tailark.com/r/{name}.json",
     "@kokonutui": "https://kokonutui.com/r/{name}.json",
     "@efferd": "https://efferd.com/r/{name}.json",
-    "@spectrumui": "https://ui.spectrumhq.in/r/{name}.json"
+    "@spectrumui": "https://ui.spectrumhq.in/r/{name}.json",
+    "@animate-ui": "https://animate-ui.com/r/{name}.json"
   }
 }
