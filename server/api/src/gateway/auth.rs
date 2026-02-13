@@ -5,7 +5,7 @@ use axum::{
 
 use crate::auth::{
     forgot_password, oauth::oauth_authorize, oauth::oauth_callback, recover_account, refresh,
-    resend_verification, reset_password, signin, signout, signup, verify,
+    resend_verification, reset_password, signin, signout, signup, verify_get, verify_post,
 };
 use crate::gateway::AppState;
 use crate::middleware::{auth_rate_limiter, sensitive_auth_rate_limiter};
@@ -23,7 +23,7 @@ pub fn routes() -> Router<AppState> {
         .route("/signup", post(signup))
         .route("/signout", post(signout))
         .route("/refresh", post(refresh))
-        .route("/verify-email", get(verify))
+        .route("/verify-email", get(verify_get).post(verify_post))
         .layer(auth_rate_limiter());
 
     // Sensitive auth routes (password reset, account recovery)

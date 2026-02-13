@@ -20,6 +20,12 @@ pub fn generate_session_token() -> String {
         .collect()
 }
 
+/// Generate a 6-digit numeric OTP
+pub fn generate_otp() -> String {
+    let otp: u32 = rand::thread_rng().gen_range(0..1000000);
+    format!("{:06}", otp)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

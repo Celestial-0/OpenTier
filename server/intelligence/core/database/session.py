@@ -14,7 +14,7 @@ from sqlalchemy import text
 from sqlalchemy.pool import NullPool, AsyncAdaptedQueuePool
 
 from core.config import get_config
-from database.models import Base
+from .models import Base
 
 logger = logging.getLogger(__name__)
 
