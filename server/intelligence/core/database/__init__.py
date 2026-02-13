@@ -1,6 +1,6 @@
 """Database module - models and session management."""
 
-from database.models import (
+from .models import (
     Base,
     ChatMessage,
     Conversation,
@@ -8,7 +8,7 @@ from database.models import (
     DocumentChunk,
     IngestionJob,
 )
-from database.session import (
+from .session import (
     close_db,
     get_engine,
     get_session,

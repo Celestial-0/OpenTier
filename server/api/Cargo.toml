@@ -44,12 +44,12 @@ bcrypt = "0.15"
 oauth2 = "4.4"
 reqwest = { version = "0.12", features = ["json"] }
 rand = "0.8"
-lettre = { version = "0.11", features = ["tokio1-native-tls"] }
+lettre = { version = "0.11", default-features = false, features = ["tokio1-rustls-tls", "hostname", "builder", "smtp-transport"] }
 ipnetwork = "0.21.1"
 
 # Rate Limiting
 tower = "0.5.2"
-tower-http = { version = "0.6", features = ["cors", "trace"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "fs"] }
 governor = "0.10.4"
 tower_governor = { version = "0.8.0", features = ["axum"] }
 

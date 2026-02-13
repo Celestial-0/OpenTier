@@ -60,7 +60,9 @@ pub struct RefreshResponse {
 
 #[derive(Debug, Deserialize)]
 pub struct VerifyEmailRequest {
-    pub token: String,
+    pub token: Option<String>,
+    pub email: Option<String>,
+    pub otp: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

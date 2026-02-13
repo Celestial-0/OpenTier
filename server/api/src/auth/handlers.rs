@@ -1,16 +1,17 @@
 use axum::{
-    extract::{Query, State},
-    http::{header, HeaderMap},
     Json,
+    extract::{Query, State},
+    http::{HeaderMap, header},
 };
 
 use crate::gateway::AppState;
 
 use super::{
-    service, AuthError, ForgotPasswordRequest, ForgotPasswordResponse, RecoverAccountRequest,
+    AuthError, ForgotPasswordRequest, ForgotPasswordResponse, RecoverAccountRequest,
     RecoverAccountResponse, RefreshRequest, RefreshResponse, ResendVerificationRequest,
     ResendVerificationResponse, ResetPasswordRequest, ResetPasswordResponse, SignInRequest,
     SignInResponse, SignUpRequest, SignUpResponse, VerifyEmailRequest, VerifyEmailResponse,
+    service,
 };
 
 // ===== Sign Up =====
@@ -83,13 +84,23 @@ pub async fn refresh(
 
 // ===== Email Verification =====
 
-/// GET /auth/verify-email?token=xxx
-/// Verify user email address
-pub async fn verify(
+/// GET /auth/verify-email
+/// Verify user email address via token link
+pub async fn verify_get(
     State(app_state): State<AppState>,
     Query(params): Query<VerifyEmailRequest>,
 ) -> Result<Json<VerifyEmailResponse>, AuthError> {
     let response = service::verify_email(&app_state.db, params).await?;
+    Ok(Json(response))
+}
+
+/// POST /auth/verify-email
+/// Verify user email address via OTP or token
+pub async fn verify_post(
+    State(app_state): State<AppState>,
+    Json(payload): Json<VerifyEmailRequest>,
+) -> Result<Json<VerifyEmailResponse>, AuthError> {
+    let response = service::verify_email(&app_state.db, payload).await?;
     Ok(Json(response))
 }
 

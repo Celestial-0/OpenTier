@@ -1,8 +1,3 @@
-#!/usr/bin/env python3
-"""
-Migration runner for intelligence service using SQLAlchemy.
-Runs SQL migrations in order based on timestamp in filename.
-"""
 import asyncio
 import sys
 from pathlib import Path

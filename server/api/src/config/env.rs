@@ -50,6 +50,8 @@ pub struct EmailConfig {
     pub smtp_username: String,
     pub smtp_password: String,
     pub from_email: String,
+    pub frontend_url: String,
+    pub api_url: String,
 }
 
 #[derive(Debug, Clone)]
@@ -100,7 +102,7 @@ impl ServerConfig {
             port: env::var("SERVER_PORT")
                 .ok()
                 .and_then(|p| p.parse().ok())
-                .unwrap_or(8080),
+                .unwrap_or(4000),
         })
     }
 }
@@ -120,7 +122,7 @@ impl GoogleOAuthConfig {
             client_id: env::var("GOOGLE_CLIENT_ID")?,
             client_secret: env::var("GOOGLE_CLIENT_SECRET")?,
             redirect_url: env::var("GOOGLE_REDIRECT_URL")
-                .unwrap_or_else(|_| "http://localhost:8080/auth/oauth/google/callback".to_string()),
+                .unwrap_or_else(|_| "http://localhost:4000/auth/oauth/google/callback".to_string()),
         })
     }
 }
@@ -131,7 +133,7 @@ impl GitHubOAuthConfig {
             client_id: env::var("GITHUB_CLIENT_ID")?,
             client_secret: env::var("GITHUB_CLIENT_SECRET")?,
             redirect_url: env::var("GITHUB_REDIRECT_URL")
-                .unwrap_or_else(|_| "http://localhost:8080/auth/oauth/github/callback".to_string()),
+                .unwrap_or_else(|_| "http://localhost:4000/auth/oauth/github/callback".to_string()),
         })
     }
 }
@@ -148,6 +150,9 @@ impl EmailConfig {
             smtp_password: env::var("SMTP_PASSWORD").unwrap_or_default(),
             from_email: env::var("FROM_EMAIL")
                 .unwrap_or_else(|_| "noreply@example.com".to_string()),
+            frontend_url: env::var("FRONTEND_URL")
+                .unwrap_or_else(|_| "http://localhost:3000".to_string()),
+            api_url: env::var("API_URL").unwrap_or_else(|_| "http://localhost:4000".to_string()),
         })
     }
 }

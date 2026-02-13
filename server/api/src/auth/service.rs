@@ -53,17 +53,19 @@ pub async fn signup(
     .fetch_one(db)
     .await?;
 
-    // Generate verification token
+    // Generate verification token and OTP
     let verification_token = tokens::generate_token();
+    let otp = tokens::generate_otp();
     let expires_at = Utc::now() + Duration::hours(24);
 
     sqlx::query!(
         r#"
-        INSERT INTO verification_tokens (user_id, token, expires_at)
-        VALUES ($1, $2, $3)
+        INSERT INTO verification_tokens (user_id, token, otp, expires_at)
+        VALUES ($1, $2, $3, $4)
         "#,
         user.id,
         verification_token,
+        otp,
         expires_at
     )
     .execute(db)
@@ -72,7 +74,7 @@ pub async fn signup(
     // Send verification email
     let email_service = EmailService::new(email_config.clone());
     if let Err(e) = email_service
-        .send_verification_email(&req.email, &verification_token)
+        .send_verification_email(&req.email, &verification_token, &otp)
         .await
     {
         tracing::error!("Failed to send verification email: {:?}", e);
@@ -156,23 +158,64 @@ pub async fn refresh_session(
 
 // ===== Email Verification =====
 
-/// Verify email address with token
+struct VerificationTokenRow {
+    user_id: uuid::Uuid,
+    expires_at: chrono::DateTime<Utc>,
+}
+
+/// Verify email address with token or OTP
 pub async fn verify_email(
     db: &PgPool,
     req: VerifyEmailRequest,
 ) -> Result<VerifyEmailResponse, AuthError> {
-    // Find verification token
-    let token_record = sqlx::query!(
-        r#"
-        SELECT user_id, expires_at
-        FROM verification_tokens
-        WHERE token = $1
-        "#,
-        req.token
-    )
-    .fetch_optional(db)
-    .await?
-    .ok_or(AuthError::InvalidToken)?;
+    // Find verification token record
+    let token_record = if let Some(token) = req.token {
+        sqlx::query!(
+            r#"
+            SELECT user_id, expires_at
+            FROM verification_tokens
+            WHERE token = $1
+            "#,
+            token
+        )
+        .fetch_optional(db)
+        .await?
+        .map(|r| VerificationTokenRow {
+            user_id: r.user_id,
+            expires_at: r.expires_at,
+        })
+    } else if let (Some(email), Some(otp)) = (req.email, req.otp) {
+        // Find user first
+        let user = sqlx::query!("SELECT id FROM users WHERE email = $1", email)
+            .fetch_optional(db)
+            .await?;
+
+        if let Some(user) = user {
+            sqlx::query!(
+                r#"
+                SELECT user_id, expires_at
+                FROM verification_tokens
+                WHERE user_id = $1 AND otp = $2
+                "#,
+                user.id,
+                otp
+            )
+            .fetch_optional(db)
+            .await?
+            .map(|r| VerificationTokenRow {
+                user_id: r.user_id,
+                expires_at: r.expires_at,
+            })
+        } else {
+            None
+        }
+    } else {
+        return Err(AuthError::Validation(
+            "Missing verification token or code".to_string(),
+        ));
+    };
+
+    let token_record = token_record.ok_or(AuthError::InvalidToken)?;
 
     // Check if expired
     if token_record.expires_at < Utc::now() {
@@ -191,10 +234,10 @@ pub async fn verify_email(
     .execute(db)
     .await?;
 
-    // Delete verification token
+    // Delete verification tokens for this user
     sqlx::query!(
-        "DELETE FROM verification_tokens WHERE token = $1",
-        req.token
+        "DELETE FROM verification_tokens WHERE user_id = $1",
+        token_record.user_id
     )
     .execute(db)
     .await?;
@@ -360,17 +403,19 @@ pub async fn resend_verification_email(
         .execute(db)
         .await?;
 
-        // Generate new verification token
+        // Generate new verification token and OTP
         let verification_token = tokens::generate_token();
+        let otp = tokens::generate_otp();
         let expires_at = Utc::now() + Duration::hours(24);
 
         sqlx::query!(
             r#"
-            INSERT INTO verification_tokens (user_id, token, expires_at)
-            VALUES ($1, $2, $3)
+            INSERT INTO verification_tokens (user_id, token, otp, expires_at)
+            VALUES ($1, $2, $3, $4)
             "#,
             user.id,
             verification_token,
+            otp,
             expires_at
         )
         .execute(db)
@@ -379,7 +424,7 @@ pub async fn resend_verification_email(
         // Send verification email
         let email_service = EmailService::new(email_config.clone());
         if let Err(e) = email_service
-            .send_verification_email(&user.email, &verification_token)
+            .send_verification_email(&user.email, &verification_token, &otp)
             .await
         {
             tracing::error!("Failed to send verification email: {:?}", e);

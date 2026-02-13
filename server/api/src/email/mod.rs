@@ -1,6 +1,6 @@
 use crate::config::env::EmailConfig;
 use lettre::{
-    Message, SmtpTransport, Transport, message::header::ContentType,
+    AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor, message::header::ContentType,
     transport::smtp::authentication::Credentials,
 };
 
@@ -11,6 +11,7 @@ pub struct EmailService {
     smtp_username: String,
     smtp_password: String,
     from_email: String,
+    frontend_url: String,
 }
 
 impl EmailService {
@@ -22,6 +23,7 @@ impl EmailService {
             smtp_username: config.smtp_username,
             smtp_password: config.smtp_password,
             from_email: config.from_email,
+            frontend_url: config.frontend_url,
         }
     }
 
@@ -30,10 +32,11 @@ impl EmailService {
         &self,
         to_email: &str,
         verification_token: &str,
+        verification_code: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let verification_url = format!(
-            "http://localhost:8000/auth/verify-email?token={}",
-            verification_token
+            "{}/auth/verify-email?token={}",
+            self.frontend_url, verification_token
         );
 
         let email_body = format!(
@@ -41,7 +44,8 @@ impl EmailService {
             <html>
                 <body>
                     <h2>Verify Your Email</h2>
-                    <p>Thank you for signing up! Please click the link below to verify your email address:</p>
+                    <p>Your verification code is: <h3 style="display:inline;">{}</h3></p>
+                    <p>Or click the link below to verify your email address:</p>
                     <p><a href="{}">Verify Email</a></p>
                     <p>Or copy and paste this link into your browser:</p>
                     <p>{}</p>
@@ -50,7 +54,7 @@ impl EmailService {
                 </body>
             </html>
             "#,
-            verification_url, verification_url
+            verification_code, verification_url, verification_url
         );
 
         self.send_email(to_email, "Verify Your Email Address", &email_body)
@@ -63,7 +67,7 @@ impl EmailService {
         to_email: &str,
         reset_token: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let reset_url = format!("http://localhost:8000/reset-password?token={}", reset_token);
+        let reset_url = format!("{}/auth/reset-password?token={}", self.frontend_url, reset_token);
 
         let email_body = format!(
             r#"
@@ -94,7 +98,7 @@ impl EmailService {
         html_body: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
         // If SMTP is not configured, just log the email
-        if self.smtp_username.is_empty() {
+        if self.smtp_username.is_empty() || self.smtp_username.contains("your-email") {
             tracing::info!(
                 "📧 Email would be sent to {}: {}\n{}",
                 to_email,
@@ -113,12 +117,12 @@ impl EmailService {
 
         let creds = Credentials::new(self.smtp_username.clone(), self.smtp_password.clone());
 
-        let mailer = SmtpTransport::relay(&self.smtp_host)?
+        let mailer = AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&self.smtp_host)?
             .credentials(creds)
             .port(self.smtp_port)
             .build();
 
-        mailer.send(&email)?;
+        mailer.send(email).await?;
         tracing::info!("✅ Email sent successfully to {}", to_email);
 
         Ok(())
