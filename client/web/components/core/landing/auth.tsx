@@ -10,36 +10,43 @@ import { type AuthView } from "./auth/constants"
 import { SignInView } from "./auth/sign-in"
 import { SignUpFlow } from "./auth/sign-up"
 import { ForgotPasswordView } from "./auth/forgot-password"
+import { VerifyView } from "./auth/verify"
+
+import { useAuth } from "@/context/auth-context"
 
 interface AuthModalProps {
     triggerText?: string
-    onLogin?: (data: any) => void
     className?: string
+    id?: string
 }
 
 function AuthModal({
     triggerText = "Sign up / Sign in",
-    onLogin,
-    className
+    className,
+    id
 }: AuthModalProps) {
-    const [isOpen, setIsOpen] = React.useState(false)
+    const {
+        isModalOpen,
+        authView,
+        authError,
+        attemptedEmail,
+        openModal,
+        closeModal,
+        setAuthView,
+        signIn,
+        signUp,
+        resendVerification,
+        verifyEmail,
+        forgotPassword
+    } = useAuth()
+
     const [mounted, setMounted] = React.useState(false)
-    const [view, setView] = React.useState<AuthView>('signin')
 
     // Cleanup on mount
     React.useEffect(() => {
         setMounted(true)
         return () => setMounted(false)
     }, [])
-
-    // Reset view when closing
-    React.useEffect(() => {
-        if (!isOpen) {
-            // Optional: reset view after delay or immediately effect
-            const timer = setTimeout(() => setView('signin'), 300)
-            return () => clearTimeout(timer)
-        }
-    }, [isOpen])
 
     const containerVariants: Variants = {
         hidden: { opacity: 0, scale: 0.95, y: 10 },
@@ -64,13 +71,13 @@ function AuthModal({
 
     const modalContent = (
         <AnimatePresence>
-            {isOpen && (
+            {isModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
-                        onClick={() => setIsOpen(false)}
+                        onClick={closeModal}
                         className="absolute inset-0 bg-black/40 backdrop-blur-sm"
                     />
 
@@ -84,7 +91,7 @@ function AuthModal({
                     >
                         <div className="absolute right-4 top-4 z-10">
                             <button
-                                onClick={() => setIsOpen(false)}
+                                onClick={closeModal}
                                 className="rounded-full p-2 text-muted-foreground hover:bg-accent hover:text-foreground"
                             >
                                 <X className="h-4 w-4" />
@@ -92,32 +99,40 @@ function AuthModal({
                         </div>
 
                         <AnimatePresence mode="wait" initial={false}>
-                            {view === 'signin' && (
+                            {authView === 'signin' && (
                                 <SignInView
                                     key="signin"
-                                    onNavigate={setView}
-                                    onSubmit={(data) => {
-                                        console.log("Login", data)
-                                        onLogin?.(data)
-                                        // setIsOpen(false) // Optionally keep open or close
-                                    }}
+                                    onNavigate={setAuthView}
+                                    error={authError}
+                                    onResend={resendVerification}
+                                    onSubmit={signIn}
                                 />
                             )}
-                            {view === 'forgot-password' && (
+                            {authView === 'forgot-password' && (
                                 <ForgotPasswordView
                                     key="forgot"
-                                    onNavigate={setView}
+                                    onNavigate={setAuthView}
+                                    onSubmit={forgotPassword}
                                 />
                             )}
-                            {view === 'signup' && (
+                            {authView === 'signup' && (
                                 <SignUpFlow
                                     key="signup"
-                                    onNavigate={setView}
-                                    onSubmit={(data) => {
-                                        console.log("Signup", data)
-                                        onLogin?.(data)
-                                        setIsOpen(false)
+                                    onNavigate={setAuthView}
+                                    onVerify={verifyEmail}
+                                    onSubmit={signUp}
+                                    onComplete={closeModal}
+                                />
+                            )}
+                            {authView === 'verify' && (
+                                <VerifyView
+                                    onNavigate={setAuthView}
+                                    initialEmail={attemptedEmail}
+                                    onVerify={async (email, otp, token) => {
+                                        await verifyEmail(email, otp, token)
+                                        closeModal()
                                     }}
+                                    onResend={resendVerification}
                                 />
                             )}
                         </AnimatePresence>
@@ -130,8 +145,8 @@ function AuthModal({
     return (
         <>
             <InteractiveHoverButton
-
-                onClick={() => setIsOpen(true)}
+                id={id}
+                onClick={() => openModal()}
                 className={cn(className, "border-0 bg-transparent")}
             >
                 {triggerText}

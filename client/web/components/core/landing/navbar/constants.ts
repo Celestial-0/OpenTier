@@ -10,7 +10,7 @@ export const mockUser = {
     email: "yash@opentier.dev",
     avatar: "https://api.dicebear.com/9.x/lorelei/svg?seed=Yash",
     role: "Admin",
-    isLoggedIn: false, // Toggle this to show/hide user menu
+    isLoggedIn: true, // Toggle this to show/hide user menu
 };
 
 // Knowledge Base items - URLs will be managed by store/context

@@ -15,7 +15,7 @@ import {
     SelectValue,
 } from "@/components/ui/select"
 import { signupSchema, type AuthView } from "./constants"
-import { OTPInput } from "@/components/core/landing/auth/otp-input"
+import { OTPInput } from "@/components/auth/otp-input"
 import { toast } from "sonner"
 
 export function SignUpFlow({
