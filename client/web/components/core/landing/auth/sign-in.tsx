@@ -11,10 +11,14 @@ import { signInSchema, type AuthView, socialButtons } from "./constants"
 
 export function SignInView({
     onNavigate,
-    onSubmit
+    onSubmit,
+    error,
+    onResend
 }: {
     onNavigate: (view: AuthView) => void
     onSubmit: (data: z.infer<typeof signInSchema>) => void
+    error?: string | null
+    onResend?: (email: string) => void
 }) {
     const form = useForm<z.infer<typeof signInSchema>>({
         resolver: zodResolver(signInSchema)
@@ -46,14 +50,45 @@ export function SignInView({
             exit="exit"
             className="space-y-6"
         >
-            <motion.div variants={itemVariants} className="text-center">
-                <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-                    Welcome back
-                </h2>
-                <p className="mt-2 text-sm text-muted-foreground">
-                    Sign in to your account
+            <motion.div variants={itemVariants} className="space-y-4 text-center">
+                <h2 className="text-2xl font-bold tracking-tight">Welcome back</h2>
+                <p className="text-sm text-muted-foreground">
+                    Enter your credentials to access your account
                 </p>
             </motion.div>
+
+            {error && (
+                <div className="p-3 text-sm text-destructive bg-destructive/10 rounded-md border border-destructive/20 flex flex-col gap-2">
+                    <p>{error}</p>
+                    {(error === "Email not verified" || error.includes("verified")) && onResend && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full border-destructive/20 hover:bg-destructive/10 hover:text-destructive"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                const email = form.getValues("email");
+                                if (email) onResend(email);
+                            }}
+                        >
+                            Resend Verification Email
+                        </Button>
+                    )}
+                    {(error === "Email not verified" || error.includes("verified")) && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="w-full h-auto p-0 text-xs text-destructive hover:text-destructive hover:underline"
+                            onClick={(e) => {
+                                e.preventDefault()
+                                onNavigate('verify')
+                            }}
+                        >
+                            Or enter verification code
+                        </Button>
+                    )}
+                </div>
+            )}
 
             <motion.div variants={itemVariants} className="grid grid-cols-5 gap-3">
                 {socialButtons.map((btn, i) => (

@@ -10,39 +10,33 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { User, Mail, Calendar, Shield, Edit } from "lucide-react";
+import { useUserStore } from "@/store/user-store";
+import { format } from "date-fns";
 
-// Mock data matching /user/me API response
-const mockUser = {
-    user_id: "550e8400-e29b-41d4-a716-446655440000",
-    email: "user@example.com",
-    full_name: "John Doe",
-    role: "admin" as "user" | "admin",
-    is_verified: true,
-    created_at: 1699920000, // Nov 14, 2023
-    updated_at: 1706484000,
-};
-
-const formatDate = (timestamp: number) => {
-    return new Date(timestamp * 1000).toLocaleDateString("en-US", {
-        month: "long",
-        day: "numeric",
-        year: "numeric",
-    });
-};
-
-const getInitials = (name: string | null) => {
-    if (!name) return "U";
-    return name
-        .split(" ")
-        .map((n) => n[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 2);
-};
-
-export const Profile = () => {
+export function Profile() {
+    const { user, updateProfile, isLoading } = useUserStore();
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-    const [fullName, setFullName] = useState(mockUser.full_name || "");
+    const [name, setName] = useState(user?.name || "");
+    const [username, setUsername] = useState(user?.username || "");
+
+    const handleSave = async () => {
+        await updateProfile({ name, username });
+        setIsEditDialogOpen(false);
+    };
+
+    const getInitials = (name: string | null | undefined) => {
+        if (!name) return "U";
+        return name
+            .split(" ")
+            .map((n) => n[0])
+            .join("")
+            .toUpperCase()
+            .slice(0, 2);
+    };
+
+    if (!user) {
+        return <div className="p-6 text-center">Please sign in to view your profile.</div>;
+    }
 
     return (
         <div className="space-y-6">
@@ -56,9 +50,9 @@ export const Profile = () => {
                     <div className="flex flex-col items-center gap-6 md:flex-row md:items-start">
                         {/* Avatar */}
                         <Avatar className="h-24 w-24">
-                            <AvatarImage src="" alt={mockUser.full_name || "User"} />
+                            <AvatarImage src={user.avatar_url || ""} alt={user.name || "User"} />
                             <AvatarFallback className="text-2xl">
-                                {getInitials(mockUser.full_name)}
+                                {getInitials(user.name)}
                             </AvatarFallback>
                         </Avatar>
 
@@ -67,17 +61,17 @@ export const Profile = () => {
                             <div>
                                 <div className="flex items-center justify-center gap-2 md:justify-start">
                                     <h3 className="text-2xl font-bold">
-                                        {mockUser.full_name || "User"}
+                                        {user.name || "User"}
                                     </h3>
-                                    <Badge variant={mockUser.role === "admin" ? "default" : "secondary"}>
-                                        {mockUser.role}
+                                    <Badge variant={user.role === "admin" ? "default" : "secondary"}>
+                                        {user.role}
                                     </Badge>
                                 </div>
-                                <p className="text-sm text-muted-foreground">{mockUser.email}</p>
+                                <p className="text-sm text-muted-foreground">{user.email}</p>
                             </div>
 
                             <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-                                <DialogTrigger>
+                                <DialogTrigger asChild>
                                     <Button variant="outline">
                                         <Edit className="mr-2 h-4 w-4" />
                                         Edit Profile
@@ -95,16 +89,25 @@ export const Profile = () => {
                                             <Label htmlFor="fullName">Full Name</Label>
                                             <Input
                                                 id="fullName"
-                                                value={fullName}
-                                                onChange={(e) => setFullName(e.target.value)}
+                                                value={name}
+                                                onChange={(e) => setName(e.target.value)}
                                                 placeholder="Enter your full name"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="username">Username</Label>
+                                            <Input
+                                                id="username"
+                                                value={username}
+                                                onChange={(e) => setUsername(e.target.value)}
+                                                placeholder="Enter your username"
                                             />
                                         </div>
                                         <div className="space-y-2">
                                             <Label htmlFor="email">Email</Label>
                                             <Input
                                                 id="email"
-                                                value={mockUser.email}
+                                                value={user.email}
                                                 disabled
                                                 className="bg-muted"
                                             />
@@ -117,8 +120,8 @@ export const Profile = () => {
                                         <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
                                             Cancel
                                         </Button>
-                                        <Button onClick={() => setIsEditDialogOpen(false)}>
-                                            Save Changes
+                                        <Button onClick={handleSave} disabled={isLoading}>
+                                            {isLoading ? "Saving..." : "Save Changes"}
                                         </Button>
                                     </DialogFooter>
                                 </DialogContent>
@@ -138,10 +141,10 @@ export const Profile = () => {
                         <Mail className="h-5 w-5 text-muted-foreground" />
                         <div className="flex-1">
                             <p className="text-sm font-medium">Email Address</p>
-                            <p className="text-sm text-muted-foreground">{mockUser.email}</p>
+                            <p className="text-sm text-muted-foreground">{user.email}</p>
                         </div>
-                        {mockUser.is_verified ? (
-                            <Badge variant="default" className="bg-green-500">
+                        {user.email_verified ? (
+                            <Badge variant="default" className="bg-green-500 hover:bg-green-600">
                                 Verified
                             </Badge>
                         ) : (
@@ -156,7 +159,7 @@ export const Profile = () => {
                         <div className="flex-1">
                             <p className="text-sm font-medium">User ID</p>
                             <p className="text-sm text-muted-foreground font-mono">
-                                {mockUser.user_id}
+                                {user.id}
                             </p>
                         </div>
                     </div>
@@ -168,7 +171,7 @@ export const Profile = () => {
                         <div className="flex-1">
                             <p className="text-sm font-medium">Account Role</p>
                             <p className="text-sm text-muted-foreground capitalize">
-                                {mockUser.role}
+                                {user.role}
                             </p>
                         </div>
                     </div>
@@ -180,35 +183,12 @@ export const Profile = () => {
                         <div className="flex-1">
                             <p className="text-sm font-medium">Member Since</p>
                             <p className="text-sm text-muted-foreground">
-                                {formatDate(mockUser.created_at)}
+                                {format(new Date(user.created_at), "MMMM d, yyyy")}
                             </p>
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
-
-            {/* Account Statistics */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Account Statistics</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="grid gap-4 md:grid-cols-3">
-                        <div className="space-y-1">
-                            <p className="text-sm text-muted-foreground">Total Conversations</p>
-                            <p className="text-2xl font-bold">12</p>
-                        </div>
-                        <div className="space-y-1">
-                            <p className="text-sm text-muted-foreground">Total Messages</p>
-                            <p className="text-2xl font-bold">156</p>
-                        </div>
-                        <div className="space-y-1">
-                            <p className="text-sm text-muted-foreground">Active Sessions</p>
-                            <p className="text-2xl font-bold">2</p>
                         </div>
                     </div>
                 </CardContent>
             </Card>
         </div>
     );
-};
+}

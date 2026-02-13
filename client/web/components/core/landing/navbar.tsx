@@ -18,12 +18,15 @@ import { OpentierLogo } from "@/components/core/common/logos";
 import { AuthModal } from "@/components/core/landing/auth";
 import Link from "next/link";
 import { useRef, useState } from "react";
-import { knowledgeBaseItems, mockUser } from "./navbar/constants";
+import { knowledgeBaseItems } from "./navbar/constants";
 import { MobileMenu } from "./navbar/mobile-menu";
 import { ListItem } from "./navbar/nav-list-item";
 import { SmoothProfileDropdown } from "./navbar/profile-dropdown";
+import { useAuth } from "@/context/auth-context";
+import { toast } from "sonner";
 
 export const Navbar = () => {
+  const { user, isAuthenticated, signIn, signUp, resendVerification, verifyEmail, forgotPassword } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Refs for animated icons in navigation
@@ -115,16 +118,13 @@ export const Navbar = () => {
             <AnimatedThemeToggler />
 
             {/* User Menu or Auth Buttons */}
-            {mockUser.isLoggedIn ? (
-              <SmoothProfileDropdown user={mockUser} />
+            {isAuthenticated && user ? (
+              <SmoothProfileDropdown user={user} />
             ) : (
               <div className="hidden md:block">
                 <AuthModal
+                  id="auth-trigger"
                   triggerText="Get Started"
-                  onLogin={(provider) => {
-                    // TODO: Connect to auth store/context
-                    console.log(`Login with ${provider}`);
-                  }}
                 />
               </div>
             )}
@@ -143,7 +143,7 @@ export const Navbar = () => {
         <MobileMenu
           isOpen={mobileMenuOpen}
           setIsOpen={setMobileMenuOpen}
-          user={mockUser}
+          user={user}
         />
       </div>
     </nav>

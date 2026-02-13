@@ -1,11 +1,6 @@
 "use client";
 
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
-import {
-    useChatRuntime,
-    AssistantChatTransport,
-} from "@assistant-ui/react-ai-sdk";
-import { lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import { Thread } from "@/components/core/chat/ChatArea/thread";
 import {
     SidebarInset,
@@ -22,14 +17,15 @@ import {
     BreadcrumbPage,
     BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import { useChatRuntimeAdapter } from "./chat-runtime-adapter";
+import { useAuth } from "@/context/auth-context";
+import { useChatStore, FREE_MESSAGE_LIMIT } from "@/store/chat-store";
+import Link from "next/link";
 
 export const AiChat = () => {
-    const runtime = useChatRuntime({
-        sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
-        transport: new AssistantChatTransport({
-            api: "/api/chat",
-        }),
-    });
+    const runtime = useChatRuntimeAdapter();
+    const { isAuthenticated } = useAuth();
+    const { freeMessageCount } = useChatStore();
 
     return (
         <AssistantRuntimeProvider runtime={runtime}>
@@ -54,7 +50,21 @@ export const AiChat = () => {
                                 </BreadcrumbList>
                             </Breadcrumb>
                         </header>
-                        <div className="flex-1 overflow-hidden">
+                        <div className="flex-1 overflow-hidden relative">
+                            {/* Free Tier Banner */}
+                            {!isAuthenticated && (
+                                <div className="absolute top-0 left-0 right-0 z-10 bg-muted/50 backdrop-blur-sm border-b px-4 py-1 flex items-center justify-center text-xs text-muted-foreground">
+                                    {freeMessageCount >= FREE_MESSAGE_LIMIT ? (
+                                        <span>
+                                            Free limit reached. <Link href="#" onClick={() => document.getElementById('auth-trigger')?.click()} className="underline font-medium text-primary">Sign in</Link> for unlimited chats.
+                                        </span>
+                                    ) : (
+                                        <span>
+                                            Free Preview: {FREE_MESSAGE_LIMIT - freeMessageCount} messages remaining. <Link href="#" onClick={() => document.getElementById('auth-trigger')?.click()} className="underline font-medium text-primary">Sign in</Link> to save progress.
+                                        </span>
+                                    )}
+                                </div>
+                            )}
                             <Thread />
                         </div>
                     </SidebarInset>

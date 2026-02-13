@@ -5,20 +5,18 @@ import { motion } from "framer-motion";
 import useMeasure from "react-use-measure";
 import Image from "next/image";
 import { UserIcon, SettingsIcon, BellIcon, LogoutIcon } from "@/components/core/common/icons/animated";
+import { UserResponse } from "@/lib/api-types";
+import { useAuth } from "@/context/auth-context";
 
 // Smooth Profile Dropdown Component
 const easeOutQuint: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
 interface SmoothProfileDropdownProps {
-    user: {
-        name: string;
-        email: string;
-        avatar: string;
-        role: string;
-    };
+    user: UserResponse;
 }
 
 export const SmoothProfileDropdown = ({ user }: SmoothProfileDropdownProps) => {
+    const { logout } = useAuth();
     const [isOpen, setIsOpen] = useState(false);
     const [activeItem, setActiveItem] = useState<string | null>(null);
     const [hoveredItem, setHoveredItem] = useState<string | null>(null);
@@ -71,6 +69,8 @@ export const SmoothProfileDropdown = ({ user }: SmoothProfileDropdownProps) => {
         }
     };
 
+    const avatarUrl = user.avatar_url || `https://api.dicebear.com/9.x/initials/svg?seed=${user.name || user.email}`;
+
     return (
         <div ref={containerRef} className="relative h-9 w-9 hidden md:block">
             <motion.div
@@ -106,8 +106,8 @@ export const SmoothProfileDropdown = ({ user }: SmoothProfileDropdownProps) => {
                 >
                     <div className="relative h-9 w-9 rounded-full overflow-hidden ring-2 ring-primary/20 hover:ring-primary/40 transition-all duration-200">
                         <Image
-                            src={user.avatar}
-                            alt={user.name}
+                            src={avatarUrl}
+                            alt={user.name || "User"}
                             width={36}
                             height={36}
                             className="object-cover pointer-events-none select-none"
@@ -151,15 +151,15 @@ export const SmoothProfileDropdown = ({ user }: SmoothProfileDropdownProps) => {
                         >
                             <div className="relative h-10 w-10 rounded-full overflow-hidden ring-2 ring-primary/20 flex-shrink-0">
                                 <Image
-                                    src={user.avatar}
-                                    alt={user.name}
+                                    src={avatarUrl}
+                                    alt={user.name || "User"}
                                     width={40}
                                     height={40}
                                     className="object-cover"
                                 />
                             </div>
                             <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium leading-none truncate">{user.name}</p>
+                                <p className="text-sm font-medium leading-none truncate">{user.name || "User"}</p>
                                 <p className="text-xs leading-none text-muted-foreground my-1 truncate">
                                     {user.email}
                                 </p>
@@ -207,6 +207,7 @@ export const SmoothProfileDropdown = ({ user }: SmoothProfileDropdownProps) => {
                                             setActiveItem(item.id);
                                             console.log(`Navigate to ${item.label}`);
                                             if (item.id === "logout") {
+                                                logout();
                                                 setIsOpen(false);
                                             }
                                         }}
@@ -267,3 +268,4 @@ export const SmoothProfileDropdown = ({ user }: SmoothProfileDropdownProps) => {
         </div>
     );
 };
+

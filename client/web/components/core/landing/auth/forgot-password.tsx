@@ -8,20 +8,31 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { forgotPasswordSchema, type AuthView } from "./constants"
+import { toast } from "sonner"
 
 export function ForgotPasswordView({
-    onNavigate
+    onNavigate,
+    onSubmit: onForgotPassword
 }: {
     onNavigate: (view: AuthView) => void
+    onSubmit: (email: string) => Promise<void> | void
 }) {
     const form = useForm<z.infer<typeof forgotPasswordSchema>>({
         resolver: zodResolver(forgotPasswordSchema)
     })
     const [submitted, setSubmitted] = React.useState(false)
+    const [isLoading, setIsLoading] = React.useState(false)
 
-    const onSubmit = (data: any) => {
-        console.log("Forgot Password", data)
-        setSubmitted(true)
+    const onSubmit = async (data: any) => {
+        setIsLoading(true)
+        try {
+            await onForgotPassword(data.email)
+            setSubmitted(true)
+        } catch (e: any) {
+            toast.error(e.message || "Failed to send reset link")
+        } finally {
+            setIsLoading(false)
+        }
     }
 
     return (
@@ -86,8 +97,8 @@ export function ForgotPasswordView({
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.4 }}
                     >
-                        <Button type="submit" className="w-full rounded-xl">
-                            Send Reset Link
+                        <Button type="submit" className="w-full rounded-xl" disabled={isLoading}>
+                            {isLoading ? "Sending..." : "Send Reset Link"}
                         </Button>
                     </motion.div>
                 </form>
