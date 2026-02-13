@@ -9,15 +9,17 @@ import { Sessions } from "./sessions";
 import { Profile } from "./profile";
 import { Settings } from "./settings";
 import { Admin } from "./admin";
-import { LayoutDashboard, MessageSquare, Shield, User, Settings as SettingsIcon, ShieldCheck } from "lucide-react";
+import { Notifications } from "./notifications";
+import { LayoutDashboard, MessageSquare, Shield, User, Settings as SettingsIcon, ShieldCheck, Bell } from "lucide-react";
+import { useUi } from "@/context/ui-context";
+import { useAuth } from "@/context/auth-context";
 
-// Mock user role - in real app this would come from auth context
-const mockUserRole: "user" | "admin" = "admin";
 
 export const DashboardUI = () => {
-    const [activeTab, setActiveTab] = useState("overview");
+    const { user } = useAuth();
+    const { activeDashboardTab, setActiveDashboardTab } = useUi();
     return (
-        <div className="container mx-auto p-6 max-w-7xl">
+        <div className="container mx-auto p-6 max-w-6xl">
             <div className="space-y-6">
                 {/* Dashboard Header */}
                 <div>
@@ -28,8 +30,8 @@ export const DashboardUI = () => {
                 </div>
 
                 {/* Dashboard Tabs */}
-                <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-                    <TabsList className="grid w-full grid-cols-3 lg:grid-cols-6 gap-2">
+                <Tabs value={activeDashboardTab} onValueChange={setActiveDashboardTab} className="space-y-6">
+                    <TabsList className={`grid w-full grid-cols-2 ${user?.role === 'admin' ? 'lg:grid-cols-6' : 'lg:grid-cols-5'} gap-2`}>
                         <TabsTrigger value="overview">
                             <LayoutDashboard className="mr-2 h-4 w-4" />
                             <span className="hidden sm:inline">Overview</span>
@@ -50,7 +52,7 @@ export const DashboardUI = () => {
                             <SettingsIcon className="mr-2 h-4 w-4" />
                             <span className="hidden sm:inline">Settings</span>
                         </TabsTrigger>
-                        {mockUserRole === "admin" && (
+                        {user?.role === "admin" && (
                             <TabsTrigger value="admin">
                                 <ShieldCheck className="mr-2 h-4 w-4 text-red-500" />
                                 <span className="hidden sm:inline">Admin</span>
@@ -59,7 +61,7 @@ export const DashboardUI = () => {
                     </TabsList>
 
                     <TabsContent value="overview">
-                        <Overview onNavigateToConversations={() => setActiveTab("conversations")} />
+                        <Overview onNavigateToConversations={() => setActiveDashboardTab("conversations")} />
                     </TabsContent>
 
                     <TabsContent value="conversations">
@@ -74,11 +76,12 @@ export const DashboardUI = () => {
                         <Profile />
                     </TabsContent>
 
+
                     <TabsContent value="settings">
-                        <Settings />
+                        <Settings onNavigateToSessions={() => setActiveDashboardTab("sessions")} />
                     </TabsContent>
 
-                    {mockUserRole === "admin" && (
+                    {user?.role === "admin" && (
                         <TabsContent value="admin">
                             <Admin />
                         </TabsContent>

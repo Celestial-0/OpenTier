@@ -111,11 +111,9 @@ export function Sessions() {
                                         </TableCell>
                                         <TableCell className="text-right py-4">
                                             <AlertDialog>
-                                                <AlertDialogTrigger asChild>
-                                                    <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10">
-                                                        <LogOut className="h-4 w-4 mr-2" />
-                                                        Revoke
-                                                    </Button>
+                                                <AlertDialogTrigger render={<Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10" />}>
+                                                    <LogOut className="h-4 w-4 mr-2" />
+                                                    Revoke
                                                 </AlertDialogTrigger>
                                                 <AlertDialogContent>
                                                     <AlertDialogHeader>

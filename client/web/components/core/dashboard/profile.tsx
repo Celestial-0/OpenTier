@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { User, Mail, Calendar, Shield, Edit } from "lucide-react";
 import { useUserStore } from "@/store/user-store";
 import { format } from "date-fns";
+import { Notifications } from "./notifications";
 
 export function Profile() {
     const { user, updateProfile, isLoading } = useUserStore();
@@ -49,7 +50,7 @@ export function Profile() {
                 <CardContent>
                     <div className="flex flex-col items-center gap-6 md:flex-row md:items-start">
                         {/* Avatar */}
-                        <Avatar className="h-24 w-24">
+                        <Avatar className="h-16 w-16">
                             <AvatarImage src={user.avatar_url || ""} alt={user.name || "User"} />
                             <AvatarFallback className="text-2xl">
                                 {getInitials(user.name)}
@@ -57,75 +58,79 @@ export function Profile() {
                         </Avatar>
 
                         {/* User Info */}
-                        <div className="flex-1 space-y-4 text-center md:text-left">
-                            <div>
+                        <div className="flex flex-1 flex-col justify-between gap-4 md:flex-row md:items-start">
+                            <div className="space-y-1 text-center md:text-left">
                                 <div className="flex items-center justify-center gap-2 md:justify-start">
-                                    <h3 className="text-2xl font-bold">
+                                    <h3 className="text-2xl font-bold tracking-tight">
                                         {user.name || "User"}
                                     </h3>
-                                    <Badge variant={user.role === "admin" ? "default" : "secondary"}>
+                                    <Badge variant={user.role === "admin" ? "default" : "secondary"} className="capitalize">
                                         {user.role}
                                     </Badge>
                                 </div>
-                                <p className="text-sm text-muted-foreground">{user.email}</p>
+                                <div className="flex items-center justify-center gap-1.5 text-muted-foreground md:justify-start">
+                                    <Mail className="h-4 w-4" />
+                                    <span className="text-sm font-medium">{user.email}</span>
+                                </div>
                             </div>
 
-                            <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-                                <DialogTrigger asChild>
-                                    <Button variant="outline">
+                            <div className="flex items-center justify-center gap-2 md:justify-end">
+                                <Notifications />
+                                <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+                                    <DialogTrigger render={<Button variant="outline" size="sm" />}>
                                         <Edit className="mr-2 h-4 w-4" />
                                         Edit Profile
-                                    </Button>
-                                </DialogTrigger>
-                                <DialogContent>
-                                    <DialogHeader>
-                                        <DialogTitle>Edit Profile</DialogTitle>
-                                        <DialogDescription>
-                                            Update your profile information
-                                        </DialogDescription>
-                                    </DialogHeader>
-                                    <div className="space-y-4 py-4">
-                                        <div className="space-y-2">
-                                            <Label htmlFor="fullName">Full Name</Label>
-                                            <Input
-                                                id="fullName"
-                                                value={name}
-                                                onChange={(e) => setName(e.target.value)}
-                                                placeholder="Enter your full name"
-                                            />
+                                    </DialogTrigger>
+                                    <DialogContent>
+                                        <DialogHeader>
+                                            <DialogTitle>Edit Profile</DialogTitle>
+                                            <DialogDescription>
+                                                Update your profile information
+                                            </DialogDescription>
+                                        </DialogHeader>
+                                        <div className="space-y-4 py-4">
+                                            <div className="space-y-2">
+                                                <Label htmlFor="fullName">Full Name</Label>
+                                                <Input
+                                                    id="fullName"
+                                                    value={name}
+                                                    onChange={(e) => setName(e.target.value)}
+                                                    placeholder="Enter your full name"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label htmlFor="username">Username</Label>
+                                                <Input
+                                                    id="username"
+                                                    value={username}
+                                                    onChange={(e) => setUsername(e.target.value)}
+                                                    placeholder="Enter your username"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label htmlFor="email">Email</Label>
+                                                <Input
+                                                    id="email"
+                                                    value={user.email}
+                                                    disabled
+                                                    className="bg-muted"
+                                                />
+                                                <p className="text-xs text-muted-foreground">
+                                                    Email cannot be changed
+                                                </p>
+                                            </div>
                                         </div>
-                                        <div className="space-y-2">
-                                            <Label htmlFor="username">Username</Label>
-                                            <Input
-                                                id="username"
-                                                value={username}
-                                                onChange={(e) => setUsername(e.target.value)}
-                                                placeholder="Enter your username"
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label htmlFor="email">Email</Label>
-                                            <Input
-                                                id="email"
-                                                value={user.email}
-                                                disabled
-                                                className="bg-muted"
-                                            />
-                                            <p className="text-xs text-muted-foreground">
-                                                Email cannot be changed
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <DialogFooter>
-                                        <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
-                                            Cancel
-                                        </Button>
-                                        <Button onClick={handleSave} disabled={isLoading}>
-                                            {isLoading ? "Saving..." : "Save Changes"}
-                                        </Button>
-                                    </DialogFooter>
-                                </DialogContent>
-                            </Dialog>
+                                        <DialogFooter>
+                                            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                                                Cancel
+                                            </Button>
+                                            <Button onClick={handleSave} disabled={isLoading}>
+                                                {isLoading ? "Saving..." : "Save Changes"}
+                                            </Button>
+                                        </DialogFooter>
+                                    </DialogContent>
+                                </Dialog>
+                            </div>
                         </div>
                     </div>
                 </CardContent>

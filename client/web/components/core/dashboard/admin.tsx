@@ -14,6 +14,10 @@ import { Users, Database, BarChart3, Search, Shield, Trash2, FileText, Activity,
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { SiRust, SiPython } from "react-icons/si";
 
+import { useQuery } from "@/hooks/use-query";
+import { apiClient } from "@/lib/api-client";
+import { HealthResponse } from "@/lib/api-types";
+
 // Mock data matching /admin/* API responses
 const mockSystemStats = {
     total_users: 542,
@@ -24,10 +28,7 @@ const mockSystemStats = {
     active_sessions: 87,
 };
 
-const systemHealth = {
-    rust_api_layer: "healthy",
-    python_intelligence_layer: "healthy",
-}
+
 
 const mockUsers = [
     {
@@ -128,6 +129,17 @@ const getStatusColor = (status: string) => {
 };
 
 export const Admin = () => {
+
+    const RustApiHealth = useQuery<HealthResponse>({
+            queryKey: ["rust-api-health"],
+            queryFn: () => apiClient<HealthResponse>("/health/api"),
+    });
+    const PythonApiHealth = useQuery<HealthResponse>({
+            queryKey: ["python-api-health"],
+            queryFn: () => apiClient<HealthResponse>("/health/intelligence"),
+    });
+
+
     const [searchQuery, setSearchQuery] = useState("");
     const [curlUrl, setCurlUrl] = useState("");
     const [method, setMethod] = useState("GET");
@@ -139,67 +151,6 @@ export const Admin = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [isCopied, setIsCopied] = useState(false);
 
-    const handleCurlRequest = async () => {
-        if (!curlUrl) return;
-        setIsLoading(true);
-        setCurlResponse(null);
-        setResponseStatus(null);
-        setResponseTime(null);
-
-        const startTime = performance.now();
-
-        try {
-            let headers = {};
-            try {
-                if (requestHeaders.trim()) {
-                    headers = JSON.parse(requestHeaders);
-                }
-            } catch (e) {
-                console.error("Failed to parse headers", e);
-            }
-
-            const options: RequestInit = {
-                method: method,
-                headers: headers,
-            };
-
-            if (method !== "GET" && method !== "HEAD" && requestBody.trim()) {
-                options.body = requestBody;
-            }
-
-            const response = await fetch(curlUrl, options);
-            const endTime = performance.now();
-            const timeTaken = (endTime - startTime).toFixed(0) + "ms";
-
-            setResponseStatus(response.status);
-            setResponseTime(timeTaken);
-
-            const contentType = response.headers.get("content-type");
-            if (contentType && contentType.includes("application/json")) {
-                const data = await response.json();
-                setCurlResponse(JSON.stringify(data, null, 2));
-            } else {
-                const text = await response.text();
-                setCurlResponse(text);
-            }
-
-        } catch (error: any) {
-            const endTime = performance.now();
-            setResponseTime((endTime - startTime).toFixed(0) + "ms");
-            setResponseStatus(0);
-            setCurlResponse(`Error: ${error.message || "Network Request Failed"}\n\nNote: This might be due to CORS if you are requesting an external resource.`);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const copyToClipboard = () => {
-        if (curlResponse) {
-            navigator.clipboard.writeText(curlResponse);
-            setIsCopied(true);
-            setTimeout(() => setIsCopied(false), 2000);
-        }
-    };
 
     const filteredUsers = mockUsers.filter((user) =>
         user.email.toLowerCase().includes(searchQuery.toLowerCase())
@@ -584,14 +535,15 @@ export const Admin = () => {
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        {systemHealth.rust_api_layer === "healthy" ? (
+                                        {RustApiHealth.data?.status === "healthy" ? (
                                             <>
+                                                <p className="text-xs text-muted-foreground">{(RustApiHealth.data?.uptime_seconds /( 60 * 60 * 24)).toFixed(2)} days</p>
                                                 <CheckCircle2 className="h-5 w-5 text-green-500" />
                                                 <Badge variant="outline" className="border-green-500 text-green-700 dark:text-green-400">
                                                     Healthy
                                                 </Badge>
                                             </>
-                                        ) : systemHealth.rust_api_layer === "degraded" ? (
+                                        ) : RustApiHealth.data?.status === "degraded" ? (
                                             <>
                                                 <AlertCircle className="h-5 w-5 text-yellow-500" />
                                                 <Badge variant="outline" className="border-yellow-500 text-yellow-700 dark:text-yellow-400">
@@ -621,14 +573,15 @@ export const Admin = () => {
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        {systemHealth.python_intelligence_layer === "healthy" ? (
+                                        {PythonApiHealth.data?.status === "healthy" ? (
                                             <>
+                                                <p className="text-xs text-muted-foreground">{(PythonApiHealth.data?.uptime_seconds /( 60 * 60 * 24)).toFixed(2)} days</p>
                                                 <CheckCircle2 className="h-5 w-5 text-green-500" />
                                                 <Badge variant="outline" className="border-green-500 text-green-700 dark:text-green-400">
                                                     Healthy
                                                 </Badge>
                                             </>
-                                        ) : systemHealth.python_intelligence_layer === "degraded" ? (
+                                        ) : PythonApiHealth.data?.status === "degraded" ? (
                                             <>
                                                 <AlertCircle className="h-5 w-5 text-yellow-500" />
                                                 <Badge variant="outline" className="border-yellow-500 text-yellow-700 dark:text-yellow-400">

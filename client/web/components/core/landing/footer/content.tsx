@@ -4,6 +4,9 @@ import Link from "next/link";
 import { motion } from "motion/react";
 import { CheckCircle2, CalendarDays } from "lucide-react";
 
+import { useQuery } from "@/hooks/use-query";
+import { apiClient } from "@/lib/api-client";
+
 import { buttonVariants } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -15,6 +18,8 @@ import {
 import { AnimatedShinyText } from "@/components/ui/animated-shiny-text";
 import { AnimatedUnderline } from "@/components/ui/animated-underline";
 import { OpentierLogo } from "@/components/core/common/logos";
+
+import type { HealthResponse } from "@/lib/api-types";
 
 import { cn } from "@/lib/utils";
 import {
@@ -29,6 +34,21 @@ import {
 import { SocialButton } from "@/components/core/landing/footer/social-button";
 
 export function FooterContent() {
+
+    const RustApiHealth = useQuery<HealthResponse>({
+        queryKey: ["rust-api-health"],
+        queryFn: () => apiClient<HealthResponse>("/health/api"),
+    });
+    const PythonApiHealth = useQuery<HealthResponse>({
+        queryKey: ["python-api-health"],
+        queryFn: () => apiClient<HealthResponse>("/health/intelligence"),
+    });
+
+    const isSystemHealthy = RustApiHealth.data?.status === "healthy" && PythonApiHealth.data?.status === "healthy";
+    const statusBadgeColor = isSystemHealthy ? "text-emerald-500" : (RustApiHealth.isError || PythonApiHealth.isError ? "text-red-500" : "text-amber-500");
+    const statusBadgeBg = isSystemHealthy ? "bg-emerald-500/10 border-emerald-500/20" : (RustApiHealth.isError || PythonApiHealth.isError ? "bg-red-500/10 border-red-500/20" : "bg-amber-500/10 border-amber-500/20");
+    const statusDotColor = isSystemHealthy ? "bg-emerald-500" : (RustApiHealth.isError || PythonApiHealth.isError ? "bg-red-500" : "bg-amber-500");
+
     return (
         <div className="container relative z-10 mx-auto px-4 text-center lg:text-left">
             <motion.div
@@ -91,10 +111,10 @@ export function FooterContent() {
                                 {FOOTER_TEXT.systemStatusTitle}
                             </h4>
 
-                            <div className="flex items-center gap-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-3 py-1">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                <AnimatedShinyText className="text-[10px] font-semibold text-emerald-500">
-                                    {FOOTER_TEXT.systemStatusBadge}
+                            <div className={cn("flex items-center gap-2 rounded-full px-3 py-1 border", statusBadgeBg)}>
+                                <span className={cn("w-1.5 h-1.5 rounded-full animate-pulse", statusDotColor)} />
+                                <AnimatedShinyText className={cn("text-[10px] font-semibold", statusBadgeColor)}>
+                                    {isSystemHealthy ? FOOTER_TEXT.systemStatusBadge : (RustApiHealth.isError || PythonApiHealth.isError ? "Degraded" : "Partial")}
                                 </AnimatedShinyText>
                             </div>
                         </div>
@@ -115,7 +135,12 @@ export function FooterContent() {
                                                 {item.label}
                                             </span>
                                         </div>
-                                        <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                                        <CheckCircle2 className={cn(
+                                            "w-4 h-4",
+                                            item.label === "Rust API Layer"
+                                                ? (RustApiHealth.data?.status === "healthy" ? "text-emerald-500" : (RustApiHealth.isError || RustApiHealth.data?.status === "unhealthy" ? "text-red-500" : "text-muted-foreground"))
+                                                : (PythonApiHealth.data?.status === "healthy" ? "text-emerald-500" : (PythonApiHealth.isError || PythonApiHealth.data?.status === "unhealthy" ? "text-red-500" : "text-muted-foreground"))
+                                        )} />
                                     </div>
 
                                     {i !== SYSTEM_STATUS.length - 1 && (
@@ -239,3 +264,6 @@ export function FooterContent() {
         </div>
     );
 }
+
+
+

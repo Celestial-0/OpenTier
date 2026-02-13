@@ -23,6 +23,10 @@ interface UiContextType {
     activeModal: string | null;
     openModal: (modalId: string) => void;
     closeModal: () => void;
+
+    // Dashboard Navigation
+    activeDashboardTab: string;
+    setActiveDashboardTab: (tab: string) => void;
 }
 
 const UiContext = createContext<UiContextType | undefined>(undefined);
@@ -31,6 +35,7 @@ export function UiProvider({ children }: { children: React.ReactNode }) {
     const [isSidebarOpen, setIsSidebarOpenState] = useState(true);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [activeModal, setActiveModal] = useState<string | null>(null);
+    const [activeDashboardTab, setActiveDashboardTab] = useState("overview");
 
     const toggleSidebar = useCallback(() => {
         setIsSidebarOpenState((prev) => !prev);
@@ -59,6 +64,8 @@ export function UiProvider({ children }: { children: React.ReactNode }) {
                 activeModal,
                 openModal,
                 closeModal,
+                activeDashboardTab,
+                setActiveDashboardTab,
             }}
         >
             {children}

@@ -3,6 +3,7 @@ import {
     LogoutIcon,
     MessageCircleMoreIcon,
     SettingsIcon,
+    ShieldCheckIcon,
     UserIcon,
     UsersIcon,
 } from "@/components/core/common/icons/animated";
@@ -13,6 +14,7 @@ import { Dispatch, SetStateAction } from "react";
 import { knowledgeBaseItems } from "./constants";
 import { UserResponse } from "@/lib/api-types";
 import { useAuth } from "@/context/auth-context";
+import { useUi } from "@/context/ui-context";
 import { toast } from "sonner";
 
 interface MobileMenuProps {
@@ -23,6 +25,7 @@ interface MobileMenuProps {
 
 export const MobileMenu = ({ isOpen, setIsOpen, user }: MobileMenuProps) => {
     const { logout, signIn, signUp, resendVerification, verifyEmail } = useAuth();
+    const { setActiveDashboardTab } = useUi();
 
     if (!isOpen) return null;
 
@@ -74,38 +77,91 @@ export const MobileMenu = ({ isOpen, setIsOpen, user }: MobileMenuProps) => {
                             </div>
                         </div>
 
-                        <button
+                        <Link
+                            href="/dashboard"
                             onClick={() => {
-                                console.log('Navigate to Profile');
+                                setActiveDashboardTab("overview");
+                                setIsOpen(false);
+                            }}
+                            className="flex items-center gap-2 w-full rounded-md px-4 py-2 text-sm font-medium transition-all duration-200 hover:bg-muted text-left"
+                        >
+                            <UsersIcon size={16} />
+                            Overview
+                        </Link>
+
+                        <Link
+                            href="/dashboard"
+                            onClick={() => {
+                                setActiveDashboardTab("conversations");
+                                setIsOpen(false);
+                            }}
+                            className="flex items-center gap-2 w-full rounded-md px-4 py-2 text-sm font-medium transition-all duration-200 hover:bg-muted text-left"
+                        >
+                            <MessageCircleMoreIcon size={16} />
+                            Conversations
+                        </Link>
+
+                        <Link
+                            href="/dashboard"
+                            onClick={() => {
+                                setActiveDashboardTab("sessions");
+                                setIsOpen(false);
+                            }}
+                            className="flex items-center gap-2 w-full rounded-md px-4 py-2 text-sm font-medium transition-all duration-200 hover:bg-muted text-left"
+                        >
+                            <ShieldCheckIcon size={16} />
+                            Sessions
+                        </Link>
+
+                        <Link
+                            href="/dashboard"
+                            onClick={() => {
+                                setActiveDashboardTab("profile");
                                 setIsOpen(false);
                             }}
                             className="flex items-center gap-2 w-full rounded-md px-4 py-2 text-sm font-medium transition-all duration-200 hover:bg-muted text-left"
                         >
                             <UserIcon size={16} />
                             Profile
-                        </button>
+                        </Link>
 
-                        <button
+                        <Link
+                            href="/dashboard"
                             onClick={() => {
-                                console.log('Navigate to Settings');
-                                setIsOpen(false);
-                            }}
-                            className="flex items-center gap-2 w-full rounded-md px-4 py-2 text-sm font-medium transition-all duration-200 hover:bg-muted text-left"
-                        >
-                            <SettingsIcon size={16} />
-                            Settings
-                        </button>
-
-                        <button
-                            onClick={() => {
-                                console.log('Navigate to Notifications');
+                                setActiveDashboardTab("notifications");
                                 setIsOpen(false);
                             }}
                             className="flex items-center gap-2 w-full rounded-md px-4 py-2 text-sm font-medium transition-all duration-200 hover:bg-muted text-left"
                         >
                             <BellIcon size={16} />
                             Notifications
-                        </button>
+                        </Link>
+
+                        <Link
+                            href="/dashboard"
+                            onClick={() => {
+                                setActiveDashboardTab("settings");
+                                setIsOpen(false);
+                            }}
+                            className="flex items-center gap-2 w-full rounded-md px-4 py-2 text-sm font-medium transition-all duration-200 hover:bg-muted text-left"
+                        >
+                            <SettingsIcon size={16} />
+                            Settings
+                        </Link>
+
+                        {user.role === 'admin' && (
+                            <Link
+                                href="/dashboard"
+                                onClick={() => {
+                                    setActiveDashboardTab("admin");
+                                    setIsOpen(false);
+                                }}
+                                className="flex items-center gap-2 w-full rounded-md px-4 py-2 text-sm font-medium transition-all duration-200 hover:bg-muted text-left"
+                            >
+                                <ShieldCheckIcon size={16} />
+                                Admin Panel
+                            </Link>
+                        )}
 
                         <div className="my-2 h-px bg-border" />
 

@@ -1,5 +1,19 @@
 import { z } from "zod";
 
+
+// ============================================================================
+// HEALTH TYPES
+// ============================================================================
+
+export const HealthResponseSchema = z.object({
+    status: z.string(),
+    version: z.string(),
+    uptime_seconds: z.number(),
+});
+
+export type HealthResponse = z.infer<typeof HealthResponseSchema>;
+
+
 // ============================================================================
 // AUTH TYPES
 // ============================================================================
