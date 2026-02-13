@@ -18,6 +18,7 @@ pub struct AppState {
     pub db: PgPool,
     pub config: Config,
     pub intelligence_client: IntelligenceClient,
+    pub start_time: std::time::Instant,
 }
 
 // Implement FromRef to allow extracting PgPool from AppState
@@ -32,6 +33,7 @@ pub fn router(db: PgPool, config: Config, intelligence_client: IntelligenceClien
         db,
         config: config.clone(),
         intelligence_client,
+        start_time: std::time::Instant::now(),
     };
 
     // Build CORS layer from configuration

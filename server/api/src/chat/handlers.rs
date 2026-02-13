@@ -74,11 +74,11 @@ pub async fn get_conversation(
     .ok_or(ChatError::ConversationNotFound(conversation_id.to_string()))?;
 
     // Fetch messages
-    // Note: This relies on the messages table which we are adding via migration
+    // Note: Python Intelligence service persists to 'chat_messages'
     let messages = sqlx::query!(
         r#"
-        SELECT id, role::text as "role!", content, metadata, created_at
-        FROM messages
+        SELECT id, role::text as "role!", content, sources, metadata, created_at
+        FROM chat_messages
         WHERE conversation_id = $1
         ORDER BY created_at ASC
         "#,
@@ -99,13 +99,7 @@ pub async fn get_conversation(
             },
             content: msg.content,
             created_at: msg.created_at.timestamp(),
-            sources: serde_json::from_value(
-                msg.metadata
-                    .get("sources")
-                    .cloned()
-                    .unwrap_or(serde_json::Value::Null),
-            )
-            .unwrap_or_default(),
+            sources: serde_json::from_value(msg.sources).unwrap_or_default(),
         })
         .collect();
 
@@ -134,7 +128,7 @@ pub async fn list_conversations(
     let conversations = sqlx::query!(
         r#"
         SELECT c.id, c.title, c.created_at, c.updated_at,
-               (SELECT COUNT(*) FROM messages m WHERE m.conversation_id = c.id) as "message_count!"
+               (SELECT COUNT(*) FROM chat_messages m WHERE m.conversation_id = c.id) as "message_count!"
         FROM conversations c
         WHERE c.user_id = $1
         ORDER BY c.updated_at DESC
@@ -216,7 +210,7 @@ pub async fn update_conversation(
 
     // Get message count
     let message_count = sqlx::query_scalar!(
-        r#"SELECT COUNT(*) FROM messages WHERE conversation_id = $1"#,
+        r#"SELECT COUNT(*) FROM chat_messages WHERE conversation_id = $1"#,
         conversation_id
     )
     .fetch_one(&state.db)
@@ -281,6 +275,51 @@ pub async fn delete_conversation(
         success: true,
         conversation_id,
         messages_deleted: 0, // Simplified
+    }))
+}
+
+/// Generate conversation title using AI
+/// POST /chat/conversations/{id}/generate-title
+pub async fn generate_conversation_title(
+    State(state): State<AppState>,
+    Extension(user_id): Extension<Uuid>,
+    Path(conversation_id): Path<Uuid>,
+    Json(req): Json<GenerateTitleRequest>,
+) -> ChatResult<Json<GenerateTitleResponse>> {
+    // 1. Verify conversation belongs to user
+    let conversation = sqlx::query!(
+        "SELECT id FROM conversations WHERE id = $1 AND user_id = $2",
+        conversation_id,
+        user_id.to_string()
+    )
+    .fetch_optional(&state.db)
+    .await?;
+
+    if conversation.is_none() {
+        return Err(ChatError::NotFound(format!(
+            "Conversation {} not found",
+            conversation_id
+        )));
+    }
+
+    // 2. Forward to intelligence service (all AI logic happens there)
+    use crate::grpc::proto::opentier::intelligence::v1 as pb;
+    
+    let grpc_request = pb::GenerateTitleRequest {
+        conversation_id: conversation_id.to_string(),
+        user_message: req.user_message,
+        assistant_message: req.assistant_message,
+    };
+
+    let response = state
+        .intelligence
+        .clone()
+        .generate_title(grpc_request)
+        .await
+        .map_err(|e| ChatError::IntelligenceError(format!("Failed to generate title: {}", e)))?;
+
+    Ok(Json(GenerateTitleResponse {
+        title: response.into_inner().title,
     }))
 }
 

@@ -192,3 +192,29 @@ class ChatService(intelligence_pb2_grpc.ChatServicer):
                 conversation_id=request.conversation_id
             )
 
+    async def GenerateTitle(self, request, context):
+        """Generate a conversation title using AI."""
+        correlation_id = get_correlation_id(context)
+        try:
+            if not check_deadline(context):
+                context.set_code(grpc.StatusCode.DEADLINE_EXCEEDED)
+                context.set_details("Request deadline exceeded before processing")
+                return intelligence_pb2.GenerateTitleResponse(title="")
+            
+            logger.debug(f"[{correlation_id}] GenerateTitle: conv={request.conversation_id}")
+            
+            # Delegate to engine for AI title generation
+            title = await self.engine.generate_title(
+                conversation_id=request.conversation_id,
+                user_message=request.user_message,
+                assistant_message=request.assistant_message
+            )
+            
+            return intelligence_pb2.GenerateTitleResponse(title=title)
+        except Exception as e:
+            status_code = classify_grpc_error(e)
+            logger.error(f"[{correlation_id}] GenerateTitle failed: {e}", exc_info=True)
+            context.set_code(status_code)
+            context.set_details(f"GenerateTitle error: {str(e)}")
+            return intelligence_pb2.GenerateTitleResponse(title="")
+

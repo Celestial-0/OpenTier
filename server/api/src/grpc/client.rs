@@ -278,6 +278,29 @@ impl IntelligenceClient {
         }
     }
 
+    pub async fn generate_title(
+        &mut self,
+        request: pb::GenerateTitleRequest,
+    ) -> Result<tonic::Response<pb::GenerateTitleResponse>, tonic::Status> {
+        // Title generation is idempotent (same input = same output), safe to retry
+        let mut attempts = 0;
+        let mut backoff = self.retry_config.initial_backoff;
+
+        loop {
+            let req = self.request_with_timeout(request.clone(), self.timeouts.chat);
+            match self.chat_client.generate_title(req).await {
+                Ok(result) => return Ok(result),
+                Err(status) if self.should_retry(&status, attempts) => {
+                    attempts += 1;
+                    self.log_retry(&status, backoff, attempts);
+                    sleep(backoff).await;
+                    backoff = self.next_backoff(backoff);
+                }
+                Err(status) => return Err(status),
+            }
+        }
+    }
+
     // Resource Methods
     pub async fn add_resource(
         &mut self,

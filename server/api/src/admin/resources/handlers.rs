@@ -1,5 +1,7 @@
 use axum::{
     extract::{Extension, Path, Query, State},
+    http::{header, HeaderMap},
+    body::Bytes,
     Json,
 };
 use uuid::Uuid;
@@ -18,10 +20,25 @@ use crate::grpc::proto::opentier::intelligence::v1 as pb;
 pub async fn add_resource(
     State(state): State<AppState>,
     Extension(user_id): Extension<Uuid>,
-    Json(req): Json<AddResourceRequest>,
+    headers: HeaderMap,
+    body: Bytes,
 ) -> Result<Json<AddResourceResponse>, ResourceError> {
-    // Validate request
-    req.validate()?;
+    // Check Content-Type header
+    let content_type = headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("");
+
+    if !content_type.starts_with("application/json") {
+        return Err(ResourceError::InvalidContentType(format!(
+            "Expected 'application/json', got '{}'",
+            content_type
+        )));
+    }
+
+    // Parse body
+    let req: AddResourceRequest = serde_json::from_slice(&body)
+        .map_err(|e| ResourceError::Validation(format!("Invalid JSON: {}", e)))?;
 
     let mut client = state.intelligence_client.clone();
 

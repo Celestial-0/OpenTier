@@ -9,6 +9,7 @@ use crate::gateway::AppState;
 pub struct HealthResponse {
     status: String,
     version: String,
+    uptime_seconds: u64,
 }
 
 pub fn routes() -> Router<AppState> {
@@ -17,10 +18,11 @@ pub fn routes() -> Router<AppState> {
         .route("/intelligence", get(intelligence_health))
 }
 
-pub async fn api_health() -> Json<HealthResponse> {
+pub async fn api_health(State(state): State<AppState>) -> Json<HealthResponse> {
     Json(HealthResponse {
         status: "healthy".to_string(),
         version: "v0.1.0".to_string(),
+        uptime_seconds: state.start_time.elapsed().as_secs(),
     })
 }
 
@@ -31,6 +33,7 @@ pub async fn intelligence_health(State(mut state): State<AppState>) -> Json<Heal
             Json(HealthResponse {
                 status: inner.status,
                 version: inner.version.unwrap_or_else(|| "unknown".to_string()),
+                uptime_seconds: inner.uptime_seconds.unwrap_or(0) as u64,
             })
         }
         Err(e) => {
@@ -38,6 +41,7 @@ pub async fn intelligence_health(State(mut state): State<AppState>) -> Json<Heal
             Json(HealthResponse {
                 status: "unhealthy".to_string(),
                 version: "unknown".to_string(),
+                uptime_seconds: 0,
             })
         }
     }

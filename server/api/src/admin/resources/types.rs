@@ -1,6 +1,6 @@
 #![allow(dead_code)]
-use serde::{Deserialize, Serialize};
 use super::errors::ResourceError;
+use serde::{Deserialize, Serialize};
 
 // Constants for validation
 const MAX_CONTENT_SIZE: usize = 10 * 1024 * 1024; // 10MB
@@ -13,7 +13,7 @@ const MIN_CONTENT_LENGTH: usize = 1;
 
 #[derive(Debug, Deserialize)]
 pub struct AddResourceRequest {
-    #[serde(rename = "type")]
+    #[serde(rename = "type", alias = "resource_type")]
     pub resource_type: String, // "url", "file", "text", "markdown", "pdf", "html", "code"
     pub content: String,
     pub title: Option<String>,
@@ -27,7 +27,11 @@ impl AddResourceRequest {
         // Validate resource type
         match self.resource_type.to_lowercase().as_str() {
             "url" | "text" | "markdown" | "pdf" | "html" | "code" | "file" => {}
-            _ => return Err(ResourceError::UnsupportedResourceType(self.resource_type.clone())),
+            _ => {
+                return Err(ResourceError::UnsupportedResourceType(
+                    self.resource_type.clone(),
+                ))
+            }
         }
 
         // Validate content length

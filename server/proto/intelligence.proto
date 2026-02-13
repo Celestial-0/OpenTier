@@ -67,6 +67,9 @@ service Chat {
   
   // Delete conversation
   rpc DeleteConversation(DeleteConversationRequest) returns (DeleteConversationResponse);
+  
+  // Generate conversation title using AI
+  rpc GenerateTitle(GenerateTitleRequest) returns (GenerateTitleResponse);
 }
 
 message ChatRequest {
@@ -163,6 +166,16 @@ message DeleteConversationRequest {
 message DeleteConversationResponse {
   bool success = 1;
   string conversation_id = 2;
+}
+
+message GenerateTitleRequest {
+  string conversation_id = 1;
+  string user_message = 2;
+  string assistant_message = 3;
+}
+
+message GenerateTitleResponse {
+  string title = 1;
 }
 
 // ============================================================================

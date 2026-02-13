@@ -20,7 +20,7 @@ class HealthService(intelligence_pb2_grpc.HealthServicer):
 
         return intelligence_pb2.HealthCheckResponse(
             status="healthy",
-            version="0.1.0",
+            version="v0.1.0",
             uptime_seconds=uptime,
         )
 

@@ -18,6 +18,11 @@ pub fn routes() -> Router<AppState> {
                 .patch(update_conversation)
                 .delete(delete_conversation),
         )
+        // AI title generation
+        .route(
+            "/conversations/{id}/generate-title",
+            post(generate_conversation_title),
+        )
         // Messaging
         .route("/conversations/{id}/messages", post(send_message))
         // Streaming

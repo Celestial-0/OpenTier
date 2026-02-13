@@ -405,3 +405,68 @@ class ChatService:
         async with get_session() as session:
             storage = ConversationStorage(session)
             return await storage.list_user_conversations(user_id, limit, offset)
+
+    async def generate_title(
+        self,
+        conversation_id: str,
+        user_message: str,
+        assistant_message: str
+    ) -> str:
+        """Generate a concise conversation title using AI.
+        
+        Args:
+            conversation_id: Conversation ID (for logging/tracking)
+            user_message: First user message
+            assistant_message: First assistant response
+            
+        Returns:
+            Generated title (3-5 words)
+        """
+        # Truncate messages to avoid token limits
+        user_truncated = user_message[:200] if len(user_message) > 200 else user_message
+        assistant_truncated = assistant_message[:300] if len(assistant_message) > 300 else assistant_message
+        
+        # Construct prompt for title generation
+        prompt = f"""Generate a concise, 3-5 word title for this conversation.
+                    The title should capture the main topic or question.
+
+                    User: {user_truncated}
+                    Assistant: {assistant_truncated}
+
+                    Respond with ONLY the title, nothing else. Do not use quotes."""
+
+        try:
+            # Use query pipeline's LLM for title generation
+            # Low temperature for consistency, minimal tokens
+            response = await self.query_pipeline.generate_response(
+                query=prompt,
+                user_id="system",  # System-level request
+                history=[],  # No history needed
+                context_limit=None,
+                use_rag=False,  # No RAG for title generation
+                temperature=0.3,  # Low for consistency
+                max_tokens=15  # Short titles only
+            )
+            
+            # Clean and validate title
+            title = response.response.strip()
+            
+            # Remove quotes if present
+            if title.startswith('"') and title.endswith('"'):
+                title = title[1:-1]
+            if title.startswith("'") and title.endswith("'"):
+                title = title[1:-1]
+            
+            # Validate length
+            if not title or len(title) > 100:
+                logger.warning(f"Invalid title generated for conversation {conversation_id}: '{title}'")
+                # Fallback to simple generation
+                return user_message.replace('\n', ' ').strip()[:50]
+            
+            logger.debug(f"Generated title for conversation {conversation_id}: '{title}'")
+            return title
+            
+        except Exception as e:
+            logger.error(f"Failed to generate AI title for conversation {conversation_id}: {e}", exc_info=True)
+            # Fallback to simple title generation
+            return user_message.replace('\n', ' ').strip()[:50]

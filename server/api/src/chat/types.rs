@@ -45,6 +45,19 @@ pub struct UpdateConversationRequest {
     pub metadata: Option<serde_json::Value>,
 }
 
+/// Generate conversation title with AI
+#[derive(Debug, Deserialize)]
+pub struct GenerateTitleRequest {
+    pub user_message: String,
+    pub assistant_message: String,
+}
+
+/// Generate title response
+#[derive(Debug, Serialize)]
+pub struct GenerateTitleResponse {
+    pub title: String,
+}
+
 /// Send a message (non-streaming)
 #[derive(Debug, Deserialize)]
 pub struct SendMessageRequest {
