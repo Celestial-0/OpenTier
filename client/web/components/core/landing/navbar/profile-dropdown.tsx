@@ -4,9 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import useMeasure from "react-use-measure";
 import Image from "next/image";
-import { UserIcon, SettingsIcon, BellIcon, LogoutIcon } from "@/components/core/common/icons/animated";
+import { useRouter } from "next/navigation";
+import { UserIcon, SettingsIcon, BellIcon, LogoutIcon, UsersIcon, MessageCircleMoreIcon, ShieldCheckIcon, FingerprintIcon } from "@/components/core/common/icons/animated";
 import { UserResponse } from "@/lib/api-types";
 import { useAuth } from "@/context/auth-context";
+import { useUi } from "@/context/ui-context";
 
 // Smooth Profile Dropdown Component
 const easeOutQuint: [number, number, number, number] = [0.23, 1, 0.32, 1];
@@ -16,7 +18,9 @@ interface SmoothProfileDropdownProps {
 }
 
 export const SmoothProfileDropdown = ({ user }: SmoothProfileDropdownProps) => {
+    const router = useRouter();
     const { logout } = useAuth();
+    const { setActiveDashboardTab } = useUi();
     const [isOpen, setIsOpen] = useState(false);
     const [activeItem, setActiveItem] = useState<string | null>(null);
     const [hoveredItem, setHoveredItem] = useState<string | null>(null);
@@ -28,9 +32,11 @@ export const SmoothProfileDropdown = ({ user }: SmoothProfileDropdownProps) => {
     const [contentRef, contentBounds] = useMeasure();
 
     const menuItems = [
+        { id: "conversations", label: "Conversations", icon: MessageCircleMoreIcon },
+        { id: "sessions", label: "Sessions", icon: ShieldCheckIcon },
         { id: "profile", label: "Profile", icon: UserIcon },
         { id: "settings", label: "Settings", icon: SettingsIcon },
-        { id: "notifications", label: "Notifications", icon: BellIcon },
+        ...(user.role === 'admin' ? [{ id: "admin", label: "Admin Panel", icon: FingerprintIcon }] : []),
         { id: "divider", label: "", icon: null },
         { id: "logout", label: "Log out", icon: LogoutIcon },
     ];
@@ -205,9 +211,12 @@ export const SmoothProfileDropdown = ({ user }: SmoothProfileDropdownProps) => {
                                         }}
                                         onClick={() => {
                                             setActiveItem(item.id);
-                                            console.log(`Navigate to ${item.label}`);
                                             if (item.id === "logout") {
                                                 logout();
+                                                setIsOpen(false);
+                                            } else {
+                                                setActiveDashboardTab(item.id);
+                                                router.push(`/dashboard`);
                                                 setIsOpen(false);
                                             }
                                         }}

@@ -16,6 +16,8 @@ import { LinkedinIcon } from "./linkedin";
 import { InstagramIcon } from "./instagram";
 import { GithubIcon } from "./github";
 import { BotMessageSquareIcon } from "./bot-message-square";
+import { UserRoundCheckIcon } from "./user-round-check";
+import { FingerprintIcon } from "./fingerprint";
 
 export {
     ConstructionIcon,
@@ -36,4 +38,6 @@ export {
     SettingsIcon,
     LogoutIcon,
     BellIcon,
+    UserRoundCheckIcon,
+    FingerprintIcon,
 }

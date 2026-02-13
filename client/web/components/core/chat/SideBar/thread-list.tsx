@@ -6,7 +6,7 @@ import {
   ThreadListItemPrimitive,
   ThreadListPrimitive,
 } from "@assistant-ui/react";
-import { ArchiveIcon, MoreHorizontalIcon, PlusIcon } from "lucide-react";
+import { ArchiveIcon, MoreHorizontalIcon, PlusIcon, TrashIcon } from "lucide-react";
 import type { FC } from "react";
 
 export const ThreadList: FC = () => {
@@ -85,8 +85,8 @@ const ThreadListItemMore: FC = () => {
       >
         <ThreadListItemPrimitive.Archive asChild>
           <ThreadListItemMorePrimitive.Item className="aui-thread-list-item-more-item flex cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground">
-            <ArchiveIcon className="size-4" />
-            Archive
+            <TrashIcon className="size-4" />
+            Delete
           </ThreadListItemMorePrimitive.Item>
         </ThreadListItemPrimitive.Archive>
       </ThreadListItemMorePrimitive.Content>

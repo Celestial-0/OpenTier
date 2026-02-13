@@ -3,13 +3,15 @@ import { devtools, persist } from 'zustand/middleware';
 import {
     ChatMessage,
     ConversationSummary,
-    ConversationListResponseSchema,
-    ConversationWithMessagesSchema,
-    MessageResponseSchema,
-    ChatMetricsSchema,
+    MessageResponse,
     CreateConversationRequest,
     SendMessageRequest,
     SourceChunk
+} from '@/types/chats';
+import {
+    ConversationListResponseSchema,
+    ConversationWithMessagesSchema,
+    MessageResponseSchema,
 } from '@/lib/api-types';
 import { getAuthToken, getAuthHeaders } from '@/lib/auth-utils';
 
@@ -25,6 +27,9 @@ interface ChatState {
     // Local State for Unauthenticated Users
     freeMessageCount: number;
 
+    // Title Generation Config
+    useAiTitleGeneration: boolean; // Toggle for AI vs simple title generation
+
     // Transient UI State
     isLoadingConversations: boolean;
     isLoadingMessages: boolean;
@@ -38,10 +43,14 @@ interface ChatState {
     selectConversation: (conversationId: string) => Promise<void>;
     createNewConversation: (title?: string) => Promise<string>; // Returns new ID
     sendMessage: (content: string, useStream?: boolean) => Promise<void>;
+    editMessage: (messageId: string, newContent: string) => Promise<void>;
+    setMessages: (messages: ChatMessage[]) => void;
+    regenerateLastResponse: () => Promise<void>;
     stopGeneration: () => void;
     deleteConversation: (conversationId: string) => Promise<void>;
-
-    // Helpers
+    updateConversationTitle: (conversationId: string, title: string) => Promise<void>;
+    generateTitleWithAI: (conversationId: string, userMessage: string, assistantMessage: string) => Promise<string | null>;
+    setUseAiTitleGeneration: (value: boolean) => void;
     clearError: () => void;
     reset: () => void;
 }
@@ -59,6 +68,7 @@ export const useChatStore = create<ChatState>()(
                 messages: {},
                 nextCursor: null,
                 freeMessageCount: 0,
+                useAiTitleGeneration: false, // Default to simple title generation
 
                 isLoadingConversations: false,
                 isLoadingMessages: false,
@@ -138,7 +148,7 @@ export const useChatStore = create<ChatState>()(
                         const id = `local-${Date.now()}`;
                         const summary: ConversationSummary = {
                             id,
-                            title: title || 'New Chat',
+                            title: 'New Chat',
                             message_count: 0,
                             last_message_preview: null,
                             created_at: Date.now() / 1000,
@@ -154,7 +164,7 @@ export const useChatStore = create<ChatState>()(
 
                     try {
                         const headers = getAuthHeaders();
-                        const payload: CreateConversationRequest = { title: title || 'New Chat' };
+                        const payload: CreateConversationRequest = { title: 'New Chat' };
                         const response = await fetch('/api/chat/conversations', {
                             method: 'POST',
                             headers: {
@@ -199,8 +209,12 @@ export const useChatStore = create<ChatState>()(
                 },
 
                 sendMessage: async (content, useStream = true) => {
-                    const { activeConversationId, freeMessageCount } = get();
-                    if (!activeConversationId) return;
+                    let { activeConversationId } = get();
+                    const { freeMessageCount } = get();
+
+                    if (!activeConversationId) {
+                        activeConversationId = await get().createNewConversation();
+                    }
 
                     const token = getAuthToken();
 
@@ -278,7 +292,8 @@ export const useChatStore = create<ChatState>()(
                             const params = new URLSearchParams({
                                 message: content,
                                 temperature: '0.7',
-                                // Add other config params if needed
+                                use_rag: 'true',
+                                max_tokens: '1000',
                             });
 
                             const response = await fetch(`/api/chat/conversations/${activeConversationId}/stream?${params.toString()}`, {
@@ -308,13 +323,14 @@ export const useChatStore = create<ChatState>()(
                                 for (const eventStr of events) {
                                     const lines = eventStr.split('\n');
                                     let type = 'message';
-                                    let data = '';
+                                    const dataLines: string[] = [];
 
                                     for (const line of lines) {
                                         if (line.startsWith('event: ')) type = line.substring(7);
-                                        else if (line.startsWith('data: ')) data = line.substring(6);
+                                        else if (line.startsWith('data: ')) dataLines.push(line.substring(6));
                                     }
 
+                                    const data = dataLines.join('\n');
                                     if (!data) continue;
 
                                     if (type === 'message') {
@@ -348,7 +364,13 @@ export const useChatStore = create<ChatState>()(
 
                         } else {
                             // NON-STREAMING (POST)
-                            const payload: SendMessageRequest = { message: content };
+                            const payload: SendMessageRequest = {
+                                message: content,
+                                config: {
+                                    use_rag: true,
+                                    temperature: 0.7
+                                }
+                            };
                             const response = await fetch(`/api/chat/conversations/${activeConversationId}/messages`, {
                                 method: 'POST',
                                 headers: {
@@ -391,6 +413,43 @@ export const useChatStore = create<ChatState>()(
 
                         set({ isSendingMessage: false, isTyping: false, abortController: null });
 
+                        // Auto-generate title after first assistant response
+                        const currentMsgs = get().messages[activeConversationId] || [];
+                        const hasOnlyTwoMessages = currentMsgs.length === 2;
+                        const firstIsUser = currentMsgs[0]?.role === 'user';
+                        const secondIsAssistant = currentMsgs[1]?.role === 'assistant';
+
+                        if (hasOnlyTwoMessages && firstIsUser && secondIsAssistant) {
+                            const firstUserMessage = currentMsgs[0].content;
+                            const firstAssistantMessage = currentMsgs[1].content;
+                            let generatedTitle: string;
+
+                            // Use AI title generation if enabled
+                            if (get().useAiTitleGeneration) {
+                                const aiTitle = await get().generateTitleWithAI(
+                                    activeConversationId,
+                                    firstUserMessage,
+                                    firstAssistantMessage
+                                );
+
+                                // Fallback to simple if AI fails
+                                generatedTitle = aiTitle || firstUserMessage
+                                    .replace(/\n/g, ' ')
+                                    .trim()
+                                    .slice(0, 50);
+                            } else {
+                                // Simple title generation
+                                generatedTitle = firstUserMessage
+                                    .replace(/\n/g, ' ')
+                                    .trim()
+                                    .slice(0, 50);
+                            }
+
+                            if (generatedTitle) {
+                                await get().updateConversationTitle(activeConversationId, generatedTitle);
+                            }
+                        }
+
                     } catch (err) {
                         if ((err as Error).name === 'AbortError') {
                             // User stopped generation
@@ -407,6 +466,255 @@ export const useChatStore = create<ChatState>()(
                         }
                     }
                 },
+
+                editMessage: async (messageId, newContent) => {
+                    const { activeConversationId } = get();
+                    if (!activeConversationId) return;
+
+                    const state = get();
+                    const currentMsgs = state.messages[activeConversationId] || [];
+                    const msgIndex = currentMsgs.findIndex(m => m.id === messageId);
+                    if (msgIndex === -1) return;
+
+                    get().stopGeneration();
+
+                    // Truncate history after this message
+                    // We keep messages up to this index inclusive
+                    const targetMsgs = currentMsgs.slice(0, msgIndex + 1);
+                    const msgToEdit = targetMsgs[msgIndex];
+
+                    // Update content
+                    const updatedMsg = { ...msgToEdit, content: newContent };
+                    targetMsgs[msgIndex] = updatedMsg;
+
+                    set({
+                        messages: {
+                            ...state.messages,
+                            [activeConversationId]: targetMsgs
+                        }
+                    });
+
+                    // If it's a user message, regenerate response
+                    if (updatedMsg.role === 'user') {
+                        await get().regenerateLastResponse();
+                    }
+                },
+
+                setMessages: (messages) => {
+                    const { activeConversationId } = get();
+                    if (!activeConversationId) return;
+
+                    set((state) => ({
+                        messages: {
+                            ...state.messages,
+                            [activeConversationId]: messages
+                        }
+                    }));
+                },
+
+                regenerateLastResponse: async () => {
+                    const { activeConversationId } = get();
+                    if (!activeConversationId) return;
+
+                    const state = get();
+                    const currentMsgs = state.messages[activeConversationId] || [];
+                    if (currentMsgs.length === 0) return;
+
+                    // 1. Identify context
+                    let targetMsgs = [...currentMsgs];
+                    const lastMsg = targetMsgs[targetMsgs.length - 1];
+
+                    // Remove last message if it's an assistant message (retry)
+                    if (lastMsg.role === 'assistant') {
+                        targetMsgs.pop();
+                    }
+
+                    const lastUserMsg = targetMsgs[targetMsgs.length - 1];
+                    if (!lastUserMsg || lastUserMsg.role !== 'user') return; // Nothing to regenerate
+
+                    // 2. Reset state for generation
+                    get().stopGeneration();
+                    const abortController = new AbortController();
+                    const tempAssistantId = `assistant-${Date.now()}`;
+
+                    // Optimistic: Add placeholder assistant message
+                    const tempAssistantMessage: ChatMessage = {
+                        id: tempAssistantId,
+                        role: 'assistant',
+                        content: '',
+                        created_at: Date.now() / 1000,
+                        sources: []
+                    };
+
+                    set({
+                        messages: {
+                            ...state.messages,
+                            [activeConversationId]: [...targetMsgs, tempAssistantMessage],
+                        },
+                        isSendingMessage: true,
+                        isTyping: true,
+                        abortController,
+                        error: null
+                    });
+
+                    // 3. Execute Request (Copy of sendMessage logic)
+                    try {
+                        const token = getAuthToken();
+                        const headers = getAuthHeaders();
+                        const content = lastUserMsg.content;
+
+                        // Check free limit if no token? 
+                        // Assuming regenerate counts as a message or maybe not? 
+                        // strict: yes. loose: no. Let's ignore for now.
+
+                        // STREAMING (Default for regenerate)
+                        const params = new URLSearchParams({
+                            message: content,
+                            temperature: '0.7',
+                            use_rag: 'true',
+                            max_tokens: '1000',
+                        });
+
+                        const response = await fetch(`/api/chat/conversations/${activeConversationId}/stream?${params.toString()}`, {
+                            signal: abortController.signal,
+                            headers: {
+                                'Accept': 'text/event-stream',
+                                ...headers as Record<string, string>
+                            }
+                        });
+
+                        if (!response.ok) throw new Error('Failed to start stream');
+                        if (!response.body) throw new Error('No response body');
+
+                        const reader = response.body.getReader();
+                        const decoder = new TextDecoder();
+                        let assistantContent = '';
+                        let sources: SourceChunk[] = [];
+
+                        while (true) {
+                            const { done, value } = await reader.read();
+                            if (done) break;
+
+                            const chunk = decoder.decode(value, { stream: true });
+                            const events = chunk.split('\n\n').filter(Boolean);
+
+                            for (const eventStr of events) {
+                                const lines = eventStr.split('\n');
+                                let type = 'message';
+                                let data = '';
+
+                                for (const line of lines) {
+                                    if (line.startsWith('event: ')) type = line.substring(7);
+                                    else if (line.startsWith('data: ')) data = line.substring(6);
+                                }
+
+                                if (!data) continue;
+
+                                if (type === 'message') {
+                                    assistantContent += data;
+                                } else if (type === 'source') {
+                                    try {
+                                        const source: SourceChunk = JSON.parse(data);
+                                        sources.push(source);
+                                    } catch (e) { console.error('Failed to parse source', e); }
+                                } else if (type === 'error') {
+                                    throw new Error(data);
+                                }
+
+                                set((state) => {
+                                    const msgs = state.messages[activeConversationId] || [];
+                                    const updatedMsgs = msgs.map(m => {
+                                        if (m.id === tempAssistantId) {
+                                            return { ...m, content: assistantContent, sources };
+                                        }
+                                        return m;
+                                    });
+                                    return {
+                                        messages: { ...state.messages, [activeConversationId]: updatedMsgs }
+                                    };
+                                });
+                            }
+                        }
+
+                        set({ isSendingMessage: false, isTyping: false, abortController: null });
+
+                    } catch (err) {
+                        if ((err as Error).name === 'AbortError') {
+                            set({ isSendingMessage: false, isTyping: false, abortController: null });
+                        } else {
+                            set({
+                                error: (err as Error).message,
+                                isSendingMessage: false,
+                                isTyping: false,
+                                abortController: null,
+                            });
+                        }
+                    }
+                },
+
+                updateConversationTitle: async (conversationId, title) => {
+                    try {
+                        const token = getAuthToken();
+
+                        // Update local state immediately (optimistic update)
+                        set((state) => ({
+                            conversations: state.conversations.map(c =>
+                                c.id === conversationId ? { ...c, title } : c
+                            ),
+                        }));
+
+                        // If authenticated, sync with backend
+                        if (token) {
+                            const headers = getAuthHeaders();
+                            const response = await fetch(`/api/chat/conversations/${conversationId}`, {
+                                method: 'PATCH',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    ...headers as Record<string, string>
+                                },
+                                body: JSON.stringify({ title }),
+                            });
+
+                            if (!response.ok) {
+                                // Revert on error
+                                throw new Error('Failed to update conversation title');
+                            }
+                        }
+                    } catch (err) {
+                        // Silently fail - title update is not critical
+                        console.error('Failed to update conversation title:', err);
+                    }
+                },
+
+                generateTitleWithAI: async (conversationId, userMessage, assistantMessage) => {
+                    try {
+                        const token = getAuthToken();
+                        if (!token) return null;
+
+                        const headers = getAuthHeaders();
+                        const response = await fetch(`/api/chat/conversations/${conversationId}/generate-title`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                ...headers as Record<string, string>
+                            },
+                            body: JSON.stringify({
+                                user_message: userMessage,
+                                assistant_message: assistantMessage
+                            }),
+                        });
+
+                        if (!response.ok) throw new Error('Failed to generate AI title');
+
+                        const data = await response.json();
+                        return data.title;
+                    } catch (err) {
+                        console.error('AI title generation failed, falling back to simple:', err);
+                        return null;
+                    }
+                },
+
+                setUseAiTitleGeneration: (value) => set({ useAiTitleGeneration: value }),
 
                 deleteConversation: async (conversationId) => {
                     try {

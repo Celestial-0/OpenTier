@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useTheme } from "next-themes";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
@@ -12,17 +13,31 @@ import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Lock, Bell, Palette, Globe, Shield, Trash2, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { useChatStore } from "@/store/chat-store";
 
-export const Settings = () => {
+interface SettingsProps {
+    onNavigateToSessions?: () => void;
+}
+
+export const Settings = ({ onNavigateToSessions }: SettingsProps) => {
     const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
     const [currentPassword, setCurrentPassword] = useState("");
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
 
+    const { theme, setTheme, resolvedTheme } = useTheme();
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
     // Mock settings state
     const [emailNotifications, setEmailNotifications] = useState(true);
     const [pushNotifications, setPushNotifications] = useState(false);
-    const [darkMode, setDarkMode] = useState(false);
+
+    // Chat title generation setting
+    const { useAiTitleGeneration, setUseAiTitleGeneration } = useChatStore();
 
     const isVerified = true; // Mock verification status
 
@@ -78,10 +93,8 @@ export const Settings = () => {
                                 </p>
                             </div>
                             <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
-                                <DialogTrigger>
-                                    <Button variant="outline" size="sm">
-                                        Change Password
-                                    </Button>
+                                <DialogTrigger render={<Button variant="outline" size="sm" />}>
+                                    Change Password
                                 </DialogTrigger>
                                 <DialogContent>
                                     <DialogHeader>
@@ -189,8 +202,20 @@ export const Settings = () => {
                                 </p>
                             </div>
                             <Switch
-                                checked={darkMode}
-                                onCheckedChange={setDarkMode}
+                                checked={mounted && resolvedTheme === "dark"}
+                                onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")}
+                            />
+                        </div>
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-1">
+                                <p className="text-sm font-medium">AI Chat Titles</p>
+                                <p className="text-sm text-muted-foreground">
+                                    Use AI to generate smart conversation titles
+                                </p>
+                            </div>
+                            <Switch
+                                checked={useAiTitleGeneration}
+                                onCheckedChange={setUseAiTitleGeneration}
                             />
                         </div>
                     </AccordionContent>
@@ -223,7 +248,7 @@ export const Settings = () => {
                                     View and manage logged-in devices
                                 </p>
                             </div>
-                            <Button variant="outline" size="sm">
+                            <Button variant="outline" size="sm" onClick={onNavigateToSessions}>
                                 Manage
                             </Button>
                         </div>
@@ -254,11 +279,9 @@ export const Settings = () => {
                                 </p>
                             </div>
                             <AlertDialog>
-                                <AlertDialogTrigger>
-                                    <Button variant="destructive" size="sm">
-                                        <Trash2 className="mr-2 h-4 w-4" />
-                                        Delete Account
-                                    </Button>
+                                <AlertDialogTrigger render={<Button variant="destructive" size="sm" />}>
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Delete Account
                                 </AlertDialogTrigger>
                                 <AlertDialogContent>
                                     <AlertDialogHeader>
