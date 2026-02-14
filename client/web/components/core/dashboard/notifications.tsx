@@ -1,57 +1,16 @@
 "use client";
 
-import { useState } from "react";
+
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Bell, CheckCheck, Trash2, Mail, Shield, MessageSquare, AlertCircle } from "lucide-react";
+import { useNotificationStore } from "@/store/notification-store";
+import { Notification } from "@/types/dashboard";
 
-// Mock notification data
-type Notification = {
-    id: string;
-    type: "system" | "conversation" | "security" | "admin";
-    title: string;
-    message: string;
-    timestamp: number;
-    read: boolean;
-};
 
-const mockNotifications: Notification[] = [
-    {
-        id: "1",
-        type: "conversation",
-        title: "New message in Project Planning",
-        message: "You have 3 new messages in your conversation",
-        timestamp: Date.now() - 300000, // 5 min ago
-        read: false,
-    },
-    {
-        id: "2",
-        type: "security",
-        title: "New login detected",
-        message: "A new device logged into your account from 192.168.1.105",
-        timestamp: Date.now() - 3600000, // 1 hour ago
-        read: false,
-    },
-    {
-        id: "3",
-        type: "system",
-        title: "Email verified successfully",
-        message: "Your email address has been verified",
-        timestamp: Date.now() - 86400000, // 1 day ago
-        read: true,
-    },
-    {
-        id: "4",
-        type: "conversation",
-        title: "Conversation updated",
-        message: "Technical Architecture Review has been updated",
-        timestamp: Date.now() - 172800000, // 2 days ago
-        read: true,
-    },
-];
 
 const getNotificationIcon = (type: Notification["type"]) => {
     switch (type) {
@@ -75,22 +34,8 @@ const formatTimeAgo = (timestamp: number) => {
 };
 
 export const Notifications = () => {
-    const [notifications, setNotifications] = useState(mockNotifications);
+    const { notifications, markAsRead, markAllAsRead, clearAll } = useNotificationStore();
     const unreadCount = notifications.filter((n) => !n.read).length;
-
-    const markAsRead = (id: string) => {
-        setNotifications((prev) =>
-            prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-        );
-    };
-
-    const markAllAsRead = () => {
-        setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-    };
-
-    const clearAll = () => {
-        setNotifications([]);
-    };
 
     return (
         <Popover>

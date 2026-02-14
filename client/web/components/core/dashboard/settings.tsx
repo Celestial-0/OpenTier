@@ -14,32 +14,76 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Lock, Bell, Palette, Globe, Shield, Trash2, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { useChatStore } from "@/store/chat-store";
+import { useUserStore } from "@/store/user-store";
 
 interface SettingsProps {
     onNavigateToSessions?: () => void;
 }
 
 export const Settings = ({ onNavigateToSessions }: SettingsProps) => {
+    const {
+        user,
+        preferences,
+        updatePreferences,
+        changePassword,
+        deleteAccount,
+        isLoading
+    } = useUserStore();
+
+    // Local state for password dialog
     const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
     const [currentPassword, setCurrentPassword] = useState("");
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
+    const [passwordError, setPasswordError] = useState<string | null>(null);
+    const [passwordSuccess, setPasswordSuccess] = useState(false);
 
     const { theme, setTheme, resolvedTheme } = useTheme();
     const [mounted, setMounted] = useState(false);
+
+    // Chat title generation setting
+    const { useAiTitleGeneration, setUseAiTitleGeneration } = useChatStore();
 
     useEffect(() => {
         setMounted(true);
     }, []);
 
-    // Mock settings state
-    const [emailNotifications, setEmailNotifications] = useState(true);
-    const [pushNotifications, setPushNotifications] = useState(false);
+    const handleChangePassword = async () => {
+        setPasswordError(null);
+        setPasswordSuccess(false);
 
-    // Chat title generation setting
-    const { useAiTitleGeneration, setUseAiTitleGeneration } = useChatStore();
+        if (newPassword !== confirmPassword) {
+            setPasswordError("New passwords do not match");
+            return;
+        }
 
-    const isVerified = true; // Mock verification status
+        if (newPassword.length < 8) {
+            setPasswordError("Password must be at least 8 characters");
+            return;
+        }
+
+        try {
+            await changePassword({
+                current_password: currentPassword,
+                new_password: newPassword
+            });
+            setPasswordSuccess(true);
+            setCurrentPassword("");
+            setNewPassword("");
+            setConfirmPassword("");
+            setTimeout(() => setIsPasswordDialogOpen(false), 2000);
+        } catch (error) {
+            setPasswordError((error as Error).message);
+        }
+    };
+
+    const handleDeleteAccount = async () => {
+        if (confirm("Are you sure you want to delete your account? This cannot be undone.")) {
+            await deleteAccount();
+            // Redirect handled by store/auth context usually, or we can force it here
+            window.location.href = "/";
+        }
+    };
 
     return (
         <div className="space-y-6">
@@ -54,7 +98,7 @@ export const Settings = ({ onNavigateToSessions }: SettingsProps) => {
             </Card>
 
             {/* Settings Accordion */}
-            <Accordion className="space-y-4">
+            <Accordion className="space-y-4" defaultValue={['account'] as any}>
                 {/* Account Settings */}
                 <AccordionItem value="account" className="border rounded-lg px-4">
                     <AccordionTrigger className="hover:no-underline">
@@ -72,7 +116,7 @@ export const Settings = ({ onNavigateToSessions }: SettingsProps) => {
                                     Your email verification status
                                 </p>
                             </div>
-                            {isVerified ? (
+                            {user?.email_verified ? (
                                 <Badge variant="default" className="bg-green-500">
                                     <CheckCircle2 className="mr-1 h-3 w-3" />
                                     Verified
@@ -93,9 +137,7 @@ export const Settings = ({ onNavigateToSessions }: SettingsProps) => {
                                 </p>
                             </div>
                             <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
-                                <DialogTrigger render={<Button variant="outline" size="sm" />}>
-                                    Change Password
-                                </DialogTrigger>
+                                <DialogTrigger render={<Button variant="outline" size="sm">Change Password</Button>} />
                                 <DialogContent>
                                     <DialogHeader>
                                         <DialogTitle>Change Password</DialogTitle>
@@ -104,6 +146,16 @@ export const Settings = ({ onNavigateToSessions }: SettingsProps) => {
                                         </DialogDescription>
                                     </DialogHeader>
                                     <div className="space-y-4 py-4">
+                                        {passwordError && (
+                                            <div className="text-sm text-red-500 bg-red-50 p-2 rounded">
+                                                {passwordError}
+                                            </div>
+                                        )}
+                                        {passwordSuccess && (
+                                            <div className="text-sm text-green-500 bg-green-50 p-2 rounded">
+                                                Password changed successfully!
+                                            </div>
+                                        )}
                                         <div className="space-y-2">
                                             <Label htmlFor="currentPassword">Current Password</Label>
                                             <Input
@@ -122,7 +174,7 @@ export const Settings = ({ onNavigateToSessions }: SettingsProps) => {
                                                 onChange={(e) => setNewPassword(e.target.value)}
                                             />
                                             <p className="text-xs text-muted-foreground">
-                                                At least 12 characters with uppercase, lowercase, numbers, and special characters
+                                                At least 8 characters
                                             </p>
                                         </div>
                                         <div className="space-y-2">
@@ -139,8 +191,8 @@ export const Settings = ({ onNavigateToSessions }: SettingsProps) => {
                                         <Button variant="outline" onClick={() => setIsPasswordDialogOpen(false)}>
                                             Cancel
                                         </Button>
-                                        <Button onClick={() => setIsPasswordDialogOpen(false)}>
-                                            Update Password
+                                        <Button onClick={handleChangePassword} disabled={isLoading}>
+                                            {isLoading ? "Updating..." : "Update Password"}
                                         </Button>
                                     </DialogFooter>
                                 </DialogContent>
@@ -166,8 +218,8 @@ export const Settings = ({ onNavigateToSessions }: SettingsProps) => {
                                 </p>
                             </div>
                             <Switch
-                                checked={emailNotifications}
-                                onCheckedChange={setEmailNotifications}
+                                checked={preferences.emailNotifications}
+                                onCheckedChange={(checked) => updatePreferences({ emailNotifications: checked })}
                             />
                         </div>
                         <div className="flex items-center justify-between">
@@ -178,8 +230,8 @@ export const Settings = ({ onNavigateToSessions }: SettingsProps) => {
                                 </p>
                             </div>
                             <Switch
-                                checked={pushNotifications}
-                                onCheckedChange={setPushNotifications}
+                                checked={preferences.pushNotifications}
+                                onCheckedChange={(checked) => updatePreferences({ pushNotifications: checked })}
                             />
                         </div>
                     </AccordionContent>
@@ -279,10 +331,12 @@ export const Settings = ({ onNavigateToSessions }: SettingsProps) => {
                                 </p>
                             </div>
                             <AlertDialog>
-                                <AlertDialogTrigger render={<Button variant="destructive" size="sm" />}>
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    Delete Account
-                                </AlertDialogTrigger>
+                                <AlertDialogTrigger render={
+                                    <Button variant="destructive" size="sm">
+                                        <Trash2 className="mr-2 h-4 w-4" />
+                                        Delete Account
+                                    </Button>
+                                } />
                                 <AlertDialogContent>
                                     <AlertDialogHeader>
                                         <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
@@ -294,7 +348,10 @@ export const Settings = ({ onNavigateToSessions }: SettingsProps) => {
                                     </AlertDialogHeader>
                                     <AlertDialogFooter>
                                         <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                        <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                        <AlertDialogAction
+                                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                            onClick={handleDeleteAccount}
+                                        >
                                             Delete Account
                                         </AlertDialogAction>
                                     </AlertDialogFooter>

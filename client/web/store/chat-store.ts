@@ -23,6 +23,7 @@ interface ChatState {
     activeConversationId: string | null;
     messages: Record<string, ChatMessage[]>; // Cache messages by conversation ID
     nextCursor: string | null; // For pagination of conversations
+    totalConversationsCount: number; // Total count from server
 
     // Local State for Unauthenticated Users
     freeMessageCount: number;
@@ -67,6 +68,7 @@ export const useChatStore = create<ChatState>()(
                 activeConversationId: null,
                 messages: {},
                 nextCursor: null,
+                totalConversationsCount: 0,
                 freeMessageCount: 0,
                 useAiTitleGeneration: false, // Default to simple title generation
 
@@ -78,8 +80,9 @@ export const useChatStore = create<ChatState>()(
                 abortController: null,
 
                 fetchConversations: async (reset = false) => {
+                    if (get().isLoadingConversations) return;
                     const token = getAuthToken();
-                    if (!token) return; // Don't fetch if not logged in (unless we want local only?)
+                    if (!token) return;
 
                     set({ isLoadingConversations: true, error: null });
                     try {
@@ -94,13 +97,22 @@ export const useChatStore = create<ChatState>()(
                         const data = await response.json();
                         const parsed = ConversationListResponseSchema.parse(data); // Zod validation
 
-                        set((state) => ({
-                            conversations: reset
+                        set((state) => {
+                            const allConversations = reset
                                 ? parsed.conversations
-                                : [...state.conversations, ...parsed.conversations],
-                            nextCursor: parsed.next_cursor || null,
-                            isLoadingConversations: false,
-                        }));
+                                : [...state.conversations, ...parsed.conversations];
+
+                            const uniqueConversations = Array.from(
+                                new Map(allConversations.map(c => [c.id, c])).values()
+                            );
+
+                            return {
+                                conversations: uniqueConversations,
+                                nextCursor: parsed.next_cursor || null,
+                                totalConversationsCount: parsed.total_count,
+                                isLoadingConversations: false,
+                            };
+                        });
                     } catch (err) {
                         set({ error: (err as Error).message, isLoadingConversations: false });
                     }

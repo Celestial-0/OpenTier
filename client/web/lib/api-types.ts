@@ -197,3 +197,87 @@ export const ConversationWithMessagesSchema = z.object({
 });
 export type ConversationWithMessages = z.infer<typeof ConversationWithMessagesSchema>;
 
+// ============================================================================
+// ADMIN TYPES
+// ============================================================================
+
+// Admin Stats Types
+export const AdminStatsSchema = z.object({
+    total_users: z.number(),
+    active_users_24h: z.number(),
+    total_conversations: z.number(),
+    total_messages: z.number(),
+});
+export type AdminStats = z.infer<typeof AdminStatsSchema>;
+
+// User Management Types
+export const UserAdminViewSchema = z.object({
+    id: z.uuid(),
+    email: z.email(),
+    full_name: z.string().nullable().optional(),
+    role: z.string(),
+    is_verified: z.boolean(),
+    created_at: z.string(),
+    updated_at: z.string(),
+});
+export type UserAdminView = z.infer<typeof UserAdminViewSchema>;
+
+export const UserListResponseSchema = z.object({
+    users: z.array(UserAdminViewSchema),
+    total_count: z.number(),
+    limit: z.number(),
+    offset: z.number(),
+});
+export type UserListResponse = z.infer<typeof UserListResponseSchema>;
+
+export const UpdateRoleRequestSchema = z.object({
+    role: z.string(),
+});
+export type UpdateRoleRequest = z.infer<typeof UpdateRoleRequestSchema>;
+
+// Resource Management Types
+export const ResourceConfigSchema = z.object({
+    depth: z.number().optional(),
+    chunk_size: z.number().optional(),
+    chunk_overlap: z.number().optional(),
+    auto_clean: z.boolean().optional(),
+    generate_embeddings: z.boolean().optional(),
+    follow_links: z.boolean().optional(),
+});
+export type ResourceConfig = z.infer<typeof ResourceConfigSchema>;
+
+export const AddResourceRequestSchema = z.object({
+    resource_type: z.string(),
+    content: z.string(),
+    title: z.string().optional(),
+    metadata: z.record(z.string(), z.string()).optional(),
+    config: ResourceConfigSchema.optional(),
+    is_global: z.boolean().optional(),
+});
+export type AddResourceRequest = z.infer<typeof AddResourceRequestSchema>;
+
+export const ResourceItemResponseSchema = z.object({
+    id: z.string(),
+    type: z.string(),
+    title: z.string().nullish(),
+    status: z.string(),
+    chunks_created: z.number(),
+    created_at: z.number(),
+    metadata: z.record(z.string(), z.string()).optional(),
+    is_global: z.boolean(),
+});
+export type ResourceItemResponse = z.infer<typeof ResourceItemResponseSchema>;
+
+export const ListResourcesResponseSchema = z.object({
+    items: z.array(ResourceItemResponseSchema),
+    next_cursor: z.string().nullable().optional(),
+    total: z.number(),
+});
+export type ListResourcesResponse = z.infer<typeof ListResourcesResponseSchema>;
+
+export const DeleteResponseSchema = z.object({
+    status: z.string(),
+    message: z.string(),
+});
+export type DeleteResponse = z.infer<typeof DeleteResponseSchema>;
+

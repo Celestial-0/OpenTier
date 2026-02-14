@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,56 +8,14 @@ import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Trash2, ExternalLink, MoreVertical, Clock, Plus, Filter } from "lucide-react";
+import { Search, Trash2, ExternalLink, MoreVertical, Clock, Filter, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { useChatStore } from "@/store/chat-store";
 
-// --- Mock Data ---
-const mockConversations = [
-    {
-        id: "550e8400-e29b-41d4-a716-446655440002",
-        title: "Project Planning Discussion",
-        message_count: 15,
-        last_message_preview: "Let's finalize the Q1 roadmap...",
-        created_at: Date.now() - 604800000,
-        updated_at: Date.now() - 3600000,
-    },
-    {
-        id: "550e8400-e29b-41d4-a716-446655440003",
-        title: "Technical Architecture Review",
-        message_count: 8,
-        last_message_preview: "The gRPC integration looks solid...",
-        created_at: Date.now() - 432000000,
-        updated_at: Date.now() - 7200000,
-    },
-    {
-        id: "550e8400-e29b-41d4-a716-446655440004",
-        title: "API Integration Questions",
-        message_count: 23,
-        last_message_preview: "How do we handle rate limiting?",
-        created_at: Date.now() - 259200000,
-        updated_at: Date.now() - 86400000,
-    },
-    {
-        id: "550e8400-e29b-41d4-a716-446655440005",
-        title: "Database Schema Design",
-        message_count: 12,
-        last_message_preview: "pgvector seems like the right choice...",
-        created_at: Date.now() - 172800000,
-        updated_at: Date.now() - 172800000,
-    },
-    {
-        id: "550e8400-e29b-41d4-a716-446655440006",
-        title: "RAG Implementation Strategy",
-        message_count: 31,
-        last_message_preview: null,
-        created_at: Date.now() - 86400000,
-        updated_at: Date.now() - 86400000,
-    },
-];
 
 // --- Helpers ---
 const formatDate = (timestamp: number) => {
-    return new Date(timestamp).toLocaleDateString("en-US", {
+    return new Date(timestamp * 1000).toLocaleDateString("en-US", {
         month: "short",
         day: "numeric",
         year: "numeric",
@@ -65,7 +23,9 @@ const formatDate = (timestamp: number) => {
 };
 
 const formatTimeAgo = (timestamp: number) => {
-    const seconds = Math.floor((Date.now() - timestamp) / 1000);
+    // timestamp is in seconds from API (based on types.rs/api-types.ts confirming i64/number)
+    // JS Date.now() is ms.
+    const seconds = Math.floor((Date.now() / 1000) - timestamp);
     if (seconds < 60) return "just now";
     if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
     if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
@@ -74,12 +34,36 @@ const formatTimeAgo = (timestamp: number) => {
 
 // --- Component ---
 export const Conversations = () => {
+    const {
+        conversations,
+        fetchConversations,
+        deleteConversation,
+        isLoadingConversations
+    } = useChatStore();
+
     const [searchQuery, setSearchQuery] = useState("");
     const [sortBy, setSortBy] = useState("updated");
+    const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
-    const filteredConversations = mockConversations
+    useEffect(() => {
+        fetchConversations(true);
+    }, [fetchConversations]);
+
+    const handleDelete = async (id: string) => {
+        setIsDeleting(id);
+        try {
+            await deleteConversation(id);
+        } catch (error) {
+            console.error("Failed to delete conversation:", error);
+            // Fallback since toast is missing
+            alert("Failed to delete conversation. Please try again.");
+        }
+        setIsDeleting(null);
+    };
+
+    const filteredConversations = conversations
         .filter((conv) =>
-            conv.title.toLowerCase().includes(searchQuery.toLowerCase())
+            (conv.title || "Untitled Conversation").toLowerCase().includes(searchQuery.toLowerCase())
         )
         .sort((a, b) => {
             if (sortBy === "updated") return b.updated_at - a.updated_at;
@@ -89,7 +73,7 @@ export const Conversations = () => {
         });
 
     return (
-        <div className="mx-auto space-y-4 p-2 animate-in fade-in duration-500">
+        <div className="mx-auto space-y-4 p-0 animate-in fade-in duration-500">
 
 
             {/* Toolbar */}
@@ -120,7 +104,7 @@ export const Conversations = () => {
             </div>
 
             {/* Table Section */}
-            <div className="rounded-xl border bg-card overflow-hidden">
+            <div className="rounded-xl border bg-card overflow-hidden p-2">
                 <Table>
                     <TableHeader className="bg-muted/50">
                         <TableRow className="hover:bg-transparent border-b">
@@ -131,10 +115,19 @@ export const Conversations = () => {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredConversations.length === 0 ? (
+                        {isLoadingConversations ? (
+                            <TableRow>
+                                <TableCell colSpan={4} className="h-32 text-center text-muted-foreground">
+                                    <div className="flex items-center justify-center gap-2">
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        <span>Loading conversations...</span>
+                                    </div>
+                                </TableCell>
+                            </TableRow>
+                        ) : filteredConversations.length === 0 ? (
                             <TableRow>
                                 <TableCell colSpan={4} className="h-32 text-center text-muted-foreground italic">
-                                    No conversations found matching your search.
+                                    {searchQuery ? "No conversations found matching your search." : "No conversations yet. Start a new chat!"}
                                 </TableCell>
                             </TableRow>
                         ) : (
@@ -143,7 +136,7 @@ export const Conversations = () => {
                                     <TableCell className="py-4">
                                         <div className="flex flex-col gap-1">
                                             <span className="font-semibold text-foreground group-hover:text-primary transition-colors cursor-pointer leading-none">
-                                                {conversation.title}
+                                                {conversation.title || "Untitled Conversation"}
                                             </span>
                                             <span className="text-xs text-muted-foreground line-clamp-1 font-mono mt-1 opacity-80">
                                                 {conversation.last_message_preview || "No messages yet"}
@@ -168,7 +161,7 @@ export const Conversations = () => {
                                             </SheetTrigger>
                                             <SheetContent className="sm:max-w-md p-4">
                                                 <SheetHeader className="text-left border-b px-4">
-                                                    <SheetTitle className="text-2xl pt-4">{conversation.title}</SheetTitle>
+                                                    <SheetTitle className="text-2xl pt-4">{conversation.title || "Untitled"}</SheetTitle>
                                                     <SheetDescription className="font-mono text-xs uppercase tracking-tighter">
                                                         ID: {conversation.id}
                                                     </SheetDescription>
@@ -208,8 +201,12 @@ export const Conversations = () => {
                                                                 </AlertDialogHeader>
                                                                 <AlertDialogFooter>
                                                                     <AlertDialogCancel className="rounded-full">Cancel</AlertDialogCancel>
-                                                                    <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-full">
-                                                                        Delete Permanently
+                                                                    <AlertDialogAction
+                                                                        onClick={() => handleDelete(conversation.id)}
+                                                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-full"
+                                                                        disabled={isDeleting === conversation.id}
+                                                                    >
+                                                                        {isDeleting === conversation.id ? "Deleting..." : "Delete Permanently"}
                                                                     </AlertDialogAction>
                                                                 </AlertDialogFooter>
                                                             </AlertDialogContent>
