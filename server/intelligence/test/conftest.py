@@ -14,6 +14,7 @@ from core.database import get_session, init_db
 from core.config import get_config
 from generated import intelligence_pb2_grpc as pb_grpc
 
+
 @pytest_asyncio.fixture(scope="function", autouse=True)
 async def setup_test_env():
     """Real test environment - FUNCTION SCOPE for reliability on Windows."""
@@ -48,25 +49,30 @@ async def setup_test_env():
     await server.stop(grace=0)
     await shutdown()
 
+
 @pytest.fixture(scope="function")
 def grpc_addr(setup_test_env):
     port = setup_test_env
     return f"127.0.0.1:{port}"
+
 
 @pytest_asyncio.fixture(scope="function")
 async def health_client(grpc_addr) -> pb_grpc.HealthStub:
     async with grpc.aio.insecure_channel(grpc_addr) as channel:
         yield pb_grpc.HealthStub(channel)
 
+
 @pytest_asyncio.fixture(scope="function")
 async def chat_client(grpc_addr) -> pb_grpc.ChatStub:
     async with grpc.aio.insecure_channel(grpc_addr) as channel:
         yield pb_grpc.ChatStub(channel)
 
+
 @pytest_asyncio.fixture(scope="function")
 async def resource_client(grpc_addr) -> pb_grpc.ResourceServiceStub:
     async with grpc.aio.insecure_channel(grpc_addr) as channel:
         yield pb_grpc.ResourceServiceStub(channel)
+
 
 @pytest_asyncio.fixture(scope="function")
 async def db_session():

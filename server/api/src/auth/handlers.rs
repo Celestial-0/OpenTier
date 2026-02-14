@@ -1,8 +1,10 @@
 use axum::{
     Json,
-    extract::{Query, State},
-    http::{HeaderMap, header},
+    extract::{ConnectInfo, Query, State},
+    http::{header, HeaderMap},
 };
+pub use sqlx::types::ipnetwork::IpNetwork;
+use std::net::SocketAddr;
 
 use crate::gateway::AppState;
 
@@ -37,12 +39,21 @@ pub async fn signup(
 /// Authenticate user and create session
 pub async fn signin(
     State(app_state): State<AppState>,
+    headers: HeaderMap,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Json(payload): Json<SignInRequest>,
 ) -> Result<Json<SignInResponse>, AuthError> {
     crate::common::validation::validate_email(&payload.email)
         .map_err(|e| AuthError::Validation(e))?;
 
-    let response = service::signin(&app_state.db, payload).await?;
+    let user_agent = headers
+        .get(header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    let ip_address = Some(IpNetwork::from(addr.ip()));
+
+    let response = service::signin(&app_state.db, payload, ip_address, user_agent).await?;
     Ok(Json(response))
 }
 
@@ -76,9 +87,18 @@ pub async fn signout(
 /// Refresh session token
 pub async fn refresh(
     State(app_state): State<AppState>,
+    headers: HeaderMap,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Json(payload): Json<RefreshRequest>,
 ) -> Result<Json<RefreshResponse>, AuthError> {
-    let response = service::refresh_session(&app_state.db, payload).await?;
+    let user_agent = headers
+        .get(header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    let ip_address = Some(IpNetwork::from(addr.ip()));
+
+    let response = service::refresh_session(&app_state.db, payload, ip_address, user_agent).await?;
     Ok(Json(response))
 }
 
@@ -148,8 +168,17 @@ pub async fn resend_verification(
 /// Recover a soft-deleted account
 pub async fn recover_account(
     State(app_state): State<AppState>,
+    headers: HeaderMap,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Json(payload): Json<RecoverAccountRequest>,
 ) -> Result<Json<RecoverAccountResponse>, AuthError> {
-    let response = service::recover_account(&app_state.db, payload).await?;
+    let user_agent = headers
+        .get(header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    let ip_address = Some(IpNetwork::from(addr.ip()));
+
+    let response = service::recover_account(&app_state.db, payload, ip_address, user_agent).await?;
     Ok(Json(response))
 }

@@ -7,38 +7,25 @@ for fast retrieval with minimal latency.
 import asyncio
 from typing import List, Optional
 import numpy as np
-from dataclasses import dataclass
+
 from functools import lru_cache
 
 from sentence_transformers import SentenceTransformer
 import torch
 
 from core.logging import get_logger
-from core.config import get_config
+from core.config import get_config, EmbeddingConfig
 
 logger = get_logger(__name__)
 
 
-@dataclass
-class EmbeddingConfig:
-    """Configuration for embedding generation."""
-    model_name: str = "BAAI/bge-small-en-v1.5"  # Better accuracy than e5-small
-    dimensions: int = 384
-    batch_size: int = 32
-    device: str = "cpu"  # or "cuda" for GPU
-    normalize: bool = True
-    cache_size: int = 10000
-    query_instruction: str = "Represent this sentence for searching relevant passages: "
-
-
 class EmbeddingModel:
     """
-    High-performance embedding model using BGE-small-en-v1.5.
-    
+    High-performance embedding model.
+
     Features:
-    - 15ms latency on CPU, <5ms on GPU
+    - Fast inference on CPU/GPU
     - 384 dimensions
-    - Better accuracy than e5-small (~5-10% improvement)
     - Batch processing for efficiency
     - In-memory caching
     """
@@ -46,17 +33,22 @@ class EmbeddingModel:
     def __init__(self, config: Optional[EmbeddingConfig] = None):
         """
         Initialize embedding model.
-        
+
         Args:
             config: Optional embedding configuration
         """
-        self.config = config or EmbeddingConfig()
+        self.config = config or get_config().embedding
         self.model: Optional[SentenceTransformer] = None
         self._cache: dict[str, np.ndarray] = {}
 
+        # Determine device: explicit config > auto-detect
+        if self.config.device:
+            self.device = self.config.device
+        else:
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+
         logger.info(
-            f"Initializing embedding model: {self.config.model_name} "
-            f"on {self.config.device}"
+            f"Initializing embedding model: {self.config.model_name} on {self.device}"
         )
 
     def load(self) -> None:
@@ -66,19 +58,16 @@ class EmbeddingModel:
             return
 
         try:
-            self.model = SentenceTransformer(
-                self.config.model_name,
-                device=self.config.device
-            )
+            self.model = SentenceTransformer(self.config.model_name, device=self.device)
 
             # Optimize for inference
             self.model.eval()
-            if self.config.device == "cuda":
+            if self.device == "cuda":
                 self.model.half()  # Use FP16 for faster GPU inference
 
             logger.info(
                 f"Loaded {self.config.model_name}: "
-                f"{self.config.dimensions} dims, device={self.config.device}"
+                f"{self.config.dimensions} dims, device={self.device}"
             )
         except Exception as e:
             logger.error(f"Failed to load embedding model: {e}")
@@ -88,16 +77,16 @@ class EmbeddingModel:
         self,
         texts: List[str],
         batch_size: Optional[int] = None,
-        show_progress: bool = False
+        show_progress: bool = False,
     ) -> np.ndarray:
         """
         Generate embeddings for texts.
-        
+
         Args:
             texts: List of texts to embed
             batch_size: Optional batch size (default: config.batch_size)
             show_progress: Show progress bar
-            
+
         Returns:
             Array of embeddings (n_texts, dimensions)
         """
@@ -118,7 +107,7 @@ class EmbeddingModel:
                 batch_size=batch_size,
                 show_progress_bar=show_progress,
                 normalize_embeddings=self.config.normalize,
-                convert_to_numpy=True
+                convert_to_numpy=True,
             )
 
             logger.debug(f"Generated {len(embeddings)} embeddings")
@@ -131,10 +120,10 @@ class EmbeddingModel:
     def encode_query(self, query: str) -> np.ndarray:
         """
         Generate embedding for a search query.
-        
+
         Args:
             query: Search query text
-            
+
         Returns:
             Query embedding vector
         """
@@ -154,7 +143,7 @@ class EmbeddingModel:
             embedding = self.model.encode(
                 [prefixed_query],
                 normalize_embeddings=self.config.normalize,
-                convert_to_numpy=True
+                convert_to_numpy=True,
             )[0]
 
             # Cache the result
@@ -169,46 +158,34 @@ class EmbeddingModel:
             raise
 
     async def encode_async(
-        self,
-        texts: List[str],
-        batch_size: Optional[int] = None
+        self, texts: List[str], batch_size: Optional[int] = None
     ) -> np.ndarray:
         """
         Async wrapper for embedding generation.
-        
+
         Args:
             texts: List of texts to embed
             batch_size: Optional batch size
-            
+
         Returns:
             Array of embeddings
         """
         # Run in thread pool to avoid blocking
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None,
-            self.encode,
-            texts,
-            batch_size,
-            False
-        )
+        return await loop.run_in_executor(None, self.encode, texts, batch_size, False)
 
     async def encode_query_async(self, query: str) -> np.ndarray:
         """
         Async wrapper for query embedding generation.
-        
+
         Args:
             query: Search query
-            
+
         Returns:
             Query embedding
         """
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            None,
-            self.encode_query,
-            query
-        )
+        return await loop.run_in_executor(None, self.encode_query, query)
 
     def clear_cache(self) -> None:
         """Clear the embedding cache."""
@@ -220,7 +197,7 @@ class EmbeddingModel:
         return {
             "size": len(self._cache),
             "max_size": self.config.cache_size,
-            "utilization": len(self._cache) / self.config.cache_size
+            "utilization": len(self._cache) / self.config.cache_size,
         }
 
 
@@ -231,18 +208,14 @@ _model_instance: Optional[EmbeddingModel] = None
 def get_embedding_model() -> EmbeddingModel:
     """
     Get the global embedding model instance.
-    
+
     Returns:
         Singleton embedding model
     """
     global _model_instance
 
     if _model_instance is None:
-        config = get_config()
-        embedding_config = EmbeddingConfig(
-            device="cuda" if torch.cuda.is_available() else "cpu"
-        )
-        _model_instance = EmbeddingModel(embedding_config)
+        _model_instance = EmbeddingModel(get_config().embedding)
         _model_instance.load()
 
     return _model_instance
@@ -251,10 +224,10 @@ def get_embedding_model() -> EmbeddingModel:
 async def generate_embeddings(texts: List[str]) -> np.ndarray:
     """
     Generate embeddings for a list of texts.
-    
+
     Args:
         texts: List of texts to embed
-        
+
     Returns:
         Array of embeddings
     """
@@ -265,10 +238,10 @@ async def generate_embeddings(texts: List[str]) -> np.ndarray:
 async def generate_query_embedding(query: str) -> np.ndarray:
     """
     Generate embedding for a search query.
-    
+
     Args:
         query: Search query
-        
+
     Returns:
         Query embedding
     """

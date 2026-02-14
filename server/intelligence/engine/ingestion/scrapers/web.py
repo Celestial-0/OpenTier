@@ -19,7 +19,7 @@ class WebScraper:
 
     def __init__(self, timeout: int = 30, rate_limit_delay: float = 1.0):
         """Initialize web scraper.
-        
+
         Args:
             timeout: Request timeout in seconds (default: 30)
             rate_limit_delay: Delay between requests in seconds (default: 1.0)
@@ -28,7 +28,9 @@ class WebScraper:
         self.rate_limit_delay = rate_limit_delay
         self.last_request_time = 0.0
 
-        logger.debug(f"Initialized WebScraper: timeout={timeout}s, rate_limit={rate_limit_delay}s")
+        logger.debug(
+            f"Initialized WebScraper: timeout={timeout}s, rate_limit={rate_limit_delay}s"
+        )
 
     @with_retry(max_retries=3, base_delay=1.0)
     async def scrape(self, url: str) -> dict[str, Any]:
@@ -40,7 +42,7 @@ class WebScraper:
 
         Returns:
             Dict with title, content, metadata
-            
+
         Raises:
             ValidationError: If URL is invalid
             httpx.HTTPError: If request fails after retries
@@ -63,7 +65,7 @@ class WebScraper:
                 follow_redirects=True,
                 headers={
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-                }
+                },
             ) as client:
                 response = await client.get(url)
                 response.raise_for_status()

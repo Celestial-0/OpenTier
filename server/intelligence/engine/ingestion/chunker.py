@@ -42,7 +42,7 @@ class TextChunker:
             chunk_size: Target size for each chunk (in characters)
             chunk_overlap: Number of characters to overlap between chunks
             separator: Primary separator for splitting (default: paragraph)
-            
+
         Raises:
             ValidationError: If chunk parameters are invalid
         """
@@ -76,7 +76,9 @@ class TextChunker:
         parts = text.split(self.separator)
         return [p.strip() for p in parts if p.strip()]
 
-    def chunk(self, text: str, metadata: dict[str, Any] | None = None) -> list[TextChunk]:
+    def chunk(
+        self, text: str, metadata: dict[str, Any] | None = None
+    ) -> list[TextChunk]:
         """
         Chunk text into overlapping segments.
 
@@ -86,7 +88,7 @@ class TextChunker:
 
         Returns:
             List of TextChunk objects
-            
+
         Raises:
             ValidationError: If text is too large
         """
@@ -131,10 +133,19 @@ class TextChunker:
                     chunk_index += 1
 
                     # Start new chunk with overlap
-                    if self.chunk_overlap > 0 and len(current_chunk) > self.chunk_overlap:
+                    if (
+                        self.chunk_overlap > 0
+                        and len(current_chunk) > self.chunk_overlap
+                    ):
                         overlap_text = current_chunk[-self.chunk_overlap :]
                         current_chunk = overlap_text + self.separator + part
-                        current_start = current_start + len(current_chunk) - len(overlap_text) - len(self.separator) - len(part)
+                        current_start = (
+                            current_start
+                            + len(current_chunk)
+                            - len(overlap_text)
+                            - len(self.separator)
+                            - len(part)
+                        )
                     else:
                         current_chunk = part
                         current_start = current_start + len(current_chunk)
@@ -158,7 +169,9 @@ class TextChunker:
                                 current_chunk = sentence
                                 current_start = current_start + len(sentence)
                             else:
-                                current_chunk += " " + sentence if current_chunk else sentence
+                                current_chunk += (
+                                    " " + sentence if current_chunk else sentence
+                                )
                     else:
                         current_chunk = part
                         current_start = current_start + len(part)

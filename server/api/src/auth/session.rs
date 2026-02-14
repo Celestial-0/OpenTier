@@ -2,6 +2,7 @@ use chrono::{DateTime, Duration, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use sqlx::types::ipnetwork::IpNetwork;
 use super::{AuthError, Role, tokens};
 
 /// Create a new session for a user with their role
@@ -10,19 +11,23 @@ pub async fn create_session(
     db: &PgPool,
     user_id: Uuid,
     role: Role,
+    ip_address: Option<IpNetwork>,
+    user_agent: Option<String>,
 ) -> Result<(String, DateTime<Utc>), AuthError> {
     let session_token = tokens::generate_session_token();
     let expires_at = Utc::now() + Duration::hours(168); // 7 days
 
     sqlx::query!(
         r#"
-        INSERT INTO sessions (user_id, session_token, expires_at, role)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO sessions (user_id, session_token, expires_at, role, ip_address, user_agent)
+        VALUES ($1, $2, $3, $4, $5, $6)
         "#,
         user_id,
         session_token,
         expires_at,
-        role as Role
+        role as Role,
+        ip_address,
+        user_agent
     )
     .execute(db)
     .await?;

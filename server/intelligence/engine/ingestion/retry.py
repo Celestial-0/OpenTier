@@ -9,35 +9,39 @@ from core.logging import get_logger
 
 logger = get_logger(__name__)
 
-P = ParamSpec('P')
-T = TypeVar('T')
+P = ParamSpec("P")
+T = TypeVar("T")
 
 
 class RetryError(Exception):
     """Raised when all retry attempts are exhausted."""
+
     pass
 
 
 def is_retriable_error(error: Exception) -> bool:
     """
     Determine if an error is retriable.
-    
+
     Args:
         error: Exception to check
-        
+
     Returns:
         True if error is retriable
     """
     import httpx
 
     # Network errors are retriable
-    if isinstance(error, (
-        httpx.ConnectError,
-        httpx.TimeoutException,
-        httpx.NetworkError,
-        ConnectionError,
-        TimeoutError,
-    )):
+    if isinstance(
+        error,
+        (
+            httpx.ConnectError,
+            httpx.TimeoutException,
+            httpx.NetworkError,
+            ConnectionError,
+            TimeoutError,
+        ),
+    ):
         return True
 
     # HTTP 5xx errors and 429 (rate limit) are retriable
@@ -60,7 +64,7 @@ async def retry_async(
 ) -> T:
     """
     Retry an async function with exponential backoff.
-    
+
     Args:
         func: Async function to retry
         *args: Positional arguments for func
@@ -70,10 +74,10 @@ async def retry_async(
         exponential_base: Base for exponential backoff
         jitter: Add random jitter to delay
         **kwargs: Keyword arguments for func
-        
+
     Returns:
         Result from successful function call
-        
+
     Raises:
         RetryError: If all retries are exhausted
     """
@@ -95,7 +99,7 @@ async def retry_async(
                 break
 
             # Calculate delay with exponential backoff
-            delay = min(base_delay * (exponential_base ** attempt), max_delay)
+            delay = min(base_delay * (exponential_base**attempt), max_delay)
 
             # Add jitter to prevent thundering herd
             if jitter:
@@ -123,17 +127,17 @@ def with_retry(
 ):
     """
     Decorator to add retry logic to async functions.
-    
+
     Args:
         max_retries: Maximum number of retry attempts
         base_delay: Initial delay in seconds
         max_delay: Maximum delay in seconds
         exponential_base: Base for exponential backoff
         jitter: Add random jitter to delay
-        
+
     Returns:
         Decorated function with retry logic
-        
+
     Example:
         @with_retry(max_retries=3, base_delay=1.0)
         async def fetch_data(url: str):
@@ -142,6 +146,7 @@ def with_retry(
                 response.raise_for_status()
                 return response.json()
     """
+
     def decorator(func: Callable[P, T]) -> Callable[P, T]:
         @wraps(func)
         async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
@@ -155,5 +160,7 @@ def with_retry(
                 jitter=jitter,
                 **kwargs,
             )
+
         return wrapper
+
     return decorator

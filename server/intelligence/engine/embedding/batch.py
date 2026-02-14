@@ -14,6 +14,7 @@ logger = get_logger(__name__)
 @dataclass
 class BatchResult:
     """Result from batch embedding generation."""
+
     embeddings: np.ndarray
     texts: List[str]
     batch_size: int
@@ -28,7 +29,7 @@ class BatchResult:
 class BatchEmbeddingProcessor:
     """
     Processes embeddings in batches for efficiency.
-    
+
     Features:
     - Automatic batching
     - Progress tracking
@@ -39,7 +40,7 @@ class BatchEmbeddingProcessor:
     def __init__(self, batch_size: int = 32, max_concurrent: int = 4):
         """
         Initialize batch processor.
-        
+
         Args:
             batch_size: Number of texts per batch
             max_concurrent: Maximum concurrent batches
@@ -49,17 +50,15 @@ class BatchEmbeddingProcessor:
         self.model = get_embedding_model()
 
     async def process_batch(
-        self,
-        texts: List[str],
-        batch_idx: int
+        self, texts: List[str], batch_idx: int
     ) -> tuple[int, np.ndarray]:
         """
         Process a single batch.
-        
+
         Args:
             texts: Texts in this batch
             batch_idx: Batch index for tracking
-            
+
         Returns:
             Tuple of (batch_idx, embeddings)
         """
@@ -72,21 +71,20 @@ class BatchEmbeddingProcessor:
             raise
 
     async def process_all(
-        self,
-        texts: List[str],
-        show_progress: bool = True
+        self, texts: List[str], show_progress: bool = True
     ) -> BatchResult:
         """
         Process all texts in batches.
-        
+
         Args:
             texts: All texts to embed
             show_progress: Show progress logging
-            
+
         Returns:
             BatchResult with all embeddings
         """
         import time
+
         start_time = time.time()
 
         if not texts:
@@ -94,12 +92,12 @@ class BatchEmbeddingProcessor:
                 embeddings=np.array([]),
                 texts=[],
                 batch_size=self.batch_size,
-                total_time=0
+                total_time=0,
             )
 
         # Split into batches
         batches = [
-            texts[i:i + self.batch_size]
+            texts[i : i + self.batch_size]
             for i in range(0, len(texts), self.batch_size)
         ]
 
@@ -112,12 +110,11 @@ class BatchEmbeddingProcessor:
         all_embeddings = []
 
         for i in range(0, len(batches), self.max_concurrent):
-            batch_group = batches[i:i + self.max_concurrent]
+            batch_group = batches[i : i + self.max_concurrent]
 
             # Process concurrent batches
             tasks = [
-                self.process_batch(batch, i + j)
-                for j, batch in enumerate(batch_group)
+                self.process_batch(batch, i + j) for j, batch in enumerate(batch_group)
             ]
 
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -143,30 +140,28 @@ class BatchEmbeddingProcessor:
 
         logger.info(
             f"Completed: {len(texts)} embeddings in {total_time:.2f}s "
-            f"({len(texts)/total_time:.1f} texts/sec)"
+            f"({len(texts) / total_time:.1f} texts/sec)"
         )
 
         return BatchResult(
             embeddings=final_embeddings,
             texts=texts,
             batch_size=self.batch_size,
-            total_time=total_time
+            total_time=total_time,
         )
 
 
 async def batch_generate_embeddings(
-    texts: List[str],
-    batch_size: int = 32,
-    max_concurrent: int = 4
+    texts: List[str], batch_size: int = 32, max_concurrent: int = 4
 ) -> np.ndarray:
     """
     Generate embeddings for texts in batches.
-    
+
     Args:
         texts: List of texts to embed
         batch_size: Batch size
         max_concurrent: Max concurrent batches
-        
+
     Returns:
         Array of embeddings
     """

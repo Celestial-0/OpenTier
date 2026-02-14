@@ -14,6 +14,7 @@ logger = get_logger(__name__)
 
 class DocumentType(Enum):
     """Document types for type-specific cleaning."""
+
     TEXT = "text"
     MARKDOWN = "markdown"
     HTML = "html"
@@ -24,14 +25,16 @@ class DocumentType(Enum):
 
 class CleaningStrategy(Enum):
     """Cleaning strategy levels."""
-    MINIMAL = "minimal"      # Only normalize line endings and unicode
-    STANDARD = "standard"    # Default production-grade cleaning
+
+    MINIMAL = "minimal"  # Only normalize line endings and unicode
+    STANDARD = "standard"  # Default production-grade cleaning
     AGGRESSIVE = "aggressive"  # Maximum cleaning, may lose some formatting
 
 
 @dataclass
 class CleaningMetrics:
     """Metrics tracking cleaning effectiveness."""
+
     original_length: int
     cleaned_length: int
     chars_removed: int
@@ -67,10 +70,10 @@ class HTMLStripper(HTMLParser):
 
 def strip_html(text: str) -> str:
     """Remove HTML tags from text.
-    
+
     Args:
         text: HTML text to clean
-        
+
     Returns:
         Text with HTML tags removed
     """
@@ -126,7 +129,7 @@ def normalize_line_endings(text: str) -> str:
 def remove_boilerplate(html: str) -> str:
     """
     Remove common web boilerplate elements (navigation, footer, ads, etc.).
-    
+
     This is a production-grade approach for cleaning web-scraped content.
     """
     if not html:
@@ -135,32 +138,28 @@ def remove_boilerplate(html: str) -> str:
     # Common boilerplate patterns to remove
     boilerplate_patterns = [
         # Navigation elements
-        r'<nav[^>]*>.*?</nav>',
-        r'<header[^>]*>.*?</header>',
-        r'<footer[^>]*>.*?</footer>',
-
+        r"<nav[^>]*>.*?</nav>",
+        r"<header[^>]*>.*?</header>",
+        r"<footer[^>]*>.*?</footer>",
         # Ads and tracking
         r'<div[^>]*class="[^"]*ad[^"]*"[^>]*>.*?</div>',
         r'<div[^>]*id="[^"]*ad[^"]*"[^>]*>.*?</div>',
-        r'<script[^>]*>.*?</script>',
-        r'<noscript[^>]*>.*?</noscript>',
-
+        r"<script[^>]*>.*?</script>",
+        r"<noscript[^>]*>.*?</noscript>",
         # Social media widgets
         r'<div[^>]*class="[^"]*social[^"]*"[^>]*>.*?</div>',
         r'<div[^>]*class="[^"]*share[^"]*"[^>]*>.*?</div>',
-
         # Comments sections
         r'<div[^>]*class="[^"]*comment[^"]*"[^>]*>.*?</div>',
         r'<div[^>]*id="[^"]*comment[^"]*"[^>]*>.*?</div>',
-
         # Common sidebar elements
-        r'<aside[^>]*>.*?</aside>',
+        r"<aside[^>]*>.*?</aside>",
         r'<div[^>]*class="[^"]*sidebar[^"]*"[^>]*>.*?</div>',
     ]
 
     cleaned = html
     for pattern in boilerplate_patterns:
-        cleaned = re.sub(pattern, '', cleaned, flags=re.DOTALL | re.IGNORECASE)
+        cleaned = re.sub(pattern, "", cleaned, flags=re.DOTALL | re.IGNORECASE)
 
     return cleaned
 
@@ -168,11 +167,11 @@ def remove_boilerplate(html: str) -> str:
 def clean_markdown(text: str, preserve_formatting: bool = True) -> str:
     """
     Clean markdown content while preserving structure.
-    
+
     Args:
         text: Markdown text
         preserve_formatting: Keep markdown formatting (links, emphasis, etc.)
-    
+
     Returns:
         Cleaned markdown text
     """
@@ -184,13 +183,13 @@ def clean_markdown(text: str, preserve_formatting: bool = True) -> str:
 
     if not preserve_formatting:
         # Strip markdown syntax if not preserving
-        text = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', text)  # Links
-        text = re.sub(r'[*_]{1,2}([^*_]+)[*_]{1,2}', r'\1', text)  # Bold/italic
-        text = re.sub(r'^#+\s+', '', text, flags=re.MULTILINE)  # Headers
-        text = re.sub(r'`([^`]+)`', r'\1', text)  # Inline code
+        text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)  # Links
+        text = re.sub(r"[*_]{1,2}([^*_]+)[*_]{1,2}", r"\1", text)  # Bold/italic
+        text = re.sub(r"^#+\s+", "", text, flags=re.MULTILINE)  # Headers
+        text = re.sub(r"`([^`]+)`", r"\1", text)  # Inline code
 
     # Remove excessive blank lines (more than 2)
-    text = re.sub(r'\n{3,}', '\n\n', text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
 
     # Normalize whitespace
     text = normalize_whitespace(text)
@@ -201,11 +200,11 @@ def clean_markdown(text: str, preserve_formatting: bool = True) -> str:
 def clean_code(text: str, language: Optional[str] = None) -> str:
     """
     Clean code content while preserving syntax.
-    
+
     Args:
         text: Code text
         language: Programming language (optional)
-    
+
     Returns:
         Cleaned code text
     """
@@ -216,7 +215,7 @@ def clean_code(text: str, language: Optional[str] = None) -> str:
     text = normalize_line_endings(text)
 
     # Remove excessive blank lines but preserve code structure
-    text = re.sub(r'\n{4,}', '\n\n\n', text)
+    text = re.sub(r"\n{4,}", "\n\n\n", text)
 
     # Remove trailing whitespace from lines (common code cleanup)
     text = "\n".join(line.rstrip() for line in text.split("\n"))
@@ -230,14 +229,14 @@ def clean_code(text: str, language: Optional[str] = None) -> str:
 def clean_url_content(html: str, aggressive: bool = False) -> str:
     """
     Clean web-scraped URL content (HTML).
-    
+
     This is optimized for web scraping scenarios where you want
     to extract meaningful content from HTML pages.
-    
+
     Args:
         html: HTML content from URL
         aggressive: If True, apply aggressive boilerplate removal
-    
+
     Returns:
         Cleaned text content
     """
@@ -263,7 +262,7 @@ def clean_url_content(html: str, aggressive: bool = False) -> str:
 def clean_pdf_text(text: str) -> str:
     """
     Clean text extracted from PDF.
-    
+
     PDFs often have artifacts from extraction like hyphenation,
     page numbers, headers/footers.
     """
@@ -275,10 +274,10 @@ def clean_pdf_text(text: str) -> str:
 
     # Remove common PDF artifacts
     # Remove page numbers (standalone numbers on lines)
-    text = re.sub(r'^\s*\d+\s*$', '', text, flags=re.MULTILINE)
+    text = re.sub(r"^\s*\d+\s*$", "", text, flags=re.MULTILINE)
 
     # Fix hyphenation at line breaks
-    text = re.sub(r'-\n(\w)', r'\1', text)
+    text = re.sub(r"-\n(\w)", r"\1", text)
 
     # Normalize unicode
     text = normalize_unicode(text)
@@ -344,17 +343,17 @@ def clean_with_strategy(
 ) -> tuple[str, CleaningMetrics]:
     """
     Production-grade cleaning with document-type-specific strategies.
-    
+
     This is the main entry point for intelligent, resource-aware cleaning.
-    
+
     Args:
         text: Input text to clean
         document_type: Type of document (URL, Markdown, Code, etc.)
         strategy: Cleaning strategy level
-    
+
     Returns:
         Tuple of (cleaned_text, metrics)
-    
+
     Examples:
         >>> text, metrics = clean_with_strategy(html, DocumentType.HTML, CleaningStrategy.STANDARD)
         >>> print(f"Removed {metrics.reduction_percent:.1f}% of content")
@@ -385,12 +384,14 @@ def clean_with_strategy(
             boilerplate_removed = len(cleaned) < before_boilerplate
 
         # Count HTML tags before removal
-        html_tags_removed = len(re.findall(r'<[^>]+>', cleaned))
-        cleaned = clean_url_content(cleaned, aggressive=(strategy == CleaningStrategy.AGGRESSIVE))
+        html_tags_removed = len(re.findall(r"<[^>]+>", cleaned))
+        cleaned = clean_url_content(
+            cleaned, aggressive=(strategy == CleaningStrategy.AGGRESSIVE)
+        )
 
     elif document_type == DocumentType.MARKDOWN:
         # Markdown cleaning
-        preserve_formatting = (strategy != CleaningStrategy.AGGRESSIVE)
+        preserve_formatting = strategy != CleaningStrategy.AGGRESSIVE
         cleaned = clean_markdown(cleaned, preserve_formatting=preserve_formatting)
 
     elif document_type == DocumentType.CODE:
@@ -432,4 +433,3 @@ def clean_with_strategy(
     )
 
     return cleaned, metrics
-

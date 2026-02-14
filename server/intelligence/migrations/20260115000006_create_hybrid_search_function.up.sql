@@ -22,7 +22,10 @@ CREATE OR REPLACE FUNCTION hybrid_search(
             ) AS vector_rank
         FROM document_chunks dc
             JOIN documents d ON dc.document_id = d.id
-        WHERE d.user_id = p_user_id
+        WHERE (
+                d.user_id = p_user_id
+                OR d.is_global = true
+            )
             AND dc.embedding IS NOT NULL
         ORDER BY dc.embedding <=> query_embedding
         LIMIT 100
@@ -42,7 +45,10 @@ CREATE OR REPLACE FUNCTION hybrid_search(
             ) AS keyword_rank
         FROM document_chunks dc
             JOIN documents d ON dc.document_id = d.id
-        WHERE d.user_id = p_user_id
+        WHERE (
+                d.user_id = p_user_id
+                OR d.is_global = true
+            )
             AND to_tsvector('english', dc.content) @@ plainto_tsquery('english', query_text)
         LIMIT 100
     ), combined AS (

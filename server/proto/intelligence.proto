@@ -211,6 +211,7 @@ message AddResourceRequest {
   optional string title = 7;
   map<string, string> metadata = 8;
   optional IngestionConfig config = 9;
+  bool is_global = 10;
 }
 
 message IngestionConfig {
@@ -265,6 +266,7 @@ message ResourceItem {
   ResourceStats stats = 5;
   int64 created_at = 6;
   map<string, string> metadata = 7;
+  bool is_global = 8;
 }
 
 message ResourceStats {

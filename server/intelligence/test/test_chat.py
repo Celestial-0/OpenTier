@@ -27,13 +27,13 @@ async def test_chat_rag_flow(chat_client, resource_client):
             user_id="test-user-1",
             text="The capital of France is Paris. It is known for the Eiffel Tower.",
             title="France Facts",
-            type=intelligence_pb2.RESOURCE_TYPE_TEXT
+            type=intelligence_pb2.RESOURCE_TYPE_TEXT,
         )
     )
     assert add_response.status in [
         intelligence_pb2.RESOURCE_STATUS_COMPLETED,
         intelligence_pb2.RESOURCE_STATUS_PROCESSING,
-        intelligence_pb2.RESOURCE_STATUS_QUEUED
+        intelligence_pb2.RESOURCE_STATUS_QUEUED,
     ]
 
     # 2. Send a message
@@ -41,7 +41,7 @@ async def test_chat_rag_flow(chat_client, resource_client):
         intelligence_pb2.ChatRequest(
             user_id="test-user-1",
             message="What is the capital of France?",
-            conversation_id=""  # New conversation
+            conversation_id="",  # New conversation
         )
     )
 
@@ -55,7 +55,9 @@ async def test_chat_rag_flow(chat_client, resource_client):
     assert response.metrics is not None
     assert response.metrics.tokens_used > 0, "Total tokens should be tracked"
     assert response.metrics.prompt_tokens > 0, "Prompt tokens should be tracked (not 0)"
-    assert response.metrics.completion_tokens > 0, "Completion tokens should be tracked (not 0)"
+    assert response.metrics.completion_tokens > 0, (
+        "Completion tokens should be tracked (not 0)"
+    )
     assert response.metrics.latency_ms >= 0
 
     # Verify token count consistency
@@ -79,7 +81,7 @@ async def test_chat_rag_flow(chat_client, resource_client):
         intelligence_pb2.ChatRequest(
             user_id="test-user-1",
             message="Tell me more about it",
-            conversation_id=response.conversation_id
+            conversation_id=response.conversation_id,
         )
     )
 
@@ -104,10 +106,14 @@ async def test_chat_stream(chat_client, resource_client):
             user_id="test-user-stream",
             text="Python is a programming language created by Guido van Rossum.",
             title="Python Facts",
-            type=intelligence_pb2.RESOURCE_TYPE_TEXT
+            type=intelligence_pb2.RESOURCE_TYPE_TEXT,
         )
     )
-    assert add_resp.status in [intelligence_pb2.RESOURCE_STATUS_COMPLETED, intelligence_pb2.RESOURCE_STATUS_PROCESSING, intelligence_pb2.RESOURCE_STATUS_QUEUED]
+    assert add_resp.status in [
+        intelligence_pb2.RESOURCE_STATUS_COMPLETED,
+        intelligence_pb2.RESOURCE_STATUS_PROCESSING,
+        intelligence_pb2.RESOURCE_STATUS_QUEUED,
+    ]
 
     # Stream chat
     chunks = []
@@ -115,7 +121,7 @@ async def test_chat_stream(chat_client, resource_client):
         intelligence_pb2.ChatRequest(
             user_id="test-user-stream",
             message="Who created Python?",
-            conversation_id=""
+            conversation_id="",
         )
     ):
         chunks.append(chunk)
@@ -147,14 +153,18 @@ async def test_chat_token_tracking_mock_mode(chat_client):
         intelligence_pb2.ChatRequest(
             user_id="test-token-user",
             message="This is a short test message.",
-            conversation_id=""
+            conversation_id="",
         )
     )
 
     # In mock mode, prompt_tokens should be > 0
     # completion_tokens should be word count of response
-    assert response.metrics.prompt_tokens > 0, "Mock mode should return prompt_tokens > 0"
-    assert response.metrics.completion_tokens > 0, "Mock should return completion count based on response"
+    assert response.metrics.prompt_tokens > 0, (
+        "Mock mode should return prompt_tokens > 0"
+    )
+    assert response.metrics.completion_tokens > 0, (
+        "Mock should return completion count based on response"
+    )
 
     # Total should be >= sum of parts
     assert response.metrics.tokens_used >= response.metrics.prompt_tokens
@@ -172,18 +182,14 @@ async def test_chat_multiple_conversations(chat_client):
     # Conversation 1
     resp1 = await chat_client.SendMessage(
         intelligence_pb2.ChatRequest(
-            user_id=user_id,
-            message="Hello from conversation 1",
-            conversation_id=""
+            user_id=user_id, message="Hello from conversation 1", conversation_id=""
         )
     )
 
     # Conversation 2
     resp2 = await chat_client.SendMessage(
         intelligence_pb2.ChatRequest(
-            user_id=user_id,
-            message="Hello from conversation 2",
-            conversation_id=""
+            user_id=user_id, message="Hello from conversation 2", conversation_id=""
         )
     )
 
@@ -205,7 +211,7 @@ async def test_chat_metrics_consistency(chat_client):
         intelligence_pb2.ChatRequest(
             user_id="test-metrics",
             message="Test message for metrics validation",
-            conversation_id=""
+            conversation_id="",
         )
     )
 
@@ -219,7 +225,9 @@ async def test_chat_metrics_consistency(chat_client):
     assert metrics.sources_retrieved >= 0, "sources_retrieved should be non-negative"
 
     # Logical consistency checks
-    assert metrics.tokens_used >= metrics.prompt_tokens, \
+    assert metrics.tokens_used >= metrics.prompt_tokens, (
         "Total tokens should be >= prompt tokens"
-    assert metrics.tokens_used >= metrics.completion_tokens, \
+    )
+    assert metrics.tokens_used >= metrics.completion_tokens, (
         "Total tokens should be >= completion tokens"
+    )

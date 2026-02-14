@@ -25,6 +25,7 @@ class DocumentStorage:
         source_url: str | None = None,
         metadata: dict[str, Any] | None = None,
         document_id: uuid.UUID | None = None,
+        is_global: bool = False,
     ) -> Document:
         """Create a new document."""
         doc = Document(
@@ -35,6 +36,7 @@ class DocumentStorage:
             document_type=document_type,
             source_url=source_url,
             metadata_=metadata or {},
+            is_global=is_global,
         )
         self.session.add(doc)
         await self.session.flush()
@@ -156,9 +158,7 @@ class JobStorage:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def create_job(
-        self, user_id: str, total_documents: int = 0
-    ) -> IngestionJob:
+    async def create_job(self, user_id: str, total_documents: int = 0) -> IngestionJob:
         """Create a new ingestion job."""
         job = IngestionJob(
             user_id=user_id,

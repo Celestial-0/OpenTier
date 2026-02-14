@@ -9,6 +9,7 @@ from engine.ingestion.retry import with_retry
 
 logger = get_logger(__name__)
 
+
 class LLMClient:
     """Simple Async LLM Client using httpx."""
 
@@ -28,10 +29,10 @@ class LLMClient:
         messages: List[Dict[str, str]],
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
-        model: Optional[str] = None
+        model: Optional[str] = None,
     ) -> tuple[str, Dict[str, int]]:
         """Generate a completion for the given messages.
-        
+
         Returns:
             Tuple of (response_text, usage_dict) where usage_dict contains:
             - prompt_tokens: Number of tokens in the prompt
@@ -44,7 +45,7 @@ class LLMClient:
             return mock_text, {
                 "prompt_tokens": 50,
                 "completion_tokens": len(mock_text.split()),
-                "total_tokens": 50 + len(mock_text.split())
+                "total_tokens": 50 + len(mock_text.split()),
             }
 
         payload = {
@@ -59,7 +60,7 @@ class LLMClient:
                 response = await client.post(
                     f"{self.base_url}/chat/completions",
                     headers=self.headers,
-                    json=payload
+                    json=payload,
                 )
                 response.raise_for_status()
                 data = response.json()
@@ -70,7 +71,7 @@ class LLMClient:
                 token_usage = {
                     "prompt_tokens": usage.get("prompt_tokens", 0),
                     "completion_tokens": usage.get("completion_tokens", 0),
-                    "total_tokens": usage.get("total_tokens", 0)
+                    "total_tokens": usage.get("total_tokens", 0),
                 }
 
                 return content, token_usage
@@ -86,7 +87,7 @@ class LLMClient:
         messages: List[Dict[str, str]],
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
-        model: Optional[str] = None
+        model: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         """Stream a completion for the given messages."""
         if self.is_mock:
@@ -100,7 +101,7 @@ class LLMClient:
             "messages": messages,
             "temperature": temperature or self.config.temperature,
             "max_tokens": max_tokens or self.config.max_tokens,
-            "stream": True
+            "stream": True,
         }
 
         try:
@@ -109,7 +110,7 @@ class LLMClient:
                     "POST",
                     f"{self.base_url}/chat/completions",
                     headers=self.headers,
-                    json=payload
+                    json=payload,
                 ) as response:
                     response.raise_for_status()
                     async for line in response.aiter_lines():
@@ -126,5 +127,5 @@ class LLMClient:
                             except json.JSONDecodeError:
                                 continue
         except Exception as e:
-             logger.error(f"LLM Streaming failed: {e}")
-             yield f"[Error: {str(e)}]"
+            logger.error(f"LLM Streaming failed: {e}")
+            yield f"[Error: {str(e)}]"

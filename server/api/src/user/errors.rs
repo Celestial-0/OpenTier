@@ -1,7 +1,7 @@
 use axum::{
-    Json,
     http::StatusCode,
     response::{IntoResponse, Response},
+    Json,
 };
 use serde_json::json;
 
@@ -46,6 +46,7 @@ impl IntoResponse for UserError {
 
         let body = Json(json!({
             "error": message,
+            "message": message,
         }));
 
         (status, body).into_response()

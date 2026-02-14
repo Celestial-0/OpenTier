@@ -4,131 +4,154 @@
 # source: intelligence.proto
 # Protobuf Python Version: 6.31.1
 """Generated protocol buffer code."""
+
 from google.protobuf import descriptor as _descriptor
 from google.protobuf import descriptor_pool as _descriptor_pool
 from google.protobuf import runtime_version as _runtime_version
 from google.protobuf import symbol_database as _symbol_database
 from google.protobuf.internal import builder as _builder
+
 _runtime_version.ValidateProtobufRuntimeVersion(
-    _runtime_version.Domain.PUBLIC,
-    6,
-    31,
-    1,
-    '',
-    'intelligence.proto'
+    _runtime_version.Domain.PUBLIC, 6, 31, 1, "", "intelligence.proto"
 )
 # @@protoc_insertion_point(imports)
 
 _sym_db = _symbol_database.Default()
 
 
-
-
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x12intelligence.proto\x12\x18opentier.intelligence.v1\"\x14\n\x12HealthCheckRequest\"w\n\x13HealthCheckResponse\x12\x0e\n\x06status\x18\x01 \x01(\t\x12\x14\n\x07version\x18\x02 \x01(\tH\x00\x88\x01\x01\x12\x1b\n\x0euptime_seconds\x18\x03 \x01(\x03H\x01\x88\x01\x01\x42\n\n\x08_versionB\x11\n\x0f_uptime_seconds\"\x13\n\x11ReadyCheckRequest\"\xd1\x01\n\x12ReadyCheckResponse\x12\r\n\x05ready\x18\x01 \x01(\x08\x12\x14\n\x0c\x64\x65pendencies\x18\x02 \x03(\t\x12]\n\x11\x64\x65pendency_status\x18\x03 \x03(\x0b\x32\x42.opentier.intelligence.v1.ReadyCheckResponse.DependencyStatusEntry\x1a\x37\n\x15\x44\x65pendencyStatusEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x08:\x02\x38\x01\"\x86\x02\n\x0b\x43hatRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\x17\n\x0f\x63onversation_id\x18\x02 \x01(\t\x12\x0f\n\x07message\x18\x03 \x01(\t\x12\x39\n\x06\x63onfig\x18\x04 \x01(\x0b\x32$.opentier.intelligence.v1.ChatConfigH\x00\x88\x01\x01\x12\x45\n\x08metadata\x18\x05 \x03(\x0b\x32\x33.opentier.intelligence.v1.ChatRequest.MetadataEntry\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x42\t\n\x07_config\"\xcc\x01\n\nChatConfig\x12\x18\n\x0btemperature\x18\x01 \x01(\x02H\x00\x88\x01\x01\x12\x17\n\nmax_tokens\x18\x02 \x01(\x05H\x01\x88\x01\x01\x12\x14\n\x07use_rag\x18\x03 \x01(\x08H\x02\x88\x01\x01\x12\x12\n\x05model\x18\x04 \x01(\tH\x03\x88\x01\x01\x12\x1a\n\rcontext_limit\x18\x05 \x01(\x05H\x04\x88\x01\x01\x42\x0e\n\x0c_temperatureB\r\n\x0b_max_tokensB\n\n\x08_use_ragB\x08\n\x06_modelB\x10\n\x0e_context_limit\"\xe3\x01\n\x0c\x43hatResponse\x12\x17\n\x0f\x63onversation_id\x18\x01 \x01(\t\x12\x12\n\nmessage_id\x18\x02 \x01(\t\x12\x10\n\x08response\x18\x03 \x01(\t\x12\x37\n\x07sources\x18\x04 \x03(\x0b\x32&.opentier.intelligence.v1.ContextChunk\x12;\n\x07metrics\x18\x05 \x01(\x0b\x32%.opentier.intelligence.v1.ChatMetricsH\x00\x88\x01\x01\x12\x12\n\ncreated_at\x18\x06 \x01(\x03\x42\n\n\x08_metrics\"\xf4\x01\n\x0f\x43hatStreamChunk\x12\x17\n\x0f\x63onversation_id\x18\x01 \x01(\t\x12\x12\n\nmessage_id\x18\x02 \x01(\t\x12\x0f\n\x05token\x18\x03 \x01(\tH\x00\x12\x38\n\x06source\x18\x04 \x01(\x0b\x32&.opentier.intelligence.v1.ContextChunkH\x00\x12\x38\n\x07metrics\x18\x05 \x01(\x0b\x32%.opentier.intelligence.v1.ChatMetricsH\x00\x12\x0f\n\x05\x65rror\x18\x06 \x01(\tH\x00\x12\x10\n\x08is_final\x18\x07 \x01(\x08\x42\x0c\n\nchunk_type\"\x83\x01\n\x0b\x43hatMetrics\x12\x13\n\x0btokens_used\x18\x01 \x01(\x05\x12\x15\n\rprompt_tokens\x18\x02 \x01(\x05\x12\x19\n\x11\x63ompletion_tokens\x18\x03 \x01(\x05\x12\x12\n\nlatency_ms\x18\x04 \x01(\x02\x12\x19\n\x11sources_retrieved\x18\x05 \x01(\x05\"\xb0\x02\n\x0c\x43ontextChunk\x12\x10\n\x08\x63hunk_id\x18\x01 \x01(\t\x12\x13\n\x0b\x64ocument_id\x18\x02 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x03 \x01(\t\x12\x17\n\x0frelevance_score\x18\x04 \x01(\x02\x12\x1b\n\x0e\x64ocument_title\x18\x05 \x01(\tH\x00\x88\x01\x01\x12\x17\n\nsource_url\x18\x06 \x01(\tH\x01\x88\x01\x01\x12\x46\n\x08metadata\x18\x07 \x03(\x0b\x32\x34.opentier.intelligence.v1.ContextChunk.MetadataEntry\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x42\x11\n\x0f_document_titleB\r\n\x0b_source_url\"\x80\x01\n\x16GetConversationRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\x17\n\x0f\x63onversation_id\x18\x02 \x01(\t\x12\x12\n\x05limit\x18\x03 \x01(\x05H\x00\x88\x01\x01\x12\x13\n\x06\x63ursor\x18\x04 \x01(\tH\x01\x88\x01\x01\x42\x08\n\x06_limitB\t\n\x07_cursor\"\xbb\x02\n\x14\x43onversationResponse\x12\x17\n\x0f\x63onversation_id\x18\x01 \x01(\t\x12\x37\n\x08messages\x18\x02 \x03(\x0b\x32%.opentier.intelligence.v1.ChatMessage\x12\x18\n\x0bnext_cursor\x18\x03 \x01(\tH\x00\x88\x01\x01\x12\x12\n\ncreated_at\x18\x04 \x01(\x03\x12\x12\n\nupdated_at\x18\x05 \x01(\x03\x12N\n\x08metadata\x18\x06 \x03(\x0b\x32<.opentier.intelligence.v1.ConversationResponse.MetadataEntry\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x42\x0e\n\x0c_next_cursor\"\xb4\x01\n\x0b\x43hatMessage\x12\x12\n\nmessage_id\x18\x01 \x01(\t\x12\x33\n\x04role\x18\x02 \x01(\x0e\x32%.opentier.intelligence.v1.MessageRole\x12\x0f\n\x07\x63ontent\x18\x03 \x01(\t\x12\x37\n\x07sources\x18\x04 \x03(\x0b\x32&.opentier.intelligence.v1.ContextChunk\x12\x12\n\ncreated_at\x18\x05 \x01(\x03\"E\n\x19\x44\x65leteConversationRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\x17\n\x0f\x63onversation_id\x18\x02 \x01(\t\"F\n\x1a\x44\x65leteConversationResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x17\n\x0f\x63onversation_id\x18\x02 \x01(\t\"\x9a\x03\n\x12\x41\x64\x64ResourceRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\x13\n\x0bresource_id\x18\x02 \x01(\t\x12\x0e\n\x04text\x18\x03 \x01(\tH\x00\x12\r\n\x03url\x18\x04 \x01(\tH\x00\x12\x16\n\x0c\x66ile_content\x18\x05 \x01(\x0cH\x00\x12\x34\n\x04type\x18\x06 \x01(\x0e\x32&.opentier.intelligence.v1.ResourceType\x12\x12\n\x05title\x18\x07 \x01(\tH\x01\x88\x01\x01\x12L\n\x08metadata\x18\x08 \x03(\x0b\x32:.opentier.intelligence.v1.AddResourceRequest.MetadataEntry\x12>\n\x06\x63onfig\x18\t \x01(\x0b\x32).opentier.intelligence.v1.IngestionConfigH\x02\x88\x01\x01\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x42\t\n\x07\x63ontentB\x08\n\x06_titleB\t\n\x07_config\"\x9b\x02\n\x0fIngestionConfig\x12\x17\n\nchunk_size\x18\x01 \x01(\x05H\x00\x88\x01\x01\x12\x1a\n\rchunk_overlap\x18\x02 \x01(\x05H\x01\x88\x01\x01\x12\x17\n\nauto_clean\x18\x03 \x01(\x08H\x02\x88\x01\x01\x12 \n\x13generate_embeddings\x18\x04 \x01(\x08H\x03\x88\x01\x01\x12\x16\n\tmax_depth\x18\x05 \x01(\x05H\x04\x88\x01\x01\x12\x19\n\x0c\x66ollow_links\x18\x06 \x01(\x08H\x05\x88\x01\x01\x42\r\n\x0b_chunk_sizeB\x10\n\x0e_chunk_overlapB\r\n\x0b_auto_cleanB\x16\n\x14_generate_embeddingsB\x0c\n\n_max_depthB\x0f\n\r_follow_links\"t\n\x13\x41\x64\x64ResourceResponse\x12\x0e\n\x06job_id\x18\x01 \x01(\t\x12\x13\n\x0bresource_id\x18\x02 \x01(\t\x12\x38\n\x06status\x18\x03 \x01(\x0e\x32(.opentier.intelligence.v1.ResourceStatus\"P\n\x18GetResourceStatusRequest\x12\x0e\n\x06job_id\x18\x01 \x01(\t\x12\x13\n\x0bresource_id\x18\x02 \x01(\t\x12\x0f\n\x07user_id\x18\x03 \x01(\t\"\xbf\x01\n\x16ResourceStatusResponse\x12\x0e\n\x06job_id\x18\x01 \x01(\t\x12\x13\n\x0bresource_id\x18\x02 \x01(\t\x12\x38\n\x06status\x18\x03 \x01(\x0e\x32(.opentier.intelligence.v1.ResourceStatus\x12\x16\n\x0e\x63hunks_created\x18\x04 \x01(\x05\x12\x12\n\x05\x65rror\x18\x05 \x01(\tH\x00\x88\x01\x01\x12\x10\n\x08progress\x18\x06 \x01(\x02\x42\x08\n\x06_error\"\x8f\x02\n\x14ListResourcesRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\x12\n\x05limit\x18\x02 \x01(\x05H\x00\x88\x01\x01\x12\x13\n\x06\x63ursor\x18\x03 \x01(\tH\x01\x88\x01\x01\x12@\n\x0btype_filter\x18\x04 \x01(\x0e\x32&.opentier.intelligence.v1.ResourceTypeH\x02\x88\x01\x01\x12\x44\n\rstatus_filter\x18\x05 \x01(\x0e\x32(.opentier.intelligence.v1.ResourceStatusH\x03\x88\x01\x01\x42\x08\n\x06_limitB\t\n\x07_cursorB\x0e\n\x0c_type_filterB\x10\n\x0e_status_filter\"\x8d\x01\n\x15ListResourcesResponse\x12\x35\n\x05items\x18\x01 \x03(\x0b\x32&.opentier.intelligence.v1.ResourceItem\x12\x18\n\x0bnext_cursor\x18\x02 \x01(\tH\x00\x88\x01\x01\x12\x13\n\x0btotal_count\x18\x03 \x01(\x05\x42\x0e\n\x0c_next_cursor\"\xe0\x02\n\x0cResourceItem\x12\n\n\x02id\x18\x01 \x01(\t\x12\x34\n\x04type\x18\x02 \x01(\x0e\x32&.opentier.intelligence.v1.ResourceType\x12\x0f\n\x07\x63ontent\x18\x03 \x01(\t\x12\x38\n\x06status\x18\x04 \x01(\x0e\x32(.opentier.intelligence.v1.ResourceStatus\x12\x36\n\x05stats\x18\x05 \x01(\x0b\x32\'.opentier.intelligence.v1.ResourceStats\x12\x12\n\ncreated_at\x18\x06 \x01(\x03\x12\x46\n\x08metadata\x18\x07 \x03(\x0b\x32\x34.opentier.intelligence.v1.ResourceItem.MetadataEntry\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"2\n\rResourceStats\x12\x11\n\tdocuments\x18\x01 \x01(\x05\x12\x0e\n\x06\x63hunks\x18\x02 \x01(\x05\"=\n\x15\x44\x65leteResourceRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\x13\n\x0bresource_id\x18\x02 \x01(\t\">\n\x16\x44\x65leteResourceResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x13\n\x0bresource_id\x18\x02 \x01(\t\"9\n\x16\x43\x61ncelIngestionRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\x0e\n\x06job_id\x18\x02 \x01(\t\"\\\n\x17\x43\x61ncelIngestionResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0e\n\x06job_id\x18\x02 \x01(\t\x12\x14\n\x07message\x18\x03 \x01(\tH\x00\x88\x01\x01\x42\n\n\x08_message\"\xf5\x01\n\x08\x44ocument\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05title\x18\x02 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x03 \x01(\t\x12\x34\n\x04type\x18\x04 \x01(\x0e\x32&.opentier.intelligence.v1.DocumentType\x12\x12\n\nsource_url\x18\x05 \x01(\t\x12\x42\n\x08metadata\x18\x06 \x03(\x0b\x32\x30.opentier.intelligence.v1.Document.MetadataEntry\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01*w\n\x0bMessageRole\x12\x1c\n\x18MESSAGE_ROLE_UNSPECIFIED\x10\x00\x12\x15\n\x11MESSAGE_ROLE_USER\x10\x01\x12\x1a\n\x16MESSAGE_ROLE_ASSISTANT\x10\x02\x12\x17\n\x13MESSAGE_ROLE_SYSTEM\x10\x03*\xc3\x01\n\x0cResourceType\x12\x1d\n\x19RESOURCE_TYPE_UNSPECIFIED\x10\x00\x12\x16\n\x12RESOURCE_TYPE_TEXT\x10\x01\x12\x1a\n\x16RESOURCE_TYPE_MARKDOWN\x10\x02\x12\x15\n\x11RESOURCE_TYPE_PDF\x10\x03\x12\x16\n\x12RESOURCE_TYPE_HTML\x10\x04\x12\x19\n\x15RESOURCE_TYPE_WEBSITE\x10\x05\x12\x16\n\x12RESOURCE_TYPE_CODE\x10\x06*\xc5\x01\n\x0eResourceStatus\x12\x1f\n\x1bRESOURCE_STATUS_UNSPECIFIED\x10\x00\x12\x1a\n\x16RESOURCE_STATUS_QUEUED\x10\x01\x12\x1e\n\x1aRESOURCE_STATUS_PROCESSING\x10\x02\x12\x1d\n\x19RESOURCE_STATUS_COMPLETED\x10\x03\x12\x1a\n\x16RESOURCE_STATUS_FAILED\x10\x04\x12\x1b\n\x17RESOURCE_STATUS_PARTIAL\x10\x05*\xa8\x01\n\x0c\x44ocumentType\x12\x1d\n\x19\x44OCUMENT_TYPE_UNSPECIFIED\x10\x00\x12\x16\n\x12\x44OCUMENT_TYPE_TEXT\x10\x01\x12\x1a\n\x16\x44OCUMENT_TYPE_MARKDOWN\x10\x02\x12\x16\n\x12\x44OCUMENT_TYPE_HTML\x10\x03\x12\x15\n\x11\x44OCUMENT_TYPE_PDF\x10\x04\x12\x16\n\x12\x44OCUMENT_TYPE_CODE\x10\x05\x32\xd2\x01\n\x06Health\x12\x64\n\x05\x43heck\x12,.opentier.intelligence.v1.HealthCheckRequest\x1a-.opentier.intelligence.v1.HealthCheckResponse\x12\x62\n\x05Ready\x12+.opentier.intelligence.v1.ReadyCheckRequest\x1a,.opentier.intelligence.v1.ReadyCheckResponse2\xbc\x03\n\x04\x43hat\x12\\\n\x0bSendMessage\x12%.opentier.intelligence.v1.ChatRequest\x1a&.opentier.intelligence.v1.ChatResponse\x12`\n\nStreamChat\x12%.opentier.intelligence.v1.ChatRequest\x1a).opentier.intelligence.v1.ChatStreamChunk0\x01\x12s\n\x0fGetConversation\x12\x30.opentier.intelligence.v1.GetConversationRequest\x1a..opentier.intelligence.v1.ConversationResponse\x12\x7f\n\x12\x44\x65leteConversation\x12\x33.opentier.intelligence.v1.DeleteConversationRequest\x1a\x34.opentier.intelligence.v1.DeleteConversationResponse2\xd7\x04\n\x0fResourceService\x12j\n\x0b\x41\x64\x64Resource\x12,.opentier.intelligence.v1.AddResourceRequest\x1a-.opentier.intelligence.v1.AddResourceResponse\x12y\n\x11GetResourceStatus\x12\x32.opentier.intelligence.v1.GetResourceStatusRequest\x1a\x30.opentier.intelligence.v1.ResourceStatusResponse\x12p\n\rListResources\x12..opentier.intelligence.v1.ListResourcesRequest\x1a/.opentier.intelligence.v1.ListResourcesResponse\x12s\n\x0e\x44\x65leteResource\x12/.opentier.intelligence.v1.DeleteResourceRequest\x1a\x30.opentier.intelligence.v1.DeleteResourceResponse\x12v\n\x0f\x43\x61ncelIngestion\x12\x30.opentier.intelligence.v1.CancelIngestionRequest\x1a\x31.opentier.intelligence.v1.CancelIngestionResponseb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
+    b'\n\x12intelligence.proto\x12\x18opentier.intelligence.v1"\x14\n\x12HealthCheckRequest"w\n\x13HealthCheckResponse\x12\x0e\n\x06status\x18\x01 \x01(\t\x12\x14\n\x07version\x18\x02 \x01(\tH\x00\x88\x01\x01\x12\x1b\n\x0euptime_seconds\x18\x03 \x01(\x03H\x01\x88\x01\x01\x42\n\n\x08_versionB\x11\n\x0f_uptime_seconds"\x13\n\x11ReadyCheckRequest"\xd1\x01\n\x12ReadyCheckResponse\x12\r\n\x05ready\x18\x01 \x01(\x08\x12\x14\n\x0c\x64\x65pendencies\x18\x02 \x03(\t\x12]\n\x11\x64\x65pendency_status\x18\x03 \x03(\x0b\x32\x42.opentier.intelligence.v1.ReadyCheckResponse.DependencyStatusEntry\x1a\x37\n\x15\x44\x65pendencyStatusEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\x08:\x02\x38\x01"\x86\x02\n\x0b\x43hatRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\x17\n\x0f\x63onversation_id\x18\x02 \x01(\t\x12\x0f\n\x07message\x18\x03 \x01(\t\x12\x39\n\x06\x63onfig\x18\x04 \x01(\x0b\x32$.opentier.intelligence.v1.ChatConfigH\x00\x88\x01\x01\x12\x45\n\x08metadata\x18\x05 \x03(\x0b\x32\x33.opentier.intelligence.v1.ChatRequest.MetadataEntry\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x42\t\n\x07_config"\xcc\x01\n\nChatConfig\x12\x18\n\x0btemperature\x18\x01 \x01(\x02H\x00\x88\x01\x01\x12\x17\n\nmax_tokens\x18\x02 \x01(\x05H\x01\x88\x01\x01\x12\x14\n\x07use_rag\x18\x03 \x01(\x08H\x02\x88\x01\x01\x12\x12\n\x05model\x18\x04 \x01(\tH\x03\x88\x01\x01\x12\x1a\n\rcontext_limit\x18\x05 \x01(\x05H\x04\x88\x01\x01\x42\x0e\n\x0c_temperatureB\r\n\x0b_max_tokensB\n\n\x08_use_ragB\x08\n\x06_modelB\x10\n\x0e_context_limit"\xe3\x01\n\x0c\x43hatResponse\x12\x17\n\x0f\x63onversation_id\x18\x01 \x01(\t\x12\x12\n\nmessage_id\x18\x02 \x01(\t\x12\x10\n\x08response\x18\x03 \x01(\t\x12\x37\n\x07sources\x18\x04 \x03(\x0b\x32&.opentier.intelligence.v1.ContextChunk\x12;\n\x07metrics\x18\x05 \x01(\x0b\x32%.opentier.intelligence.v1.ChatMetricsH\x00\x88\x01\x01\x12\x12\n\ncreated_at\x18\x06 \x01(\x03\x42\n\n\x08_metrics"\xf4\x01\n\x0f\x43hatStreamChunk\x12\x17\n\x0f\x63onversation_id\x18\x01 \x01(\t\x12\x12\n\nmessage_id\x18\x02 \x01(\t\x12\x0f\n\x05token\x18\x03 \x01(\tH\x00\x12\x38\n\x06source\x18\x04 \x01(\x0b\x32&.opentier.intelligence.v1.ContextChunkH\x00\x12\x38\n\x07metrics\x18\x05 \x01(\x0b\x32%.opentier.intelligence.v1.ChatMetricsH\x00\x12\x0f\n\x05\x65rror\x18\x06 \x01(\tH\x00\x12\x10\n\x08is_final\x18\x07 \x01(\x08\x42\x0c\n\nchunk_type"\x83\x01\n\x0b\x43hatMetrics\x12\x13\n\x0btokens_used\x18\x01 \x01(\x05\x12\x15\n\rprompt_tokens\x18\x02 \x01(\x05\x12\x19\n\x11\x63ompletion_tokens\x18\x03 \x01(\x05\x12\x12\n\nlatency_ms\x18\x04 \x01(\x02\x12\x19\n\x11sources_retrieved\x18\x05 \x01(\x05"\xb0\x02\n\x0c\x43ontextChunk\x12\x10\n\x08\x63hunk_id\x18\x01 \x01(\t\x12\x13\n\x0b\x64ocument_id\x18\x02 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x03 \x01(\t\x12\x17\n\x0frelevance_score\x18\x04 \x01(\x02\x12\x1b\n\x0e\x64ocument_title\x18\x05 \x01(\tH\x00\x88\x01\x01\x12\x17\n\nsource_url\x18\x06 \x01(\tH\x01\x88\x01\x01\x12\x46\n\x08metadata\x18\x07 \x03(\x0b\x32\x34.opentier.intelligence.v1.ContextChunk.MetadataEntry\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x42\x11\n\x0f_document_titleB\r\n\x0b_source_url"\x80\x01\n\x16GetConversationRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\x17\n\x0f\x63onversation_id\x18\x02 \x01(\t\x12\x12\n\x05limit\x18\x03 \x01(\x05H\x00\x88\x01\x01\x12\x13\n\x06\x63ursor\x18\x04 \x01(\tH\x01\x88\x01\x01\x42\x08\n\x06_limitB\t\n\x07_cursor"\xbb\x02\n\x14\x43onversationResponse\x12\x17\n\x0f\x63onversation_id\x18\x01 \x01(\t\x12\x37\n\x08messages\x18\x02 \x03(\x0b\x32%.opentier.intelligence.v1.ChatMessage\x12\x18\n\x0bnext_cursor\x18\x03 \x01(\tH\x00\x88\x01\x01\x12\x12\n\ncreated_at\x18\x04 \x01(\x03\x12\x12\n\nupdated_at\x18\x05 \x01(\x03\x12N\n\x08metadata\x18\x06 \x03(\x0b\x32<.opentier.intelligence.v1.ConversationResponse.MetadataEntry\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x42\x0e\n\x0c_next_cursor"\xb4\x01\n\x0b\x43hatMessage\x12\x12\n\nmessage_id\x18\x01 \x01(\t\x12\x33\n\x04role\x18\x02 \x01(\x0e\x32%.opentier.intelligence.v1.MessageRole\x12\x0f\n\x07\x63ontent\x18\x03 \x01(\t\x12\x37\n\x07sources\x18\x04 \x03(\x0b\x32&.opentier.intelligence.v1.ContextChunk\x12\x12\n\ncreated_at\x18\x05 \x01(\x03"E\n\x19\x44\x65leteConversationRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\x17\n\x0f\x63onversation_id\x18\x02 \x01(\t"F\n\x1a\x44\x65leteConversationResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x17\n\x0f\x63onversation_id\x18\x02 \x01(\t"`\n\x14GenerateTitleRequest\x12\x17\n\x0f\x63onversation_id\x18\x01 \x01(\t\x12\x14\n\x0cuser_message\x18\x02 \x01(\t\x12\x19\n\x11\x61ssistant_message\x18\x03 \x01(\t"&\n\x15GenerateTitleResponse\x12\r\n\x05title\x18\x01 \x01(\t"\xad\x03\n\x12\x41\x64\x64ResourceRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\x13\n\x0bresource_id\x18\x02 \x01(\t\x12\x0e\n\x04text\x18\x03 \x01(\tH\x00\x12\r\n\x03url\x18\x04 \x01(\tH\x00\x12\x16\n\x0c\x66ile_content\x18\x05 \x01(\x0cH\x00\x12\x34\n\x04type\x18\x06 \x01(\x0e\x32&.opentier.intelligence.v1.ResourceType\x12\x12\n\x05title\x18\x07 \x01(\tH\x01\x88\x01\x01\x12L\n\x08metadata\x18\x08 \x03(\x0b\x32:.opentier.intelligence.v1.AddResourceRequest.MetadataEntry\x12>\n\x06\x63onfig\x18\t \x01(\x0b\x32).opentier.intelligence.v1.IngestionConfigH\x02\x88\x01\x01\x12\x11\n\tis_global\x18\n \x01(\x08\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x42\t\n\x07\x63ontentB\x08\n\x06_titleB\t\n\x07_config"\x9b\x02\n\x0fIngestionConfig\x12\x17\n\nchunk_size\x18\x01 \x01(\x05H\x00\x88\x01\x01\x12\x1a\n\rchunk_overlap\x18\x02 \x01(\x05H\x01\x88\x01\x01\x12\x17\n\nauto_clean\x18\x03 \x01(\x08H\x02\x88\x01\x01\x12 \n\x13generate_embeddings\x18\x04 \x01(\x08H\x03\x88\x01\x01\x12\x16\n\tmax_depth\x18\x05 \x01(\x05H\x04\x88\x01\x01\x12\x19\n\x0c\x66ollow_links\x18\x06 \x01(\x08H\x05\x88\x01\x01\x42\r\n\x0b_chunk_sizeB\x10\n\x0e_chunk_overlapB\r\n\x0b_auto_cleanB\x16\n\x14_generate_embeddingsB\x0c\n\n_max_depthB\x0f\n\r_follow_links"t\n\x13\x41\x64\x64ResourceResponse\x12\x0e\n\x06job_id\x18\x01 \x01(\t\x12\x13\n\x0bresource_id\x18\x02 \x01(\t\x12\x38\n\x06status\x18\x03 \x01(\x0e\x32(.opentier.intelligence.v1.ResourceStatus"P\n\x18GetResourceStatusRequest\x12\x0e\n\x06job_id\x18\x01 \x01(\t\x12\x13\n\x0bresource_id\x18\x02 \x01(\t\x12\x0f\n\x07user_id\x18\x03 \x01(\t"\xbf\x01\n\x16ResourceStatusResponse\x12\x0e\n\x06job_id\x18\x01 \x01(\t\x12\x13\n\x0bresource_id\x18\x02 \x01(\t\x12\x38\n\x06status\x18\x03 \x01(\x0e\x32(.opentier.intelligence.v1.ResourceStatus\x12\x16\n\x0e\x63hunks_created\x18\x04 \x01(\x05\x12\x12\n\x05\x65rror\x18\x05 \x01(\tH\x00\x88\x01\x01\x12\x10\n\x08progress\x18\x06 \x01(\x02\x42\x08\n\x06_error"\x8f\x02\n\x14ListResourcesRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\x12\n\x05limit\x18\x02 \x01(\x05H\x00\x88\x01\x01\x12\x13\n\x06\x63ursor\x18\x03 \x01(\tH\x01\x88\x01\x01\x12@\n\x0btype_filter\x18\x04 \x01(\x0e\x32&.opentier.intelligence.v1.ResourceTypeH\x02\x88\x01\x01\x12\x44\n\rstatus_filter\x18\x05 \x01(\x0e\x32(.opentier.intelligence.v1.ResourceStatusH\x03\x88\x01\x01\x42\x08\n\x06_limitB\t\n\x07_cursorB\x0e\n\x0c_type_filterB\x10\n\x0e_status_filter"\x8d\x01\n\x15ListResourcesResponse\x12\x35\n\x05items\x18\x01 \x03(\x0b\x32&.opentier.intelligence.v1.ResourceItem\x12\x18\n\x0bnext_cursor\x18\x02 \x01(\tH\x00\x88\x01\x01\x12\x13\n\x0btotal_count\x18\x03 \x01(\x05\x42\x0e\n\x0c_next_cursor"\xf3\x02\n\x0cResourceItem\x12\n\n\x02id\x18\x01 \x01(\t\x12\x34\n\x04type\x18\x02 \x01(\x0e\x32&.opentier.intelligence.v1.ResourceType\x12\x0f\n\x07\x63ontent\x18\x03 \x01(\t\x12\x38\n\x06status\x18\x04 \x01(\x0e\x32(.opentier.intelligence.v1.ResourceStatus\x12\x36\n\x05stats\x18\x05 \x01(\x0b\x32\'.opentier.intelligence.v1.ResourceStats\x12\x12\n\ncreated_at\x18\x06 \x01(\x03\x12\x46\n\x08metadata\x18\x07 \x03(\x0b\x32\x34.opentier.intelligence.v1.ResourceItem.MetadataEntry\x12\x11\n\tis_global\x18\x08 \x01(\x08\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01"2\n\rResourceStats\x12\x11\n\tdocuments\x18\x01 \x01(\x05\x12\x0e\n\x06\x63hunks\x18\x02 \x01(\x05"=\n\x15\x44\x65leteResourceRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\x13\n\x0bresource_id\x18\x02 \x01(\t">\n\x16\x44\x65leteResourceResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x13\n\x0bresource_id\x18\x02 \x01(\t"9\n\x16\x43\x61ncelIngestionRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\x0e\n\x06job_id\x18\x02 \x01(\t"\\\n\x17\x43\x61ncelIngestionResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0e\n\x06job_id\x18\x02 \x01(\t\x12\x14\n\x07message\x18\x03 \x01(\tH\x00\x88\x01\x01\x42\n\n\x08_message"\x89\x01\n\tFileChunk\x12;\n\x08metadata\x18\x01 \x01(\x0b\x32\'.opentier.intelligence.v1.ChunkMetadataH\x00\x12\x0e\n\x04\x64\x61ta\x18\x02 \x01(\x0cH\x00\x12\x13\n\x0b\x63hunk_index\x18\x03 \x01(\x05\x12\x0f\n\x07is_last\x18\x04 \x01(\x08\x42\t\n\x07payload"\xc4\x03\n\rChunkMetadata\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\x13\n\x0bresource_id\x18\x02 \x01(\t\x12\x10\n\x08\x66ilename\x18\x03 \x01(\t\x12\x14\n\x0c\x63ontent_type\x18\x04 \x01(\t\x12\x12\n\ntotal_size\x18\x05 \x01(\x03\x12\x14\n\x0ctotal_chunks\x18\x06 \x01(\x05\x12\x34\n\x04type\x18\x07 \x01(\x0e\x32&.opentier.intelligence.v1.ResourceType\x12\x12\n\x05title\x18\x08 \x01(\tH\x00\x88\x01\x01\x12G\n\x08metadata\x18\t \x03(\x0b\x32\x35.opentier.intelligence.v1.ChunkMetadata.MetadataEntry\x12>\n\x06\x63onfig\x18\n \x01(\x0b\x32).opentier.intelligence.v1.IngestionConfigH\x01\x88\x01\x01\x12\x15\n\x08\x63hecksum\x18\x0b \x01(\tH\x02\x88\x01\x01\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\x42\x08\n\x06_titleB\t\n\x07_configB\x0b\n\t_checksum"\xd1\x01\n\x15\x43hunkedUploadResponse\x12\x0e\n\x06job_id\x18\x01 \x01(\t\x12\x13\n\x0bresource_id\x18\x02 \x01(\t\x12\x38\n\x06status\x18\x03 \x01(\x0e\x32(.opentier.intelligence.v1.ResourceStatus\x12\x17\n\x0f\x63hunks_received\x18\x04 \x01(\x05\x12\x12\n\x05\x65rror\x18\x05 \x01(\tH\x00\x88\x01\x01\x12\x15\n\x08\x63hecksum\x18\x06 \x01(\tH\x01\x88\x01\x01\x42\x08\n\x06_errorB\x0b\n\t_checksum"\xaa\x01\n\x13SyncMetadataRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12:\n\tdirection\x18\x02 \x01(\x0e\x32\'.opentier.intelligence.v1.SyncDirection\x12\x1c\n\x0fsince_timestamp\x18\x03 \x01(\x03H\x00\x88\x01\x01\x12\x14\n\x0cresource_ids\x18\x04 \x03(\tB\x12\n\x10_since_timestamp"\xd7\x01\n\x14SyncMetadataResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x18\n\x10resources_synced\x18\x02 \x01(\x05\x12\x17\n\x0f\x63onflicts_found\x18\x03 \x01(\x05\x12\x39\n\tconflicts\x18\x04 \x03(\x0b\x32&.opentier.intelligence.v1.SyncConflict\x12\x16\n\x0esync_timestamp\x18\x05 \x01(\x03\x12\x18\n\x0bnext_cursor\x18\x06 \x01(\tH\x00\x88\x01\x01\x42\x0e\n\x0c_next_cursor"\xca\x01\n\x0cSyncConflict\x12\x13\n\x0bresource_id\x18\x01 \x01(\t\x12\x34\n\x04type\x18\x02 \x01(\x0e\x32&.opentier.intelligence.v1.ConflictType\x12\x11\n\tapi_state\x18\x03 \x01(\t\x12\x1a\n\x12intelligence_state\x18\x04 \x01(\t\x12@\n\nresolution\x18\x05 \x01(\x0e\x32,.opentier.intelligence.v1.ConflictResolution"\xf5\x01\n\x08\x44ocument\x12\n\n\x02id\x18\x01 \x01(\t\x12\r\n\x05title\x18\x02 \x01(\t\x12\x0f\n\x07\x63ontent\x18\x03 \x01(\t\x12\x34\n\x04type\x18\x04 \x01(\x0e\x32&.opentier.intelligence.v1.DocumentType\x12\x12\n\nsource_url\x18\x05 \x01(\t\x12\x42\n\x08metadata\x18\x06 \x03(\x0b\x32\x30.opentier.intelligence.v1.Document.MetadataEntry\x1a/\n\rMetadataEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01*w\n\x0bMessageRole\x12\x1c\n\x18MESSAGE_ROLE_UNSPECIFIED\x10\x00\x12\x15\n\x11MESSAGE_ROLE_USER\x10\x01\x12\x1a\n\x16MESSAGE_ROLE_ASSISTANT\x10\x02\x12\x17\n\x13MESSAGE_ROLE_SYSTEM\x10\x03*\xa1\x01\n\rSyncDirection\x12\x1e\n\x1aSYNC_DIRECTION_UNSPECIFIED\x10\x00\x12&\n"SYNC_DIRECTION_API_TO_INTELLIGENCE\x10\x01\x12&\n"SYNC_DIRECTION_INTELLIGENCE_TO_API\x10\x02\x12 \n\x1cSYNC_DIRECTION_BIDIRECTIONAL\x10\x03*\xc2\x01\n\x0c\x43onflictType\x12\x1d\n\x19\x43ONFLICT_TYPE_UNSPECIFIED\x10\x00\x12 \n\x1c\x43ONFLICT_TYPE_MISSING_IN_API\x10\x01\x12)\n%CONFLICT_TYPE_MISSING_IN_INTELLIGENCE\x10\x02\x12!\n\x1d\x43ONFLICT_TYPE_STATUS_MISMATCH\x10\x03\x12#\n\x1f\x43ONFLICT_TYPE_METADATA_MISMATCH\x10\x04*\xc3\x01\n\x12\x43onflictResolution\x12#\n\x1f\x43ONFLICT_RESOLUTION_UNSPECIFIED\x10\x00\x12\x1f\n\x1b\x43ONFLICT_RESOLUTION_USE_API\x10\x01\x12(\n$CONFLICT_RESOLUTION_USE_INTELLIGENCE\x10\x02\x12\x1d\n\x19\x43ONFLICT_RESOLUTION_MERGE\x10\x03\x12\x1e\n\x1a\x43ONFLICT_RESOLUTION_MANUAL\x10\x04*\xc3\x01\n\x0cResourceType\x12\x1d\n\x19RESOURCE_TYPE_UNSPECIFIED\x10\x00\x12\x16\n\x12RESOURCE_TYPE_TEXT\x10\x01\x12\x1a\n\x16RESOURCE_TYPE_MARKDOWN\x10\x02\x12\x15\n\x11RESOURCE_TYPE_PDF\x10\x03\x12\x16\n\x12RESOURCE_TYPE_HTML\x10\x04\x12\x19\n\x15RESOURCE_TYPE_WEBSITE\x10\x05\x12\x16\n\x12RESOURCE_TYPE_CODE\x10\x06*\xc5\x01\n\x0eResourceStatus\x12\x1f\n\x1bRESOURCE_STATUS_UNSPECIFIED\x10\x00\x12\x1a\n\x16RESOURCE_STATUS_QUEUED\x10\x01\x12\x1e\n\x1aRESOURCE_STATUS_PROCESSING\x10\x02\x12\x1d\n\x19RESOURCE_STATUS_COMPLETED\x10\x03\x12\x1a\n\x16RESOURCE_STATUS_FAILED\x10\x04\x12\x1b\n\x17RESOURCE_STATUS_PARTIAL\x10\x05*\xa8\x01\n\x0c\x44ocumentType\x12\x1d\n\x19\x44OCUMENT_TYPE_UNSPECIFIED\x10\x00\x12\x16\n\x12\x44OCUMENT_TYPE_TEXT\x10\x01\x12\x1a\n\x16\x44OCUMENT_TYPE_MARKDOWN\x10\x02\x12\x16\n\x12\x44OCUMENT_TYPE_HTML\x10\x03\x12\x15\n\x11\x44OCUMENT_TYPE_PDF\x10\x04\x12\x16\n\x12\x44OCUMENT_TYPE_CODE\x10\x05\x32\xd2\x01\n\x06Health\x12\x64\n\x05\x43heck\x12,.opentier.intelligence.v1.HealthCheckRequest\x1a-.opentier.intelligence.v1.HealthCheckResponse\x12\x62\n\x05Ready\x12+.opentier.intelligence.v1.ReadyCheckRequest\x1a,.opentier.intelligence.v1.ReadyCheckResponse2\xae\x04\n\x04\x43hat\x12\\\n\x0bSendMessage\x12%.opentier.intelligence.v1.ChatRequest\x1a&.opentier.intelligence.v1.ChatResponse\x12`\n\nStreamChat\x12%.opentier.intelligence.v1.ChatRequest\x1a).opentier.intelligence.v1.ChatStreamChunk0\x01\x12s\n\x0fGetConversation\x12\x30.opentier.intelligence.v1.GetConversationRequest\x1a..opentier.intelligence.v1.ConversationResponse\x12\x7f\n\x12\x44\x65leteConversation\x12\x33.opentier.intelligence.v1.DeleteConversationRequest\x1a\x34.opentier.intelligence.v1.DeleteConversationResponse\x12p\n\rGenerateTitle\x12..opentier.intelligence.v1.GenerateTitleRequest\x1a/.opentier.intelligence.v1.GenerateTitleResponse2\xb7\x06\n\x0fResourceService\x12j\n\x0b\x41\x64\x64Resource\x12,.opentier.intelligence.v1.AddResourceRequest\x1a-.opentier.intelligence.v1.AddResourceResponse\x12g\n\rChunkedUpload\x12#.opentier.intelligence.v1.FileChunk\x1a/.opentier.intelligence.v1.ChunkedUploadResponse(\x01\x12y\n\x11GetResourceStatus\x12\x32.opentier.intelligence.v1.GetResourceStatusRequest\x1a\x30.opentier.intelligence.v1.ResourceStatusResponse\x12p\n\rListResources\x12..opentier.intelligence.v1.ListResourcesRequest\x1a/.opentier.intelligence.v1.ListResourcesResponse\x12s\n\x0e\x44\x65leteResource\x12/.opentier.intelligence.v1.DeleteResourceRequest\x1a\x30.opentier.intelligence.v1.DeleteResourceResponse\x12v\n\x0f\x43\x61ncelIngestion\x12\x30.opentier.intelligence.v1.CancelIngestionRequest\x1a\x31.opentier.intelligence.v1.CancelIngestionResponse\x12u\n\x14SyncResourceMetadata\x12-.opentier.intelligence.v1.SyncMetadataRequest\x1a..opentier.intelligence.v1.SyncMetadataResponseb\x06proto3'
+)
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
-_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'intelligence_pb2', _globals)
+_builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, "intelligence_pb2", _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
-  DESCRIPTOR._loaded_options = None
-  _globals['_READYCHECKRESPONSE_DEPENDENCYSTATUSENTRY']._loaded_options = None
-  _globals['_READYCHECKRESPONSE_DEPENDENCYSTATUSENTRY']._serialized_options = b'8\001'
-  _globals['_CHATREQUEST_METADATAENTRY']._loaded_options = None
-  _globals['_CHATREQUEST_METADATAENTRY']._serialized_options = b'8\001'
-  _globals['_CONTEXTCHUNK_METADATAENTRY']._loaded_options = None
-  _globals['_CONTEXTCHUNK_METADATAENTRY']._serialized_options = b'8\001'
-  _globals['_CONVERSATIONRESPONSE_METADATAENTRY']._loaded_options = None
-  _globals['_CONVERSATIONRESPONSE_METADATAENTRY']._serialized_options = b'8\001'
-  _globals['_ADDRESOURCEREQUEST_METADATAENTRY']._loaded_options = None
-  _globals['_ADDRESOURCEREQUEST_METADATAENTRY']._serialized_options = b'8\001'
-  _globals['_RESOURCEITEM_METADATAENTRY']._loaded_options = None
-  _globals['_RESOURCEITEM_METADATAENTRY']._serialized_options = b'8\001'
-  _globals['_DOCUMENT_METADATAENTRY']._loaded_options = None
-  _globals['_DOCUMENT_METADATAENTRY']._serialized_options = b'8\001'
-  _globals['_MESSAGEROLE']._serialized_start=5035
-  _globals['_MESSAGEROLE']._serialized_end=5154
-  _globals['_RESOURCETYPE']._serialized_start=5157
-  _globals['_RESOURCETYPE']._serialized_end=5352
-  _globals['_RESOURCESTATUS']._serialized_start=5355
-  _globals['_RESOURCESTATUS']._serialized_end=5552
-  _globals['_DOCUMENTTYPE']._serialized_start=5555
-  _globals['_DOCUMENTTYPE']._serialized_end=5723
-  _globals['_HEALTHCHECKREQUEST']._serialized_start=48
-  _globals['_HEALTHCHECKREQUEST']._serialized_end=68
-  _globals['_HEALTHCHECKRESPONSE']._serialized_start=70
-  _globals['_HEALTHCHECKRESPONSE']._serialized_end=189
-  _globals['_READYCHECKREQUEST']._serialized_start=191
-  _globals['_READYCHECKREQUEST']._serialized_end=210
-  _globals['_READYCHECKRESPONSE']._serialized_start=213
-  _globals['_READYCHECKRESPONSE']._serialized_end=422
-  _globals['_READYCHECKRESPONSE_DEPENDENCYSTATUSENTRY']._serialized_start=367
-  _globals['_READYCHECKRESPONSE_DEPENDENCYSTATUSENTRY']._serialized_end=422
-  _globals['_CHATREQUEST']._serialized_start=425
-  _globals['_CHATREQUEST']._serialized_end=687
-  _globals['_CHATREQUEST_METADATAENTRY']._serialized_start=629
-  _globals['_CHATREQUEST_METADATAENTRY']._serialized_end=676
-  _globals['_CHATCONFIG']._serialized_start=690
-  _globals['_CHATCONFIG']._serialized_end=894
-  _globals['_CHATRESPONSE']._serialized_start=897
-  _globals['_CHATRESPONSE']._serialized_end=1124
-  _globals['_CHATSTREAMCHUNK']._serialized_start=1127
-  _globals['_CHATSTREAMCHUNK']._serialized_end=1371
-  _globals['_CHATMETRICS']._serialized_start=1374
-  _globals['_CHATMETRICS']._serialized_end=1505
-  _globals['_CONTEXTCHUNK']._serialized_start=1508
-  _globals['_CONTEXTCHUNK']._serialized_end=1812
-  _globals['_CONTEXTCHUNK_METADATAENTRY']._serialized_start=629
-  _globals['_CONTEXTCHUNK_METADATAENTRY']._serialized_end=676
-  _globals['_GETCONVERSATIONREQUEST']._serialized_start=1815
-  _globals['_GETCONVERSATIONREQUEST']._serialized_end=1943
-  _globals['_CONVERSATIONRESPONSE']._serialized_start=1946
-  _globals['_CONVERSATIONRESPONSE']._serialized_end=2261
-  _globals['_CONVERSATIONRESPONSE_METADATAENTRY']._serialized_start=629
-  _globals['_CONVERSATIONRESPONSE_METADATAENTRY']._serialized_end=676
-  _globals['_CHATMESSAGE']._serialized_start=2264
-  _globals['_CHATMESSAGE']._serialized_end=2444
-  _globals['_DELETECONVERSATIONREQUEST']._serialized_start=2446
-  _globals['_DELETECONVERSATIONREQUEST']._serialized_end=2515
-  _globals['_DELETECONVERSATIONRESPONSE']._serialized_start=2517
-  _globals['_DELETECONVERSATIONRESPONSE']._serialized_end=2587
-  _globals['_ADDRESOURCEREQUEST']._serialized_start=2590
-  _globals['_ADDRESOURCEREQUEST']._serialized_end=3000
-  _globals['_ADDRESOURCEREQUEST_METADATAENTRY']._serialized_start=629
-  _globals['_ADDRESOURCEREQUEST_METADATAENTRY']._serialized_end=676
-  _globals['_INGESTIONCONFIG']._serialized_start=3003
-  _globals['_INGESTIONCONFIG']._serialized_end=3286
-  _globals['_ADDRESOURCERESPONSE']._serialized_start=3288
-  _globals['_ADDRESOURCERESPONSE']._serialized_end=3404
-  _globals['_GETRESOURCESTATUSREQUEST']._serialized_start=3406
-  _globals['_GETRESOURCESTATUSREQUEST']._serialized_end=3486
-  _globals['_RESOURCESTATUSRESPONSE']._serialized_start=3489
-  _globals['_RESOURCESTATUSRESPONSE']._serialized_end=3680
-  _globals['_LISTRESOURCESREQUEST']._serialized_start=3683
-  _globals['_LISTRESOURCESREQUEST']._serialized_end=3954
-  _globals['_LISTRESOURCESRESPONSE']._serialized_start=3957
-  _globals['_LISTRESOURCESRESPONSE']._serialized_end=4098
-  _globals['_RESOURCEITEM']._serialized_start=4101
-  _globals['_RESOURCEITEM']._serialized_end=4453
-  _globals['_RESOURCEITEM_METADATAENTRY']._serialized_start=629
-  _globals['_RESOURCEITEM_METADATAENTRY']._serialized_end=676
-  _globals['_RESOURCESTATS']._serialized_start=4455
-  _globals['_RESOURCESTATS']._serialized_end=4505
-  _globals['_DELETERESOURCEREQUEST']._serialized_start=4507
-  _globals['_DELETERESOURCEREQUEST']._serialized_end=4568
-  _globals['_DELETERESOURCERESPONSE']._serialized_start=4570
-  _globals['_DELETERESOURCERESPONSE']._serialized_end=4632
-  _globals['_CANCELINGESTIONREQUEST']._serialized_start=4634
-  _globals['_CANCELINGESTIONREQUEST']._serialized_end=4691
-  _globals['_CANCELINGESTIONRESPONSE']._serialized_start=4693
-  _globals['_CANCELINGESTIONRESPONSE']._serialized_end=4785
-  _globals['_DOCUMENT']._serialized_start=4788
-  _globals['_DOCUMENT']._serialized_end=5033
-  _globals['_DOCUMENT_METADATAENTRY']._serialized_start=629
-  _globals['_DOCUMENT_METADATAENTRY']._serialized_end=676
-  _globals['_HEALTH']._serialized_start=5726
-  _globals['_HEALTH']._serialized_end=5936
-  _globals['_CHAT']._serialized_start=5939
-  _globals['_CHAT']._serialized_end=6383
-  _globals['_RESOURCESERVICE']._serialized_start=6386
-  _globals['_RESOURCESERVICE']._serialized_end=6985
+    DESCRIPTOR._loaded_options = None
+    _globals["_READYCHECKRESPONSE_DEPENDENCYSTATUSENTRY"]._loaded_options = None
+    _globals["_READYCHECKRESPONSE_DEPENDENCYSTATUSENTRY"]._serialized_options = b"8\001"
+    _globals["_CHATREQUEST_METADATAENTRY"]._loaded_options = None
+    _globals["_CHATREQUEST_METADATAENTRY"]._serialized_options = b"8\001"
+    _globals["_CONTEXTCHUNK_METADATAENTRY"]._loaded_options = None
+    _globals["_CONTEXTCHUNK_METADATAENTRY"]._serialized_options = b"8\001"
+    _globals["_CONVERSATIONRESPONSE_METADATAENTRY"]._loaded_options = None
+    _globals["_CONVERSATIONRESPONSE_METADATAENTRY"]._serialized_options = b"8\001"
+    _globals["_ADDRESOURCEREQUEST_METADATAENTRY"]._loaded_options = None
+    _globals["_ADDRESOURCEREQUEST_METADATAENTRY"]._serialized_options = b"8\001"
+    _globals["_RESOURCEITEM_METADATAENTRY"]._loaded_options = None
+    _globals["_RESOURCEITEM_METADATAENTRY"]._serialized_options = b"8\001"
+    _globals["_CHUNKMETADATA_METADATAENTRY"]._loaded_options = None
+    _globals["_CHUNKMETADATA_METADATAENTRY"]._serialized_options = b"8\001"
+    _globals["_DOCUMENT_METADATAENTRY"]._loaded_options = None
+    _globals["_DOCUMENT_METADATAENTRY"]._serialized_options = b"8\001"
+    _globals["_MESSAGEROLE"]._serialized_start = 6614
+    _globals["_MESSAGEROLE"]._serialized_end = 6733
+    _globals["_SYNCDIRECTION"]._serialized_start = 6736
+    _globals["_SYNCDIRECTION"]._serialized_end = 6897
+    _globals["_CONFLICTTYPE"]._serialized_start = 6900
+    _globals["_CONFLICTTYPE"]._serialized_end = 7094
+    _globals["_CONFLICTRESOLUTION"]._serialized_start = 7097
+    _globals["_CONFLICTRESOLUTION"]._serialized_end = 7292
+    _globals["_RESOURCETYPE"]._serialized_start = 7295
+    _globals["_RESOURCETYPE"]._serialized_end = 7490
+    _globals["_RESOURCESTATUS"]._serialized_start = 7493
+    _globals["_RESOURCESTATUS"]._serialized_end = 7690
+    _globals["_DOCUMENTTYPE"]._serialized_start = 7693
+    _globals["_DOCUMENTTYPE"]._serialized_end = 7861
+    _globals["_HEALTHCHECKREQUEST"]._serialized_start = 48
+    _globals["_HEALTHCHECKREQUEST"]._serialized_end = 68
+    _globals["_HEALTHCHECKRESPONSE"]._serialized_start = 70
+    _globals["_HEALTHCHECKRESPONSE"]._serialized_end = 189
+    _globals["_READYCHECKREQUEST"]._serialized_start = 191
+    _globals["_READYCHECKREQUEST"]._serialized_end = 210
+    _globals["_READYCHECKRESPONSE"]._serialized_start = 213
+    _globals["_READYCHECKRESPONSE"]._serialized_end = 422
+    _globals["_READYCHECKRESPONSE_DEPENDENCYSTATUSENTRY"]._serialized_start = 367
+    _globals["_READYCHECKRESPONSE_DEPENDENCYSTATUSENTRY"]._serialized_end = 422
+    _globals["_CHATREQUEST"]._serialized_start = 425
+    _globals["_CHATREQUEST"]._serialized_end = 687
+    _globals["_CHATREQUEST_METADATAENTRY"]._serialized_start = 629
+    _globals["_CHATREQUEST_METADATAENTRY"]._serialized_end = 676
+    _globals["_CHATCONFIG"]._serialized_start = 690
+    _globals["_CHATCONFIG"]._serialized_end = 894
+    _globals["_CHATRESPONSE"]._serialized_start = 897
+    _globals["_CHATRESPONSE"]._serialized_end = 1124
+    _globals["_CHATSTREAMCHUNK"]._serialized_start = 1127
+    _globals["_CHATSTREAMCHUNK"]._serialized_end = 1371
+    _globals["_CHATMETRICS"]._serialized_start = 1374
+    _globals["_CHATMETRICS"]._serialized_end = 1505
+    _globals["_CONTEXTCHUNK"]._serialized_start = 1508
+    _globals["_CONTEXTCHUNK"]._serialized_end = 1812
+    _globals["_CONTEXTCHUNK_METADATAENTRY"]._serialized_start = 629
+    _globals["_CONTEXTCHUNK_METADATAENTRY"]._serialized_end = 676
+    _globals["_GETCONVERSATIONREQUEST"]._serialized_start = 1815
+    _globals["_GETCONVERSATIONREQUEST"]._serialized_end = 1943
+    _globals["_CONVERSATIONRESPONSE"]._serialized_start = 1946
+    _globals["_CONVERSATIONRESPONSE"]._serialized_end = 2261
+    _globals["_CONVERSATIONRESPONSE_METADATAENTRY"]._serialized_start = 629
+    _globals["_CONVERSATIONRESPONSE_METADATAENTRY"]._serialized_end = 676
+    _globals["_CHATMESSAGE"]._serialized_start = 2264
+    _globals["_CHATMESSAGE"]._serialized_end = 2444
+    _globals["_DELETECONVERSATIONREQUEST"]._serialized_start = 2446
+    _globals["_DELETECONVERSATIONREQUEST"]._serialized_end = 2515
+    _globals["_DELETECONVERSATIONRESPONSE"]._serialized_start = 2517
+    _globals["_DELETECONVERSATIONRESPONSE"]._serialized_end = 2587
+    _globals["_GENERATETITLEREQUEST"]._serialized_start = 2589
+    _globals["_GENERATETITLEREQUEST"]._serialized_end = 2685
+    _globals["_GENERATETITLERESPONSE"]._serialized_start = 2687
+    _globals["_GENERATETITLERESPONSE"]._serialized_end = 2725
+    _globals["_ADDRESOURCEREQUEST"]._serialized_start = 2728
+    _globals["_ADDRESOURCEREQUEST"]._serialized_end = 3157
+    _globals["_ADDRESOURCEREQUEST_METADATAENTRY"]._serialized_start = 629
+    _globals["_ADDRESOURCEREQUEST_METADATAENTRY"]._serialized_end = 676
+    _globals["_INGESTIONCONFIG"]._serialized_start = 3160
+    _globals["_INGESTIONCONFIG"]._serialized_end = 3443
+    _globals["_ADDRESOURCERESPONSE"]._serialized_start = 3445
+    _globals["_ADDRESOURCERESPONSE"]._serialized_end = 3561
+    _globals["_GETRESOURCESTATUSREQUEST"]._serialized_start = 3563
+    _globals["_GETRESOURCESTATUSREQUEST"]._serialized_end = 3643
+    _globals["_RESOURCESTATUSRESPONSE"]._serialized_start = 3646
+    _globals["_RESOURCESTATUSRESPONSE"]._serialized_end = 3837
+    _globals["_LISTRESOURCESREQUEST"]._serialized_start = 3840
+    _globals["_LISTRESOURCESREQUEST"]._serialized_end = 4111
+    _globals["_LISTRESOURCESRESPONSE"]._serialized_start = 4114
+    _globals["_LISTRESOURCESRESPONSE"]._serialized_end = 4255
+    _globals["_RESOURCEITEM"]._serialized_start = 4258
+    _globals["_RESOURCEITEM"]._serialized_end = 4629
+    _globals["_RESOURCEITEM_METADATAENTRY"]._serialized_start = 629
+    _globals["_RESOURCEITEM_METADATAENTRY"]._serialized_end = 676
+    _globals["_RESOURCESTATS"]._serialized_start = 4631
+    _globals["_RESOURCESTATS"]._serialized_end = 4681
+    _globals["_DELETERESOURCEREQUEST"]._serialized_start = 4683
+    _globals["_DELETERESOURCEREQUEST"]._serialized_end = 4744
+    _globals["_DELETERESOURCERESPONSE"]._serialized_start = 4746
+    _globals["_DELETERESOURCERESPONSE"]._serialized_end = 4808
+    _globals["_CANCELINGESTIONREQUEST"]._serialized_start = 4810
+    _globals["_CANCELINGESTIONREQUEST"]._serialized_end = 4867
+    _globals["_CANCELINGESTIONRESPONSE"]._serialized_start = 4869
+    _globals["_CANCELINGESTIONRESPONSE"]._serialized_end = 4961
+    _globals["_FILECHUNK"]._serialized_start = 4964
+    _globals["_FILECHUNK"]._serialized_end = 5101
+    _globals["_CHUNKMETADATA"]._serialized_start = 5104
+    _globals["_CHUNKMETADATA"]._serialized_end = 5556
+    _globals["_CHUNKMETADATA_METADATAENTRY"]._serialized_start = 629
+    _globals["_CHUNKMETADATA_METADATAENTRY"]._serialized_end = 676
+    _globals["_CHUNKEDUPLOADRESPONSE"]._serialized_start = 5559
+    _globals["_CHUNKEDUPLOADRESPONSE"]._serialized_end = 5768
+    _globals["_SYNCMETADATAREQUEST"]._serialized_start = 5771
+    _globals["_SYNCMETADATAREQUEST"]._serialized_end = 5941
+    _globals["_SYNCMETADATARESPONSE"]._serialized_start = 5944
+    _globals["_SYNCMETADATARESPONSE"]._serialized_end = 6159
+    _globals["_SYNCCONFLICT"]._serialized_start = 6162
+    _globals["_SYNCCONFLICT"]._serialized_end = 6364
+    _globals["_DOCUMENT"]._serialized_start = 6367
+    _globals["_DOCUMENT"]._serialized_end = 6612
+    _globals["_DOCUMENT_METADATAENTRY"]._serialized_start = 629
+    _globals["_DOCUMENT_METADATAENTRY"]._serialized_end = 676
+    _globals["_HEALTH"]._serialized_start = 7864
+    _globals["_HEALTH"]._serialized_end = 8074
+    _globals["_CHAT"]._serialized_start = 8077
+    _globals["_CHAT"]._serialized_end = 8635
+    _globals["_RESOURCESERVICE"]._serialized_start = 8638
+    _globals["_RESOURCESERVICE"]._serialized_end = 9461
 # @@protoc_insertion_point(module_scope)

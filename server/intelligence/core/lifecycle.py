@@ -43,5 +43,3 @@ async def shutdown() -> None:
         logger.info("Shutdown complete")
     except Exception as e:
         logger.error(f"Error during shutdown: {e}")
-
-

@@ -4,7 +4,12 @@ import asyncio
 import re
 from typing import Optional
 
-from playwright.async_api import async_playwright, Browser, Page, TimeoutError as PlaywrightTimeout
+from playwright.async_api import (
+    async_playwright,
+    Browser,
+    Page,
+    TimeoutError as PlaywrightTimeout,
+)
 
 from core.logging import get_logger
 
@@ -33,8 +38,7 @@ class BrowserScraper:
         if not self.playwright:
             self.playwright = await async_playwright().start()
             self.browser = await self.playwright.chromium.launch(
-                headless=True,
-                args=['--no-sandbox', '--disable-setuid-sandbox']
+                headless=True, args=["--no-sandbox", "--disable-setuid-sandbox"]
             )
             logger.info("Browser instance started")
 
@@ -51,20 +55,20 @@ class BrowserScraper:
     async def scrape(
         self,
         url: str,
-        wait_for: str = 'networkidle',
+        wait_for: str = "networkidle",
         timeout_ms: int = 300000,
         screenshot: bool = False,
         scroll_to_bottom: bool = True,
     ) -> dict:
         """Scrape URL using headless browser.
-        
+
         Args:
             url: URL to scrape
             wait_for: Wait strategy ('load', 'domcontentloaded', 'networkidle')
             timeout_ms: Timeout in milliseconds
             screenshot: Whether to capture screenshot
             scroll_to_bottom: Automatically scroll to bottom to load all content
-            
+
         Returns:
             Dictionary with title, content, and metadata
         """
@@ -87,26 +91,26 @@ class BrowserScraper:
                 logger.info("Scrolling to bottom to load all content")
 
                 # Get initial scroll height
-                prev_height = await page.evaluate('document.body.scrollHeight')
+                prev_height = await page.evaluate("document.body.scrollHeight")
 
                 # Scroll down in steps to trigger lazy loading
                 for i in range(10):  # Scroll up to 10 times
                     # Scroll by viewport height
-                    await page.evaluate('window.scrollBy(0, window.innerHeight)')
+                    await page.evaluate("window.scrollBy(0, window.innerHeight)")
                     await asyncio.sleep(0.8)  # Wait for content to load
 
                     # Check if we've reached the bottom
-                    new_height = await page.evaluate('document.body.scrollHeight')
+                    new_height = await page.evaluate("document.body.scrollHeight")
                     if new_height == prev_height:
                         break  # No more content loading
                     prev_height = new_height
 
                 # Final scroll to absolute bottom
-                await page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
+                await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                 await asyncio.sleep(1.5)  # Wait for final lazy loads
 
                 # Scroll back to top for consistent extraction
-                await page.evaluate('window.scrollTo(0, 0)')
+                await page.evaluate("window.scrollTo(0, 0)")
                 await asyncio.sleep(0.5)
 
                 logger.info(f"Scrolling complete - final height: {prev_height}px")
@@ -119,39 +123,41 @@ class BrowserScraper:
             content = await page.content()
 
             # Extract text content - use textContent to get ALL text
-            text_content = await page.evaluate('''() => {
+            text_content = await page.evaluate("""() => {
                 // Remove script, style, and noscript elements
                 const unwanted = document.querySelectorAll('script, style, noscript, iframe');
                 unwanted.forEach(el => el.remove());
                 
                 // Use textContent to get all text (including hidden/formatted)
                 return document.body.textContent || document.body.innerText || '';
-            }''')
+            }""")
 
             # Clean up the text - remove excessive whitespace
-            text_content = re.sub(r'\s+', ' ', text_content).strip()
+            text_content = re.sub(r"\s+", " ", text_content).strip()
 
             metadata = {
-                'url': url,
-                'final_url': page.url,  # May differ if redirected
-                'type': 'html',
-                'scraper': 'browser',
-                'scrolled': scroll_to_bottom,
+                "url": url,
+                "final_url": page.url,  # May differ if redirected
+                "type": "html",
+                "scraper": "browser",
+                "scrolled": scroll_to_bottom,
             }
 
             # Optional screenshot
             if screenshot:
                 screenshot_bytes = await page.screenshot(full_page=True)
-                metadata['screenshot_size'] = len(screenshot_bytes)
+                metadata["screenshot_size"] = len(screenshot_bytes)
 
-            logger.info(f"Successfully scraped {url} with browser ({len(text_content)} chars)")
+            logger.info(
+                f"Successfully scraped {url} with browser ({len(text_content)} chars)"
+            )
 
             return {
-                'title': title,
-                'content': text_content,
-                'html': content,
-                'url': url,
-                'metadata': metadata,
+                "title": title,
+                "content": text_content,
+                "html": content,
+                "url": url,
+                "metadata": metadata,
             }
 
         except PlaywrightTimeout:
@@ -164,18 +170,15 @@ class BrowserScraper:
             await page.close()
 
     async def scrape_with_interaction(
-        self,
-        url: str,
-        actions: list[dict],
-        timeout_ms: int = 30000
+        self, url: str, actions: list[dict], timeout_ms: int = 30000
     ) -> dict:
         """Scrape URL with custom interactions (clicks, scrolls, etc).
-        
+
         Args:
             url: URL to scrape
             actions: List of actions to perform (e.g., [{'type': 'click', 'selector': '#button'}])
             timeout_ms: Timeout in milliseconds
-            
+
         Returns:
             Dictionary with title, content, and metadata
         """
@@ -189,32 +192,36 @@ class BrowserScraper:
 
             # Perform actions
             for action in actions:
-                action_type = action.get('type')
+                action_type = action.get("type")
 
-                if action_type == 'click':
-                    await page.click(action['selector'])
-                elif action_type == 'scroll':
-                    await page.evaluate('window.scrollTo(0, document.body.scrollHeight)')
-                elif action_type == 'wait':
-                    await asyncio.sleep(action.get('seconds', 1))
-                elif action_type == 'wait_for_selector':
-                    await page.wait_for_selector(action['selector'], timeout=action.get('timeout', 5000))
+                if action_type == "click":
+                    await page.click(action["selector"])
+                elif action_type == "scroll":
+                    await page.evaluate(
+                        "window.scrollTo(0, document.body.scrollHeight)"
+                    )
+                elif action_type == "wait":
+                    await asyncio.sleep(action.get("seconds", 1))
+                elif action_type == "wait_for_selector":
+                    await page.wait_for_selector(
+                        action["selector"], timeout=action.get("timeout", 5000)
+                    )
 
             # Extract content after interactions
             title = await page.title()
-            text_content = await page.evaluate('document.body.innerText')
+            text_content = await page.evaluate("document.body.innerText")
 
             return {
-                'title': title,
-                'content': text_content,
-                'url': url,
-                'metadata': {
-                    'url': url,
-                    'final_url': page.url,
-                    'type': 'html',
-                    'scraper': 'browser_interactive',
-                    'actions_performed': len(actions),
-                }
+                "title": title,
+                "content": text_content,
+                "url": url,
+                "metadata": {
+                    "url": url,
+                    "final_url": page.url,
+                    "type": "html",
+                    "scraper": "browser_interactive",
+                    "actions_performed": len(actions),
+                },
             }
 
         finally:

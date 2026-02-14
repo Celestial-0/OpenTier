@@ -7,11 +7,13 @@ CREATE TABLE IF NOT EXISTS documents (
     document_type VARCHAR(50) NOT NULL,
     source_url VARCHAR(1000),
     metadata JSONB NOT NULL DEFAULT '{}',
+    is_global BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 -- Create indexes
 CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id);
+CREATE INDEX IF NOT EXISTS idx_documents_is_global ON documents(is_global);
 CREATE INDEX IF NOT EXISTS idx_documents_created_at ON documents(created_at DESC);
 -- Create trigger function for updated_at if not exists
 CREATE OR REPLACE FUNCTION update_updated_at_column() RETURNS TRIGGER AS $$ BEGIN NEW.updated_at = NOW();

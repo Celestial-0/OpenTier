@@ -40,6 +40,18 @@ pub enum ChatError {
     #[error("Request timeout: {0}")]
     #[allow(dead_code)]
     RequestTimeout(String),
+
+    #[error("Not found: {0}")]
+    NotFound(String),
+
+    #[error("Intelligence service error: {0}")]
+    IntelligenceError(String),
+}
+
+impl From<sqlx::Error> for ChatError {
+    fn from(e: sqlx::Error) -> Self {
+        ChatError::DatabaseError(e.to_string())
+    }
 }
 
 /// Map gRPC status code to appropriate HTTP status and error code
@@ -133,9 +145,13 @@ impl IntoResponse for ChatError {
                 "service_unavailable",
                 self.to_string(),
             ),
-            ChatError::RequestTimeout(_) => (
-                StatusCode::GATEWAY_TIMEOUT,
-                "timeout",
+            ChatError::RequestTimeout(_) => {
+                (StatusCode::GATEWAY_TIMEOUT, "timeout", self.to_string())
+            }
+            ChatError::NotFound(_) => (StatusCode::NOT_FOUND, "not_found", self.to_string()),
+            ChatError::IntelligenceError(_) => (
+                StatusCode::BAD_GATEWAY,
+                "intelligence_error",
                 self.to_string(),
             ),
             ChatError::DatabaseError(_)

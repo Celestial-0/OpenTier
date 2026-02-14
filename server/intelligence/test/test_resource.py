@@ -31,11 +31,15 @@ async def test_resource_full_lifecycle(resource_client):
             text="Artificial Intelligence (AI) is the simulation of human intelligence by machines.",
             title="AI Definition",
             type=intelligence_pb2.RESOURCE_TYPE_TEXT,
-            metadata={"category": "technology"}
+            metadata={"category": "technology"},
         )
     )
 
-    assert add_response.status in [intelligence_pb2.RESOURCE_STATUS_COMPLETED, intelligence_pb2.RESOURCE_STATUS_PROCESSING, intelligence_pb2.RESOURCE_STATUS_QUEUED]
+    assert add_response.status in [
+        intelligence_pb2.RESOURCE_STATUS_COMPLETED,
+        intelligence_pb2.RESOURCE_STATUS_PROCESSING,
+        intelligence_pb2.RESOURCE_STATUS_QUEUED,
+    ]
     assert add_response.resource_id != ""
     assert add_response.job_id != ""
 
@@ -45,8 +49,7 @@ async def test_resource_full_lifecycle(resource_client):
     # 2. Check resource status
     status_response = await resource_client.GetResourceStatus(
         intelligence_pb2.GetResourceStatusRequest(
-            job_id=job_id,
-            resource_id=resource_id
+            job_id=job_id, resource_id=resource_id
         )
     )
 
@@ -54,15 +57,12 @@ async def test_resource_full_lifecycle(resource_client):
     assert status_response.status in [
         intelligence_pb2.RESOURCE_STATUS_COMPLETED,
         intelligence_pb2.RESOURCE_STATUS_PROCESSING,
-        intelligence_pb2.RESOURCE_STATUS_QUEUED
+        intelligence_pb2.RESOURCE_STATUS_QUEUED,
     ]
 
     # 3. List resources
     list_response = await resource_client.ListResources(
-        intelligence_pb2.ListResourcesRequest(
-            user_id=user_id,
-            limit=10
-        )
+        intelligence_pb2.ListResourcesRequest(user_id=user_id, limit=10)
     )
 
     # Should contain our resource
@@ -78,9 +78,7 @@ async def test_resource_full_lifecycle(resource_client):
 
     # 4. Delete resource
     delete_response = await resource_client.DeleteResource(
-        intelligence_pb2.DeleteResourceRequest(
-            resource_id=resource_id
-        )
+        intelligence_pb2.DeleteResourceRequest(resource_id=resource_id)
     )
 
     assert delete_response.success is True
@@ -88,10 +86,7 @@ async def test_resource_full_lifecycle(resource_client):
 
     # 5. Verify resource is deleted (list should no longer contain it)
     list_after_delete = await resource_client.ListResources(
-        intelligence_pb2.ListResourcesRequest(
-            user_id=user_id,
-            limit=10
-        )
+        intelligence_pb2.ListResourcesRequest(user_id=user_id, limit=10)
     )
 
     resource_ids_after = [r.id for r in list_after_delete.items]
@@ -108,11 +103,15 @@ async def test_add_text_resource(resource_client):
             user_id="test-text-user",
             text="Machine learning is a subset of AI that enables systems to learn from data.",
             title="ML Overview",
-            type=intelligence_pb2.RESOURCE_TYPE_TEXT
+            type=intelligence_pb2.RESOURCE_TYPE_TEXT,
         )
     )
 
-    assert response.status in [intelligence_pb2.RESOURCE_STATUS_COMPLETED, intelligence_pb2.RESOURCE_STATUS_PROCESSING, intelligence_pb2.RESOURCE_STATUS_QUEUED]
+    assert response.status in [
+        intelligence_pb2.RESOURCE_STATUS_COMPLETED,
+        intelligence_pb2.RESOURCE_STATUS_PROCESSING,
+        intelligence_pb2.RESOURCE_STATUS_QUEUED,
+    ]
     assert response.resource_id != ""
     assert response.job_id != ""
 
@@ -127,7 +126,7 @@ async def test_add_url_resource(resource_client):
             user_id="test-url-user",
             url="https://example.com/article",
             title="Example Article",
-            type=intelligence_pb2.RESOURCE_TYPE_WEBSITE
+            type=intelligence_pb2.RESOURCE_TYPE_WEBSITE,
         )
     )
 
@@ -136,7 +135,7 @@ async def test_add_url_resource(resource_client):
         intelligence_pb2.RESOURCE_STATUS_COMPLETED,
         intelligence_pb2.RESOURCE_STATUS_FAILED,
         intelligence_pb2.RESOURCE_STATUS_PROCESSING,
-        intelligence_pb2.RESOURCE_STATUS_QUEUED
+        intelligence_pb2.RESOURCE_STATUS_QUEUED,
     ]
 
     if response.status == intelligence_pb2.RESOURCE_STATUS_COMPLETED:
@@ -149,21 +148,23 @@ async def test_add_file_resource(resource_client):
     Test adding file resource.
     """
     # Mock PDF content (just bytes for testing)
-    file_content = b"This is a test PDF content. It contains information about neural networks."
+    file_content = (
+        b"This is a test PDF content. It contains information about neural networks."
+    )
 
     response = await resource_client.AddResource(
         intelligence_pb2.AddResourceRequest(
             user_id="test-file-user",
             file_content=file_content,
             title="Neural Networks Guide.pdf",
-            type=intelligence_pb2.RESOURCE_TYPE_PDF
+            type=intelligence_pb2.RESOURCE_TYPE_PDF,
         )
     )
 
     assert response.status in [
         intelligence_pb2.RESOURCE_STATUS_COMPLETED,
         intelligence_pb2.RESOURCE_STATUS_PROCESSING,
-        intelligence_pb2.RESOURCE_STATUS_QUEUED
+        intelligence_pb2.RESOURCE_STATUS_QUEUED,
     ]
 
     if response.status == intelligence_pb2.RESOURCE_STATUS_COMPLETED:
@@ -184,16 +185,13 @@ async def test_list_resources_pagination(resource_client):
                 user_id=user_id,
                 text=f"Resource {i}: This is test content for pagination testing.",
                 title=f"Resource {i}",
-                type=intelligence_pb2.RESOURCE_TYPE_TEXT
+                type=intelligence_pb2.RESOURCE_TYPE_TEXT,
             )
         )
 
     # List with limit=3
     response = await resource_client.ListResources(
-        intelligence_pb2.ListResourcesRequest(
-            user_id=user_id,
-            limit=3
-        )
+        intelligence_pb2.ListResourcesRequest(user_id=user_id, limit=3)
     )
 
     # Should return at most 3 resources
@@ -208,11 +206,7 @@ async def test_resource_metadata(resource_client):
     """
     user_id = "test-metadata-user"
 
-    metadata = {
-        "category": "research",
-        "author": "Test Author",
-        "year": "2024"
-    }
+    metadata = {"category": "research", "author": "Test Author", "year": "2024"}
 
     add_response = await resource_client.AddResource(
         intelligence_pb2.AddResourceRequest(
@@ -220,7 +214,7 @@ async def test_resource_metadata(resource_client):
             text="Test content with metadata",
             title="Metadata Test",
             type=intelligence_pb2.RESOURCE_TYPE_TEXT,
-            metadata=metadata
+            metadata=metadata,
         )
     )
 
@@ -228,15 +222,10 @@ async def test_resource_metadata(resource_client):
 
     # List and verify metadata
     list_response = await resource_client.ListResources(
-        intelligence_pb2.ListResourcesRequest(
-            user_id=user_id
-        )
+        intelligence_pb2.ListResourcesRequest(user_id=user_id)
     )
 
-    our_resource = next(
-        (r for r in list_response.items if r.id == resource_id),
-        None
-    )
+    our_resource = next((r for r in list_response.items if r.id == resource_id), None)
 
     if our_resource:
         assert our_resource.metadata.get("category") == "research"
@@ -254,7 +243,7 @@ async def test_resource_status_tracking(resource_client):
             user_id="test-status-user",
             text="Content for status tracking test",
             title="Status Test",
-            type=intelligence_pb2.RESOURCE_TYPE_TEXT
+            type=intelligence_pb2.RESOURCE_TYPE_TEXT,
         )
     )
 
@@ -263,30 +252,26 @@ async def test_resource_status_tracking(resource_client):
 
     # Query status by job_id
     status_response = await resource_client.GetResourceStatus(
-        intelligence_pb2.GetResourceStatusRequest(
-            job_id=job_id
-        )
+        intelligence_pb2.GetResourceStatusRequest(job_id=job_id)
     )
 
     assert status_response.status in [
         intelligence_pb2.RESOURCE_STATUS_COMPLETED,
         intelligence_pb2.RESOURCE_STATUS_PROCESSING,
         intelligence_pb2.RESOURCE_STATUS_FAILED,
-        intelligence_pb2.RESOURCE_STATUS_QUEUED
+        intelligence_pb2.RESOURCE_STATUS_QUEUED,
     ]
 
     # Query status by resource_id
     status_response2 = await resource_client.GetResourceStatus(
-        intelligence_pb2.GetResourceStatusRequest(
-            resource_id=resource_id
-        )
+        intelligence_pb2.GetResourceStatusRequest(resource_id=resource_id)
     )
 
     assert status_response2.status in [
         intelligence_pb2.RESOURCE_STATUS_COMPLETED,
         intelligence_pb2.RESOURCE_STATUS_PROCESSING,
         intelligence_pb2.RESOURCE_STATUS_FAILED,
-        intelligence_pb2.RESOURCE_STATUS_QUEUED
+        intelligence_pb2.RESOURCE_STATUS_QUEUED,
     ]
 
 
@@ -302,7 +287,9 @@ async def test_delete_nonexistent_resource(resource_client):
     )
 
     # Should return success=False or handle gracefully
-    assert response.success is False or response.success is True  # Implementation may vary
+    assert (
+        response.success is False or response.success is True
+    )  # Implementation may vary
 
 
 @pytest.mark.asyncio
@@ -319,7 +306,7 @@ async def test_multiple_users_resources_isolated(resource_client):
             user_id=user1,
             text="User 1 content",
             title="User 1 Resource",
-            type=intelligence_pb2.RESOURCE_TYPE_TEXT
+            type=intelligence_pb2.RESOURCE_TYPE_TEXT,
         )
     )
 
@@ -329,7 +316,7 @@ async def test_multiple_users_resources_isolated(resource_client):
             user_id=user2,
             text="User 2 content",
             title="User 2 Resource",
-            type=intelligence_pb2.RESOURCE_TYPE_TEXT
+            type=intelligence_pb2.RESOURCE_TYPE_TEXT,
         )
     )
 

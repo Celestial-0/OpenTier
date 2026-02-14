@@ -17,6 +17,7 @@ logger = get_logger(__name__)
 @dataclass
 class SearchResult:
     """Search result with relevance score."""
+
     chunk_id: uuid.UUID
     document_id: uuid.UUID
     content: str
@@ -29,11 +30,7 @@ class HybridSearchEngine:
     Hybrid search engine combining vector and keyword search using SQLAlchemy.
     """
 
-    def __init__(
-        self,
-        vector_weight: float = 0.7,
-        keyword_weight: float = 0.3
-    ):
+    def __init__(self, vector_weight: float = 0.7, keyword_weight: float = 0.3):
         self.vector_weight = vector_weight
         self.keyword_weight = keyword_weight
 
@@ -42,7 +39,7 @@ class HybridSearchEngine:
         query: str,
         user_id: str,
         top_k: int = 20,
-        document_id: Optional[uuid.UUID] = None
+        document_id: Optional[uuid.UUID] = None,
     ) -> List[SearchResult]:
         """
         Perform hybrid search using the database stored procedure.
@@ -60,8 +57,10 @@ class HybridSearchEngine:
                     user_id,
                     top_k,
                     self.vector_weight,
-                    self.keyword_weight
-                ).table_valued("chunk_id", "document_id", "content", "similarity_score", "rank")
+                    self.keyword_weight,
+                ).table_valued(
+                    "chunk_id", "document_id", "content", "similarity_score", "rank"
+                )
             )
 
             result = await session.execute(stmt)
@@ -73,7 +72,7 @@ class HybridSearchEngine:
                     document_id=row[1],
                     content=row[2],
                     similarity_score=float(row[3]),
-                    rank=int(row[4])
+                    rank=int(row[4]),
                 )
                 for row in rows
             ]
@@ -86,10 +85,7 @@ class HybridSearchEngine:
             return results
 
     async def vector_search_only(
-        self,
-        query: str,
-        user_id: str,
-        top_k: int = 20
+        self, query: str, user_id: str, top_k: int = 20
     ) -> List[SearchResult]:
         """
         Perform semantic-only vector search using SQLAlchemy.
@@ -108,7 +104,7 @@ class HybridSearchEngine:
                     DocumentChunk.document_id,
                     DocumentChunk.content,
                     (1 - distance).label("similarity_score"),
-                    func.row_number().over(order_by=distance).label("rank")
+                    func.row_number().over(order_by=distance).label("rank"),
                 )
                 .join(Document, DocumentChunk.document_id == Document.id)
                 .where(Document.user_id == user_id)
@@ -125,7 +121,7 @@ class HybridSearchEngine:
                     document_id=row[1],
                     content=row[2],
                     similarity_score=float(row[3]),
-                    rank=int(row[4])
+                    rank=int(row[4]),
                 )
                 for row in rows
             ]
@@ -136,7 +132,7 @@ async def hybrid_search(
     user_id: str,
     top_k: int = 20,
     vector_weight: float = 0.7,
-    keyword_weight: float = 0.3
+    keyword_weight: float = 0.3,
 ) -> List[SearchResult]:
     engine = HybridSearchEngine(vector_weight, keyword_weight)
     return await engine.search(query, user_id, top_k)

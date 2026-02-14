@@ -172,7 +172,8 @@ pub async fn handle_callback(
     .role;
 
     // Create session with user's role
-    let (session_token, expires_at) = session::create_session(db, user_id, user_role).await?;
+    let (session_token, expires_at) =
+        session::create_session(db, user_id, user_role, None, None).await?;
 
     Ok(OAuthCallbackResponse {
         user_id,

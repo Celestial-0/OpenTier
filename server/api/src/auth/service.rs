@@ -8,6 +8,7 @@ use super::{
     SignInResponse, SignUpRequest, SignUpResponse, VerifyEmailRequest, VerifyEmailResponse,
     password, session, tokens,
 };
+use sqlx::types::ipnetwork::IpNetwork;
 use crate::email::EmailService;
 
 // ===== Email/Password Authentication =====
@@ -93,7 +94,12 @@ pub async fn signup(
 /// - Checks if email is verified
 /// - Creates session with role
 /// - Returns session token
-pub async fn signin(db: &PgPool, req: SignInRequest) -> Result<SignInResponse, AuthError> {
+pub async fn signin(
+    db: &PgPool,
+    req: SignInRequest,
+    ip_address: Option<IpNetwork>,
+    user_agent: Option<String>,
+) -> Result<SignInResponse, AuthError> {
     // Find user by email
     let user = sqlx::query!(
         r#"
@@ -121,7 +127,8 @@ pub async fn signin(db: &PgPool, req: SignInRequest) -> Result<SignInResponse, A
     }
 
     // Create session with user's role
-    let (session_token, expires_at) = session::create_session(db, user.id, user.role).await?;
+    let (session_token, expires_at) =
+        session::create_session(db, user.id, user.role, ip_address, user_agent).await?;
 
     Ok(SignInResponse {
         user_id: user.id,
@@ -140,6 +147,8 @@ pub async fn signout(db: &PgPool, session_token: &str) -> Result<(), AuthError> 
 pub async fn refresh_session(
     db: &PgPool,
     req: RefreshRequest,
+    ip_address: Option<IpNetwork>,
+    user_agent: Option<String>,
 ) -> Result<RefreshResponse, AuthError> {
     // Validate current session and get user_id and role
     let (user_id, role) = session::get_user_from_session(db, &req.session_token).await?;
@@ -148,7 +157,8 @@ pub async fn refresh_session(
     session::invalidate_session(db, &req.session_token).await?;
 
     // Create new session with same role
-    let (new_token, expires_at) = session::create_session(db, user_id, role).await?;
+    let (new_token, expires_at) =
+        session::create_session(db, user_id, role, ip_address, user_agent).await?;
 
     Ok(RefreshResponse {
         session_token: new_token,
@@ -444,6 +454,8 @@ pub async fn resend_verification_email(
 pub async fn recover_account(
     db: &PgPool,
     req: RecoverAccountRequest,
+    ip_address: Option<IpNetwork>,
+    user_agent: Option<String>,
 ) -> Result<RecoverAccountResponse, AuthError> {
     // Find soft-deleted user by email
     let user = sqlx::query!(
@@ -487,7 +499,8 @@ pub async fn recover_account(
     .await?;
 
     // Create new session with user's role
-    let (session_token, expires_at) = session::create_session(db, user.id, user.role).await?;
+    let (session_token, expires_at) =
+        session::create_session(db, user.id, user.role, ip_address, user_agent).await?;
 
     Ok(RecoverAccountResponse {
         user_id: user.id,

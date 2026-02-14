@@ -44,7 +44,7 @@ class StructuredFormatter(logging.Formatter):
 def setup_logging(level: str = "INFO") -> None:
     """
     Setup structured logging for the application.
-    
+
     Args:
         level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
     """
@@ -52,9 +52,7 @@ def setup_logging(level: str = "INFO") -> None:
     numeric_level = getattr(logging, level.upper(), logging.INFO)
 
     # Create formatter
-    formatter = StructuredFormatter(
-        datefmt="%Y-%m-%d %H:%M:%S"
-    )
+    formatter = StructuredFormatter(datefmt="%Y-%m-%d %H:%M:%S")
 
     # Setup console handler
     console_handler = logging.StreamHandler(sys.stdout)
@@ -75,10 +73,10 @@ def setup_logging(level: str = "INFO") -> None:
 def get_logger(name: str) -> logging.Logger:
     """
     Get a logger instance.
-    
+
     Args:
         name: Logger name (usually __name__)
-    
+
     Returns:
         Logger instance
     """

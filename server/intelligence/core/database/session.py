@@ -37,7 +37,9 @@ def get_engine() -> AsyncEngine:
         # Choose pool class based on environment
         pool_class = AsyncAdaptedQueuePool if config.environment != "test" else NullPool
 
-        logger.info(f"Creating database engine with pool_size={config.database.pool_size}")
+        logger.info(
+            f"Creating database engine with pool_size={config.database.pool_size}"
+        )
 
         _engine = create_async_engine(
             url,
@@ -109,6 +111,7 @@ async def health_check() -> bool:
     try:
         engine = get_engine()
         from sqlalchemy import select
+
         async with engine.connect() as conn:
             await conn.execute(select(1))
         return True

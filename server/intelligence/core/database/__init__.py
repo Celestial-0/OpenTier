@@ -7,6 +7,7 @@ from .models import (
     Document,
     DocumentChunk,
     IngestionJob,
+    UserMemory,
 )
 from .session import (
     close_db,
@@ -25,6 +26,7 @@ __all__ = [
     "Document",
     "DocumentChunk",
     "IngestionJob",
+    "UserMemory",
     # Session management
     "close_db",
     "get_engine",

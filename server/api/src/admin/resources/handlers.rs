@@ -40,6 +40,9 @@ pub async fn add_resource(
     let req: AddResourceRequest = serde_json::from_slice(&body)
         .map_err(|e| ResourceError::Validation(format!("Invalid JSON: {}", e)))?;
 
+    // Validate request
+    req.validate()?;
+
     let mut client = state.intelligence_client.clone();
 
     // Generate IDs
@@ -48,7 +51,9 @@ pub async fn add_resource(
     // Map to appropriate gRPC call based on type
     let content = match req.resource_type.to_lowercase().as_str() {
         "url" => Some(pb::add_resource_request::Content::Url(req.content.clone())),
-        "text" => Some(pb::add_resource_request::Content::Text(req.content.clone())),
+        "text" | "markdown" | "html" | "code" => {
+            Some(pb::add_resource_request::Content::Text(req.content.clone()))
+        }
         "file" => Some(pb::add_resource_request::Content::FileContent(
             req.content.as_bytes().to_vec(),
         )),
@@ -66,16 +71,27 @@ pub async fn add_resource(
         _ => pb::ResourceType::Unspecified,
     };
 
+    let mut metadata = req.metadata.clone().unwrap_or_default();
+    
+    // Ensure title is preserved in metadata
+    if let Some(ref t) = req.title {
+        metadata.insert("title".to_string(), t.clone());
+    } else {
+        // fallback to generated title
+        let generated: String = req.content.chars().take(50).collect();
+        metadata.insert("title".to_string(), generated);
+    }
+    
+    // Preserve original requested type
+    metadata.insert("original_type".to_string(), req.resource_type.clone());
+
     let grpc_req = pb::AddResourceRequest {
         user_id: user_id.to_string(),
         resource_id: resource_id.clone(),
         content,
         r#type: resource_type as i32,
-        title: req
-            .title
-            .clone()
-            .or_else(|| Some(req.content.chars().take(50).collect())),
-        metadata: req.metadata.clone().unwrap_or_default(),
+        title: req.title.clone(),
+        metadata,
         config: req.config.as_ref().map(|cfg| pb::IngestionConfig {
             chunk_size: cfg.chunk_size.or(Some(1000)),
             chunk_overlap: cfg.chunk_overlap.or(Some(200)),
@@ -84,6 +100,7 @@ pub async fn add_resource(
             max_depth: cfg.depth.or(Some(1)),
             follow_links: cfg.follow_links.or(Some(false)),
         }),
+        is_global: req.is_global.unwrap_or(false),
     };
 
     let response = client
@@ -195,15 +212,26 @@ pub async fn list_resources(
                 .unwrap_or("unspecified")
                 .to_string();
 
+            let title = item.metadata.get("title").cloned();
+            
+            // Prefer original type from metadata if available, otherwise use mapped type
+            let final_type = if let Some(orig) = item.metadata.get("original_type") {
+                orig.clone()
+            } else {
+                item_type
+            };
+
             ResourceItemResponse {
                 id: item.id,
-                resource_type: item_type,
+                resource_type: final_type,
                 content: item.content,
                 status: item_status,
                 chunks_created: item.stats.as_ref().map(|s| s.chunks).unwrap_or(0),
                 documents: item.stats.as_ref().map(|s| s.documents).unwrap_or(0),
                 metadata: item.metadata,
                 created_at: item.created_at,
+                title,
+                is_global: item.is_global,
             }
         })
         .collect();

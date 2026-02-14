@@ -95,8 +95,7 @@ async def test_health_check_multiple_calls(health_client):
 
     # Send multiple concurrent health checks
     tasks = [
-        health_client.Check(intelligence_pb2.HealthCheckRequest())
-        for _ in range(10)
+        health_client.Check(intelligence_pb2.HealthCheckRequest()) for _ in range(10)
     ]
 
     responses = await asyncio.gather(*tasks)
@@ -121,5 +120,9 @@ async def test_ready_check_dependencies_format(health_client):
 
     # Each dependency should have a boolean status
     for dep_name, status in deps.items():
-        assert isinstance(dep_name, str), f"Dependency name should be string: {dep_name}"
-        assert isinstance(status, bool), f"Dependency status should be boolean: {status}"
+        assert isinstance(dep_name, str), (
+            f"Dependency name should be string: {dep_name}"
+        )
+        assert isinstance(status, bool), (
+            f"Dependency status should be boolean: {status}"
+        )

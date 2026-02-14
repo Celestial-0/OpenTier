@@ -241,7 +241,15 @@ uv run black .
 uv run ruff check .
 ```
 
-### Adding Dependencies
+### Updating Protobufs
+245: 
+246: If you modify `server/proto/intelligence.proto`, you must regenerate the Python code:
+247: 
+248: ```bash
+249: uv run python script/generate_protos.py
+250: ```
+251: 
+252: ### Adding Dependencies
 
 ```bash
 # Add a new dependency (with uv)

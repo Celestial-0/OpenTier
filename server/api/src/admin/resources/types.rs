@@ -19,6 +19,7 @@ pub struct AddResourceRequest {
     pub title: Option<String>,
     pub metadata: Option<std::collections::HashMap<String, String>>,
     pub config: Option<ResourceConfig>,
+    pub is_global: Option<bool>,
 }
 
 impl AddResourceRequest {
@@ -186,6 +187,9 @@ pub struct ResourceItemResponse {
     pub documents: i32,
     pub metadata: std::collections::HashMap<String, String>,
     pub created_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    pub is_global: bool,
 }
 
 #[derive(Debug, Serialize)]

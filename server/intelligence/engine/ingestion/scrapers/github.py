@@ -17,7 +17,7 @@ class GitHubScraper:
 
     def __init__(self, github_token: Optional[str] = None):
         """Initialize GitHub scraper.
-        
+
         Args:
             github_token: Optional GitHub personal access token for higher rate limits
         """
@@ -34,10 +34,10 @@ class GitHubScraper:
 
     async def scrape(self, url: str) -> dict:
         """Scrape GitHub URL and extract markdown content.
-        
+
         Args:
             url: GitHub URL (blob, raw, or repo)
-            
+
         Returns:
             Dictionary with title, content, and metadata
         """
@@ -56,13 +56,15 @@ class GitHubScraper:
             logger.error(f"Failed to scrape GitHub URL {url}: {e}")
             raise
 
-    async def discover_markdown_files(self, repo_url: str, max_files: int = 100) -> list[dict]:
+    async def discover_markdown_files(
+        self, repo_url: str, max_files: int = 100
+    ) -> list[dict]:
         """Discover all markdown files in a GitHub repository.
-        
+
         Args:
             repo_url: GitHub repository URL
             max_files: Maximum number of files to discover
-            
+
         Returns:
             List of file info dictionaries
         """
@@ -79,16 +81,20 @@ class GitHubScraper:
                 if file_content.type == "dir":
                     # Add directory contents to queue
                     contents.extend(repository.get_contents(file_content.path))
-                elif file_content.name.endswith(('.md', '.markdown')):
-                    markdown_files.append({
-                        'path': file_content.path,
-                        'name': file_content.name,
-                        'url': file_content.html_url,
-                        'download_url': file_content.download_url,
-                        'size': file_content.size,
-                    })
+                elif file_content.name.endswith((".md", ".markdown")):
+                    markdown_files.append(
+                        {
+                            "path": file_content.path,
+                            "name": file_content.name,
+                            "url": file_content.html_url,
+                            "download_url": file_content.download_url,
+                            "size": file_content.size,
+                        }
+                    )
 
-            logger.info(f"Discovered {len(markdown_files)} markdown files in {repo_url}")
+            logger.info(
+                f"Discovered {len(markdown_files)} markdown files in {repo_url}"
+            )
             return markdown_files
 
         except GithubException as e:
@@ -103,18 +109,20 @@ class GitHubScraper:
         response.raise_for_status()
 
         content = response.text
-        title = self._extract_title_from_markdown(content) or self._extract_filename(url)
+        title = self._extract_title_from_markdown(content) or self._extract_filename(
+            url
+        )
 
         return {
-            'title': title,
-            'content': content,
-            'url': url,
-            'raw_url': raw_url,
-            'type': 'markdown',
-            'metadata': {
-                'source': 'github',
-                'content_type': 'markdown',
-            }
+            "title": title,
+            "content": content,
+            "url": url,
+            "raw_url": raw_url,
+            "type": "markdown",
+            "metadata": {
+                "source": "github",
+                "content_type": "markdown",
+            },
         }
 
     async def _scrape_repo_readme(self, repo_url: str) -> dict:
@@ -125,20 +133,20 @@ class GitHubScraper:
 
             # Try to get README
             readme = repository.get_readme()
-            content = readme.decoded_content.decode('utf-8')
+            content = readme.decoded_content.decode("utf-8")
 
             return {
-                'title': f"{repository.full_name} - README",
-                'content': content,
-                'url': repo_url,
-                'raw_url': readme.download_url,
-                'type': 'markdown',
-                'metadata': {
-                    'source': 'github',
-                    'repository': repository.full_name,
-                    'stars': repository.stargazers_count,
-                    'description': repository.description,
-                }
+                "title": f"{repository.full_name} - README",
+                "content": content,
+                "url": repo_url,
+                "raw_url": readme.download_url,
+                "type": "markdown",
+                "metadata": {
+                    "source": "github",
+                    "repository": repository.full_name,
+                    "stars": repository.stargazers_count,
+                    "description": repository.description,
+                },
             }
 
         except GithubException as e:
@@ -161,15 +169,15 @@ class GitHubScraper:
     def _is_repo_url(self, url: str) -> bool:
         """Check if URL is a repository root URL."""
         parsed = urlparse(url)
-        path_parts = [p for p in parsed.path.split('/') if p]
+        path_parts = [p for p in parsed.path.split("/") if p]
 
         # Repository URL has exactly 2 path parts: owner/repo
-        return len(path_parts) == 2 and 'github.com' in parsed.netloc
+        return len(path_parts) == 2 and "github.com" in parsed.netloc
 
     def _parse_repo_url(self, url: str) -> tuple[str, str]:
         """Parse repository URL to extract owner and repo name."""
         parsed = urlparse(url)
-        path_parts = [p for p in parsed.path.split('/') if p]
+        path_parts = [p for p in parsed.path.split("/") if p]
 
         if len(path_parts) < 2:
             raise ValueError(f"Invalid repository URL: {url}")
@@ -179,7 +187,7 @@ class GitHubScraper:
     def _extract_title_from_markdown(self, content: str) -> Optional[str]:
         """Extract title from markdown content (first H1)."""
         # Look for first # heading
-        match = re.search(r'^#\s+(.+)$', content, re.MULTILINE)
+        match = re.search(r"^#\s+(.+)$", content, re.MULTILINE)
         if match:
             return match.group(1).strip()
         return None
@@ -187,9 +195,9 @@ class GitHubScraper:
     def _extract_filename(self, url: str) -> str:
         """Extract filename from URL."""
         parsed = urlparse(url)
-        filename = parsed.path.split('/')[-1]
+        filename = parsed.path.split("/")[-1]
         # Remove extension
-        return filename.rsplit('.', 1)[0].replace('-', ' ').replace('_', ' ').title()
+        return filename.rsplit(".", 1)[0].replace("-", " ").replace("_", " ").title()
 
     async def close(self):
         """Close HTTP client."""

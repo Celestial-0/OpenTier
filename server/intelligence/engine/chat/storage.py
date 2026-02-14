@@ -33,9 +33,7 @@ class ConversationStorage:
         await self.session.flush()
         return conv
 
-    async def get_conversation(
-        self, conversation_id: uuid.UUID
-    ) -> Conversation | None:
+    async def get_conversation(self, conversation_id: uuid.UUID) -> Conversation | None:
         """Get conversation by ID."""
         result = await self.session.execute(
             select(Conversation).where(Conversation.id == conversation_id)
@@ -54,7 +52,9 @@ class ConversationStorage:
                     return conv
 
                 # If ID was provided but not found, create with that ID
-                return await self.create_conversation(user_id, conversation_id=conv_uuid)
+                return await self.create_conversation(
+                    user_id, conversation_id=conv_uuid
+                )
             except ValueError:
                 pass
 
@@ -119,3 +119,46 @@ class ConversationStorage:
             .offset(offset)
         )
         return list(result.scalars().all())
+
+
+class MemoryStorage:
+    """Storage operations for long-term user memory."""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def get_memory(self, user_id: str) -> str:
+        """Get long-term memory for a user."""
+        from core.database import UserMemory
+
+        result = await self.session.execute(
+            select(UserMemory).where(UserMemory.user_id == user_id)
+        )
+        memory_obj = result.scalar_one_or_none()
+        return memory_obj.memory if memory_obj else ""
+
+    async def update_memory(self, user_id: str, new_memory: str) -> None:
+        """Update or create long-term memory for a user."""
+        from core.database import UserMemory
+
+        result = await self.session.execute(
+            select(UserMemory).where(UserMemory.user_id == user_id)
+        )
+        memory_obj = result.scalar_one_or_none()
+
+        if memory_obj:
+            memory_obj.memory = new_memory
+        else:
+            memory_obj = UserMemory(user_id=user_id, memory=new_memory)
+            self.session.add(memory_obj)
+
+        await self.session.flush()
+
+    async def delete_memory(self, user_id: str) -> bool:
+        """Delete long-term memory for a user."""
+        from core.database import UserMemory
+
+        result = await self.session.execute(
+            delete(UserMemory).where(UserMemory.user_id == user_id)
+        )
+        return result.rowcount > 0

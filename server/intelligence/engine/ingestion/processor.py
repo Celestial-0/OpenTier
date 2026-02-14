@@ -5,7 +5,11 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from engine.ingestion.cleaning import CleaningStrategy, DocumentType, clean_with_strategy
+from engine.ingestion.cleaning import (
+    CleaningStrategy,
+    DocumentType,
+    clean_with_strategy,
+)
 from engine.ingestion.chunker import TextChunk, chunk_text
 from engine.ingestion.storage import DocumentStorage, JobStorage
 from engine.ingestion.validation import (
@@ -27,7 +31,12 @@ logger = get_logger(__name__)
 class DocumentProcessor:
     """Processes documents through the ingestion pipeline."""
 
-    def __init__(self, doc_storage: DocumentStorage, job_storage: JobStorage, session: AsyncSession):
+    def __init__(
+        self,
+        doc_storage: DocumentStorage,
+        job_storage: JobStorage,
+        session: AsyncSession,
+    ):
         self.doc_storage = doc_storage
         self.job_storage = job_storage
         self.session = session
@@ -40,6 +49,7 @@ class DocumentProcessor:
         document: intelligence_pb2.Document,
         config: intelligence_pb2.IngestionConfig | None = None,
         job_id: uuid.UUID | None = None,
+        is_global: bool = False,
     ) -> tuple[uuid.UUID, list[TextChunk]]:
         """
         Process a single document through the pipeline.
@@ -52,7 +62,7 @@ class DocumentProcessor:
 
         Returns:
             Tuple of (document_id, chunks)
-            
+
         Raises:
             ValidationError: If input validation fails
             Exception: If processing fails
@@ -66,7 +76,11 @@ class DocumentProcessor:
 
             # Validate and sanitize title
             try:
-                title = validate_document_title(document.title) if document.title else "Untitled"
+                title = (
+                    validate_document_title(document.title)
+                    if document.title
+                    else "Untitled"
+                )
             except ValidationError as e:
                 logger.warning(f"Title validation failed, using 'Untitled': {e}")
                 title = "Untitled"
@@ -136,9 +150,13 @@ class DocumentProcessor:
                     doc_type = "UNKNOWN"
 
                 # Store job_id in metadata for status tracking
-                doc_metadata = sanitize_metadata(dict(document.metadata)) if document.metadata else {}
+                doc_metadata = (
+                    sanitize_metadata(dict(document.metadata))
+                    if document.metadata
+                    else {}
+                )
                 if job_id:
-                    doc_metadata['job_id'] = str(job_id)
+                    doc_metadata["job_id"] = str(job_id)
 
                 db_doc = await self.doc_storage.create_document(
                     user_id=user_id,
@@ -147,7 +165,8 @@ class DocumentProcessor:
                     document_type=doc_type,
                     source_url=document.source_url if document.source_url else None,
                     metadata=doc_metadata,
-                    document_id=doc_id
+                    document_id=doc_id,
+                    is_global=is_global,
                 )
                 logger.debug(f"Created document in database: {db_doc.id}")
             except Exception as e:
@@ -194,7 +213,9 @@ class DocumentProcessor:
                     chunk.embedding = embeddings[i].tolist()
 
                 await self.session.flush()
-                logger.info(f"Stored {len(embeddings)} embeddings for document {db_doc.id}")
+                logger.info(
+                    f"Stored {len(embeddings)} embeddings for document {db_doc.id}"
+                )
 
             except Exception as e:
                 logger.error(f"Failed to store chunks or embeddings: {e}")
@@ -215,7 +236,9 @@ class DocumentProcessor:
         except ValidationError as e:
             logger.error(f"Validation error processing document: {e}")
             if job_id:
-                await self.job_storage.increment_failed(job_id, f"Validation error: {e}")
+                await self.job_storage.increment_failed(
+                    job_id, f"Validation error: {e}"
+                )
             raise
         except Exception as e:
             logger.error(f"Error processing document: {e}", exc_info=True)
@@ -229,6 +252,7 @@ class DocumentProcessor:
         user_id: str,
         documents: list[intelligence_pb2.Document],
         config: intelligence_pb2.IngestionConfig | None = None,
+        is_global: bool = False,
     ) -> uuid.UUID:
         """
         Process a batch of documents.
@@ -252,7 +276,9 @@ class DocumentProcessor:
         # Process each document
         for document in documents:
             try:
-                await self.process_document(user_id, document, config, job_id=job.id)
+                await self.process_document(
+                    user_id, document, config, job_id=job.id, is_global=is_global
+                )
             except Exception as e:
                 # Error already logged in process_document
                 logger.error(f"Error processing document {document.title}: {e}")

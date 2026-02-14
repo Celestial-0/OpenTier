@@ -128,7 +128,8 @@ pub async fn list_conversations(
     let conversations = sqlx::query!(
         r#"
         SELECT c.id, c.title, c.created_at, c.updated_at,
-               (SELECT COUNT(*) FROM chat_messages m WHERE m.conversation_id = c.id) as "message_count!"
+               (SELECT COUNT(*) FROM chat_messages m WHERE m.conversation_id = c.id) as "message_count!",
+               (SELECT content FROM chat_messages m WHERE m.conversation_id = c.id ORDER BY created_at DESC LIMIT 1) as "last_message_preview"
         FROM conversations c
         WHERE c.user_id = $1
         ORDER BY c.updated_at DESC
@@ -164,7 +165,7 @@ pub async fn list_conversations(
             id: row.id,
             title: row.title,
             message_count: row.message_count as i32,
-            last_message_preview: None, // Could add this with another subquery but expensive
+            last_message_preview: row.last_message_preview,
             created_at: row.created_at.timestamp(),
             updated_at: row.updated_at.timestamp(),
         })
@@ -312,7 +313,7 @@ pub async fn generate_conversation_title(
     };
 
     let response = state
-        .intelligence
+        .intelligence_client
         .clone()
         .generate_title(grpc_request)
         .await

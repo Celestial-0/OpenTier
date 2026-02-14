@@ -23,7 +23,7 @@ pub async fn list_users(
         UserAdminView,
         r#"
         SELECT 
-            id, email as "email!", NULL::text as "full_name?", role::text as "role!", false as "is_verified!", created_at as "created_at!", updated_at as "updated_at!"
+            id, email as "email!", name as "full_name?", role::text as "role!", email_verified as "is_verified!", created_at as "created_at!", updated_at as "updated_at!"
         FROM users
         WHERE ($3::text IS NULL OR email ILIKE '%' || $3 || '%')
         ORDER BY created_at DESC
@@ -68,7 +68,7 @@ pub async fn get_user(
         UserAdminView,
         r#"
         SELECT 
-            id, email as "email!", NULL::text as "full_name?", role::text as "role!", false as "is_verified!", created_at as "created_at!", updated_at as "updated_at!"
+            id, email as "email!", name as "full_name?", role::text as "role!", email_verified as "is_verified!", created_at as "created_at!", updated_at as "updated_at!"
         FROM users
         WHERE id = $1
         "#,
@@ -97,7 +97,7 @@ pub async fn update_user_role(
         UPDATE users
         SET role = $2::text::user_role, updated_at = NOW()
         WHERE id = $1
-        RETURNING id, email as "email!", NULL::text as "full_name?", role::text as "role!", false as "is_verified!", created_at as "created_at!", updated_at as "updated_at!"
+        RETURNING id, email as "email!", name as "full_name?", role::text as "role!", email_verified as "is_verified!", created_at as "created_at!", updated_at as "updated_at!"
         "#,
         user_id,
         req.role.to_string()

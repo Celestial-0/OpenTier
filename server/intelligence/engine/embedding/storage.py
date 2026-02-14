@@ -16,6 +16,7 @@ logger = get_logger(__name__)
 @dataclass
 class EmbeddingRecord:
     """Embedding database record."""
+
     id: uuid.UUID
     chunk_id: uuid.UUID
     embedding: np.ndarray
@@ -38,7 +39,7 @@ class EmbeddingStorage:
         embedding: np.ndarray,
         document_id: uuid.UUID,
         user_id: str,
-        chunk_index: int
+        chunk_index: int,
     ) -> uuid.UUID:
         """
         Store a single embedding by updating an existing chunk.
@@ -60,7 +61,7 @@ class EmbeddingStorage:
         embeddings: np.ndarray,
         document_id: uuid.UUID,
         user_id: str,
-        chunk_indices: List[int]
+        chunk_indices: List[int],
     ) -> List[uuid.UUID]:
         """
         Store multiple embeddings in a batch by updating existing chunks.
@@ -74,14 +75,9 @@ class EmbeddingStorage:
             for i in range(len(chunk_ids))
         ]
 
-        await self.session.execute(
-            update(DocumentChunk),
-            batch_data
-        )
+        await self.session.execute(update(DocumentChunk), batch_data)
 
-        logger.info(
-            f"Updated {len(chunk_ids)} embeddings for document {document_id}"
-        )
+        logger.info(f"Updated {len(chunk_ids)} embeddings for document {document_id}")
 
         return chunk_ids
 
@@ -102,14 +98,11 @@ class EmbeddingStorage:
             chunk_id=chunk.id,
             embedding=np.array(chunk.embedding),
             document_id=chunk.document_id,
-            user_id="", # user_id is on Document, not Chunk in current schema
-            chunk_index=chunk.chunk_index
+            user_id="",  # user_id is on Document, not Chunk in current schema
+            chunk_index=chunk.chunk_index,
         )
 
-    async def delete_embeddings_for_document(
-        self,
-        document_id: uuid.UUID
-    ) -> int:
+    async def delete_embeddings_for_document(self, document_id: uuid.UUID) -> int:
         """
         Clear all embeddings for a document.
         """

@@ -76,6 +76,7 @@ impl IntoResponse for AuthError {
 
         let body = Json(json!({
             "error": message,
+            "message": message,
         }));
 
         (status, body).into_response()
