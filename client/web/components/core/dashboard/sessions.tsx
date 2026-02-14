@@ -27,6 +27,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useUserStore } from "@/store/user-store";
 
+import { DashboardSession } from "@/types/dashboard";
+
 export function Sessions() {
     const { sessions, isLoadingSessions, fetchSessions, revokeSession } = useUserStore();
     const [revokingId, setRevokingId] = useState<string | null>(null);
@@ -87,7 +89,7 @@ export function Sessions() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {sessions.map((session) => (
+                                {sessions.map((session: DashboardSession) => (
                                     <TableRow key={session.id}>
                                         <TableCell className="font-medium py-4">
                                             <div className="flex items-center gap-2">

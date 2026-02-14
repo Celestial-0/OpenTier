@@ -24,21 +24,27 @@ import {
 import { ChevronsUpDown } from "lucide-react";
 import { UserIcon, SettingsIcon, BellIcon, LogoutIcon, UsersIcon } from "@/components/core/common/icons/animated";
 import { cn } from "@/lib/utils";
+import { useUserStore } from "@/store/user-store";
+import { useUi, DashboardView } from "@/context/ui-context";
+import { useAuth } from "@/context/auth-context";
 
 export const Menu = () => {
   const iconRefs = useRef<Record<string, any>>({});
+  const { user } = useUserStore();
+  const { navigateToDashboard } = useUi();
+  const { logout } = useAuth();
 
-  const user = {
-    name: "shadcn",
-    email: "m@example.com",
-    avatar: "https://github.com/shadcn.png",
+  const userData = {
+    name: user?.name || "User",
+    email: user?.email || "m@example.com",
+    avatar: user?.avatar_url || "https://github.com/shadcn.png",
+    initials: user?.name ? user.name.substring(0, 2).toUpperCase() : "U",
   };
 
-  const menuItems = [
-    { label: "Dashboard", icon: UsersIcon },
-    { label: "Settings", icon: SettingsIcon },
-    { label: "Notifications", icon: BellIcon },
-
+  const menuItems: { label: string; icon: any; view?: DashboardView }[] = [
+    { label: "Dashboard", icon: UsersIcon, view: "overview" },
+    { label: "Settings", icon: SettingsIcon, view: "settings" },
+    { label: "Notifications", icon: BellIcon, view: "notifications" },
   ];
 
   const handleMouseEnter = (label: string) => {
@@ -53,11 +59,16 @@ export const Menu = () => {
     }
   };
 
+  const handleItemClick = (view?: DashboardView) => {
+    if (view) {
+      navigateToDashboard(view);
+    }
+  };
+
   return (
     <SidebarMenu>
       <SidebarMenuItem>
         <DropdownMenu>
-          {/* Removed asChild: The Trigger now wraps the button */}
           <DropdownMenuTrigger className="w-full focus-visible:outline-none">
             <div
               className={cn(
@@ -66,12 +77,12 @@ export const Menu = () => {
               )}
             >
               <Avatar className="h-8 w-8 rounded-lg border border-border/50">
-                <AvatarImage src={user.avatar} alt={user.name} />
-                <AvatarFallback className="rounded-lg font-medium">CN</AvatarFallback>
+                <AvatarImage src={userData.avatar} alt={userData.name} />
+                <AvatarFallback className="rounded-lg font-medium">{userData.initials}</AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-semibold tracking-tight">{user.name}</span>
-                <span className="truncate text-xs text-muted-foreground">{user.email}</span>
+                <span className="truncate font-semibold tracking-tight">{userData.name}</span>
+                <span className="truncate text-xs text-muted-foreground">{userData.email}</span>
               </div>
               <ChevronsUpDown className="ml-auto size-4 text-muted-foreground/50" />
             </div>
@@ -87,12 +98,12 @@ export const Menu = () => {
               <DropdownMenuLabel className="p-0 font-normal">
                 <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                   <Avatar className="h-8 w-8 rounded-lg border border-border/50">
-                    <AvatarImage src={user.avatar} alt={user.name} />
-                    <AvatarFallback className="rounded-lg">CN</AvatarFallback>
+                    <AvatarImage src={userData.avatar} alt={userData.name} />
+                    <AvatarFallback className="rounded-lg">{userData.initials}</AvatarFallback>
                   </Avatar>
                   <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-semibold">{user.name}</span>
-                    <span className="truncate text-xs text-muted-foreground">{user.email}</span>
+                    <span className="truncate font-semibold">{userData.name}</span>
+                    <span className="truncate text-xs text-muted-foreground">{userData.email}</span>
                   </div>
                 </div>
               </DropdownMenuLabel>
@@ -106,6 +117,7 @@ export const Menu = () => {
                 return (
                   <DropdownMenuItem
                     key={index}
+                    onClick={() => handleItemClick(item.view)}
                     onMouseEnter={() => handleMouseEnter(item.label)}
                     onMouseLeave={() => handleMouseLeave(item.label)}
                     className="group gap-3 p-2 cursor-pointer focus:bg-accent focus:text-accent-foreground"
@@ -123,6 +135,7 @@ export const Menu = () => {
 
             <DropdownMenuGroup>
               <DropdownMenuItem
+                onClick={() => logout()}
                 onMouseEnter={() => handleMouseEnter("Log out")}
                 onMouseLeave={() => handleMouseLeave("Log out")}
                 className="group gap-3 p-2 cursor-pointer focus:bg-red-50 focus:text-red-600 dark:focus:bg-red-950/20 dark:focus:text-red-400"

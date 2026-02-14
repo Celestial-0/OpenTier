@@ -25,9 +25,7 @@ export function ThreadListSidebar({
             <SidebarMenuItem>
               <SidebarMenuButton size="lg">
                 <Link
-                  href="https://opentier.vercel.app"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href="/"
                   className="flex items-center gap-2"
                 >
 

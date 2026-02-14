@@ -4,10 +4,10 @@ import {
     UserResponse,
     UpdateProfileRequest,
     ChangePasswordRequest,
-    UserResponseSchema,
-    Session,
-    SessionListResponseSchema
+    SessionListResponseSchema,
+    UserResponseSchema
 } from '@/lib/api-types';
+import { UserPreferences, DashboardSession } from '@/types/dashboard';
 import { getAuthHeaders } from '@/lib/auth-utils';
 
 /**
@@ -16,16 +16,10 @@ import { getAuthHeaders } from '@/lib/auth-utils';
  * Manages user preferences, cached user profile, and active sessions.
  */
 
-interface UserPreferences {
-    theme: 'light' | 'dark' | 'system';
-    fontSize: 'small' | 'medium' | 'large';
-    notificationsEnabled: boolean;
-}
-
 interface UserState {
     // Data
     user: UserResponse | null;
-    sessions: Session[];
+    sessions: DashboardSession[];
     preferences: UserPreferences;
 
     // UI State
@@ -62,6 +56,8 @@ export const useUserStore = create<UserState>()(
                     theme: 'system',
                     fontSize: 'medium',
                     notificationsEnabled: true,
+                    emailNotifications: true,
+                    pushNotifications: false,
                 },
                 isLoading: false,
                 isLoadingSessions: false,
@@ -80,10 +76,13 @@ export const useUserStore = create<UserState>()(
                             theme: 'system',
                             fontSize: 'medium',
                             notificationsEnabled: true,
+                            emailNotifications: true,
+                            pushNotifications: false,
                         },
                     }),
 
                 fetchUser: async () => {
+                    if (get().isLoading) return;
                     set({ isLoading: true, error: null });
                     try {
                         const headers = getAuthHeaders();
@@ -191,6 +190,7 @@ export const useUserStore = create<UserState>()(
                 },
 
                 fetchSessions: async () => {
+                    if (get().isLoadingSessions) return;
                     set({ isLoadingSessions: true, error: null });
                     try {
                         const headers = getAuthHeaders();
@@ -222,7 +222,7 @@ export const useUserStore = create<UserState>()(
 
                     try {
                         const headers = getAuthHeaders();
-                        const res = await fetch(`/api/user/sessions/${sessionId}`, {
+                        const res = await fetch(`/api/user/revoke-session/${sessionId}`, {
                             method: 'DELETE',
                             headers: {
                                 ...headers as Record<string, string>

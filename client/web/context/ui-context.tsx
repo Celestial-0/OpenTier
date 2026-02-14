@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useCallback } from "react";
+import { useRouter, usePathname } from "next/navigation";
 
 /**
  * UI Context
@@ -8,6 +9,14 @@ import React, { createContext, useContext, useState, useCallback } from "react";
  * Manages transient UI state that needs to be accessible globally but
  * doesn't need persistence or complex logic suitable for a store.
  */
+
+export type DashboardView =
+    | "overview"
+    | "conversations"
+    | "sessions"
+    | "notifications"
+    | "profile"
+    | "settings";
 
 interface UiContextType {
     // Sidebar State
@@ -25,17 +34,21 @@ interface UiContextType {
     closeModal: () => void;
 
     // Dashboard Navigation
-    activeDashboardTab: string;
-    setActiveDashboardTab: (tab: string) => void;
+    activeDashboardView: DashboardView;
+    setActiveDashboardView: (view: DashboardView) => void;
+    navigateToDashboard: (view: DashboardView) => void;
 }
 
 const UiContext = createContext<UiContextType | undefined>(undefined);
 
 export function UiProvider({ children }: { children: React.ReactNode }) {
+    const router = useRouter();
+    const pathname = usePathname();
+
     const [isSidebarOpen, setIsSidebarOpenState] = useState(true);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [activeModal, setActiveModal] = useState<string | null>(null);
-    const [activeDashboardTab, setActiveDashboardTab] = useState("overview");
+    const [activeDashboardView, setActiveDashboardView] = useState<DashboardView>("overview");
 
     const toggleSidebar = useCallback(() => {
         setIsSidebarOpenState((prev) => !prev);
@@ -53,6 +66,13 @@ export function UiProvider({ children }: { children: React.ReactNode }) {
         setActiveModal(null);
     }, []);
 
+    const navigateToDashboard = useCallback((view: DashboardView) => {
+        setActiveDashboardView(view);
+        if (pathname !== "/dashboard") {
+            router.push("/dashboard");
+        }
+    }, [pathname, router]);
+
     return (
         <UiContext.Provider
             value={{
@@ -64,8 +84,9 @@ export function UiProvider({ children }: { children: React.ReactNode }) {
                 activeModal,
                 openModal,
                 closeModal,
-                activeDashboardTab,
-                setActiveDashboardTab,
+                activeDashboardView,
+                setActiveDashboardView,
+                navigateToDashboard,
             }}
         >
             {children}

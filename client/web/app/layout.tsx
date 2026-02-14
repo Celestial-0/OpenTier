@@ -6,6 +6,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/context/auth-context";
 import { UiProvider } from "@/context/ui-context";
+import { AdminProvider } from "@/context/admin-context";
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
@@ -44,9 +45,11 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <AuthProvider>
-            <UiProvider>
-              {children}
-            </UiProvider>
+            <AdminProvider>
+              <UiProvider>
+                {children}
+              </UiProvider>
+            </AdminProvider>
             <Toaster />
           </AuthProvider>
         </ThemeProvider>

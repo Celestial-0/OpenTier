@@ -1,67 +1,18 @@
-"use client";
-
+import { useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { MessageSquare, Clock, Shield, TrendingUp } from "lucide-react";
 import Link from "next/link";
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-
-// Mock data matching API response structures
-const mockStats = {
-    totalConversations: 12,
-    totalMessages: 156,
-    activeSessions: 2,
-    accountAge: "3 months",
-};
-
-const mockRecentConversations = [
-    {
-        id: "550e8400-e29b-41d4-a716-446655440002",
-        title: "Project Planning Discussion",
-        message_count: 15,
-        updated_at: Date.now() - 3600000, // 1 hour ago
-    },
-    {
-        id: "550e8400-e29b-41d4-a716-446655440003",
-        title: "Technical Architecture Review",
-        message_count: 8,
-        updated_at: Date.now() - 7200000, // 2 hours ago
-    },
-    {
-        id: "550e8400-e29b-41d4-a716-446655440004",
-        title: "API Integration Questions",
-        message_count: 23,
-        updated_at: Date.now() - 86400000, // 1 day ago
-    },
-];
-
-// Mock activity data for the last 7 days
-const mockActivityData = [
-    { day: "Mon", messages: 12 },
-    { day: "Tue", messages: 19 },
-    { day: "Wed", messages: 8 },
-    { day: "Thu", messages: 25 },
-    { day: "Fri", messages: 18 },
-    { day: "Sat", messages: 14 },
-    { day: "Sun", messages: 22 },
-];
-
-// Mock conversation data for bar chart
-const mockConversationData = [
-    { name: "Project Planning", messages: 15 },
-    { name: "Tech Review", messages: 8 },
-    { name: "API Questions", messages: 23 },
-    { name: "Bug Fixes", messages: 12 },
-    { name: "Feature Ideas", messages: 18 },
-];
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { useUserStore } from "@/store/user-store";
+import { useChatStore } from "@/store/chat-store";
+import { formatDistanceToNow } from "date-fns";
 
 const formatTimeAgo = (timestamp: number) => {
-    const seconds = Math.floor((Date.now() - timestamp) / 1000);
-    if (seconds < 60) return "just now";
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-    return `${Math.floor(seconds / 86400)}d ago`;
+    // Handle seconds vs milliseconds - API usually returns seconds
+    const time = timestamp < 10000000000 ? timestamp * 1000 : timestamp;
+    return formatDistanceToNow(new Date(time), { addSuffix: true });
 };
 
 interface OverviewProps {
@@ -69,6 +20,28 @@ interface OverviewProps {
 }
 
 export const Overview = ({ onNavigateToConversations }: OverviewProps) => {
+    const { user, sessions, fetchSessions } = useUserStore();
+    const { conversations, totalConversationsCount, fetchConversations } = useChatStore();
+
+    useEffect(() => {
+        fetchSessions();
+        fetchConversations(true);
+    }, [fetchSessions, fetchConversations]);
+
+    // Calculate generic stats
+    const totalMessages = conversations.reduce((acc, curr) => acc + curr.message_count, 0);
+
+    // Prepare chart data from top 5 conversations by message count
+    const chartData = [...conversations]
+        .sort((a, b) => b.message_count - a.message_count)
+        .slice(0, 5)
+        .map(c => ({
+            name: c.title?.slice(0, 15) + (c.title && c.title.length > 15 ? '...' : '') || 'Untitled',
+            messages: c.message_count
+        }));
+
+    const accountAge = user?.created_at ? formatTimeAgo(new Date(user.created_at).getTime()) : "N/A";
+
     return (
         <div className="space-y-6">
             {/* Stats Grid */}
@@ -79,7 +52,7 @@ export const Overview = ({ onNavigateToConversations }: OverviewProps) => {
                         <MessageSquare className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{mockStats.totalConversations}</div>
+                        <div className="text-2xl font-bold">{totalConversationsCount}</div>
                         <p className="text-xs text-muted-foreground">
                             Across all time
                         </p>
@@ -92,9 +65,9 @@ export const Overview = ({ onNavigateToConversations }: OverviewProps) => {
                         <TrendingUp className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{mockStats.totalMessages}</div>
+                        <div className="text-2xl font-bold">{totalMessages}</div>
                         <p className="text-xs text-muted-foreground">
-                            +12 from last week
+                            In {conversations.length} recent conversations
                         </p>
                     </CardContent>
                 </Card>
@@ -105,7 +78,7 @@ export const Overview = ({ onNavigateToConversations }: OverviewProps) => {
                         <Shield className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{mockStats.activeSessions}</div>
+                        <div className="text-2xl font-bold">{sessions.length}</div>
                         <p className="text-xs text-muted-foreground">
                             Logged in devices
                         </p>
@@ -118,9 +91,9 @@ export const Overview = ({ onNavigateToConversations }: OverviewProps) => {
                         <Clock className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{mockStats.accountAge}</div>
+                        <div className="text-2xl font-bold">{accountAge.replace(" ago", "")}</div>
                         <p className="text-xs text-muted-foreground">
-                            Member since Nov 2025
+                            Member since {user?.created_at ? new Date(user.created_at).getFullYear() : '...'}
                         </p>
                     </CardContent>
                 </Card>
@@ -128,91 +101,71 @@ export const Overview = ({ onNavigateToConversations }: OverviewProps) => {
 
             {/* Charts Section */}
             <div className="grid gap-4 md:grid-cols-2">
-                {/* Activity Over Time Chart */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Activity Over Time</CardTitle>
-                        <CardDescription>Messages sent in the last 7 days</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <ResponsiveContainer width="100%" height={250}>
-                            <AreaChart data={mockActivityData}>
-                                <defs>
-                                    <linearGradient id="colorMessages" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.4} />
-                                        <stop offset="95%" stopColor="var(--chart-1)" stopOpacity={0.05} />
-                                    </linearGradient>
-                                </defs>
-                                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                                <XAxis
-                                    dataKey="day"
-                                    className="text-xs"
-                                    tick={{ fill: 'var(--muted-foreground)' }}
-                                />
-                                <YAxis
-                                    className="text-xs"
-                                    tick={{ fill: 'var(--muted-foreground)' }}
-                                />
-                                <Tooltip
-                                    contentStyle={{
-                                        backgroundColor: 'var(--background)',
-                                        border: '1px solid var(--border)',
-                                        borderRadius: '8px',
-                                    }}
-                                    labelStyle={{ color: 'var(--foreground)' }}
-                                />
-                                <Area
-                                    type="monotone"
-                                    dataKey="messages"
-                                    stroke="var(--chart-1)"
-                                    fillOpacity={1}
-                                    fill="url(#colorMessages)"
-                                    strokeWidth={2}
-                                />
-                            </AreaChart>
-                        </ResponsiveContainer>
-                    </CardContent>
-                </Card>
-
                 {/* Top Conversations Chart */}
-                <Card>
+                <Card className="col-span-2 md:col-span-1">
                     <CardHeader>
                         <CardTitle>Top Conversations</CardTitle>
                         <CardDescription>Most active conversations by message count</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <ResponsiveContainer width="100%" height={250}>
-                            <BarChart data={mockConversationData}>
-                                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                                <XAxis
-                                    dataKey="name"
-                                    className="text-xs"
-                                    tick={{ fill: 'var(--muted-foreground)' }}
-                                    angle={-45}
-                                    textAnchor="end"
-                                    height={80}
-                                />
-                                <YAxis
-                                    className="text-xs"
-                                    tick={{ fill: 'var(--muted-foreground)' }}
-                                />
-                                <Tooltip
-                                    contentStyle={{
-                                        backgroundColor: 'var(--background)',
-                                        border: '1px solid var(--border)',
-                                        borderRadius: '8px',
-                                    }}
-                                    labelStyle={{ color: 'var(--foreground)' }}
-                                    cursor={{ fill: 'var(--muted-foreground)', opacity: 0.2, radius: 6 }}
-                                />
-                                <Bar
-                                    dataKey="messages"
-                                    fill="var(--chart-1)"
-                                    radius={[8, 8, 0, 0]}
-                                    
-                                />
-                            </BarChart>
-                        </ResponsiveContainer>
+                        {chartData.length > 0 ? (
+                            <ResponsiveContainer width="100%" height={250}>
+                                <BarChart data={chartData}>
+                                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                                    <XAxis
+                                        dataKey="name"
+                                        className="text-xs"
+                                        tick={{ fill: 'var(--muted-foreground)' }}
+                                        height={50}
+                                    />
+                                    <YAxis
+                                        className="text-xs"
+                                        tick={{ fill: 'var(--muted-foreground)' }}
+                                    />
+                                    <Tooltip
+                                        contentStyle={{
+                                            backgroundColor: 'var(--background)',
+                                            border: '1px solid var(--border)',
+                                            borderRadius: '8px',
+                                        }}
+                                        labelStyle={{ color: 'var(--foreground)' }}
+                                        cursor={{ fill: 'var(--muted-foreground)', opacity: 0.2, radius: 6 }}
+                                    />
+                                    <Bar
+                                        dataKey="messages"
+                                        fill="var(--chart-1)"
+                                        radius={[8, 8, 0, 0]}
+                                    />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center h-[250px] text-muted-foreground">
+                                <MessageSquare className="h-10 w-10 mb-2 opacity-20" />
+                                <p>No conversations yet</p>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {/* Quick Actions - Moved up to take space of removed chart */}
+                <Card className="col-span-2 md:col-span-1">
+                    <CardHeader>
+                        <CardTitle>Quick Actions</CardTitle>
+                        <CardDescription>Common tasks and shortcuts</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="grid gap-4">
+                            <Link href="/chat">
+                                <Button variant="outline" className="w-full justify-start h-12 text-base">
+                                    <MessageSquare className="mr-3 h-5 w-5" />
+                                    Start New Chat
+                                </Button>
+                            </Link>
+                            <Button variant="outline" className="w-full justify-start h-12 text-base" onClick={onNavigateToConversations}>
+                                <Shield className="mr-3 h-5 w-5" />
+                                Manage Sessions
+                            </Button>
+                        </div>
                     </CardContent>
                 </Card>
             </div>
@@ -226,63 +179,45 @@ export const Overview = ({ onNavigateToConversations }: OverviewProps) => {
                             <CardDescription>Quick access to your latest chats</CardDescription>
                         </div>
                         <Badge variant="secondary" className="font-mono text-xs">
-                            {mockRecentConversations.length} total
+                            {conversations.length} visible
                         </Badge>
                     </div>
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-3">
-                        {mockRecentConversations.slice(0, 3).map((conversation) => (
-                            <Link
-                                key={conversation.id}
-                                href={`/chat?conversation=${conversation.id}`}
-                                className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent hover:border-primary/50 transition-all group"
-                            >
-                                <div className="space-y-1 flex-1">
-                                    <p className="text-sm font-medium leading-none group-hover:text-primary transition-colors">
-                                        {conversation.title}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                        {conversation.message_count} messages · {formatTimeAgo(conversation.updated_at)}
-                                    </p>
-                                </div>
-                                <Button variant="ghost" size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
-                                    Open
-                                </Button>
-                            </Link>
-                        ))}
+                        {conversations.length === 0 ? (
+                            <div className="text-center py-8 text-muted-foreground">
+                                No conversations found. Start a new chat!
+                            </div>
+                        ) : (
+                            conversations.slice(0, 3).map((conversation) => (
+                                <Link
+                                    key={conversation.id}
+                                    href={`/chat?conversation=${conversation.id}`}
+                                    className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent hover:border-primary/50 transition-all group"
+                                >
+                                    <div className="space-y-1 flex-1">
+                                        <p className="text-sm font-medium leading-none group-hover:text-primary transition-colors">
+                                            {conversation.title || "Untitled Conversation"}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">
+                                            {conversation.message_count} messages · {formatTimeAgo(conversation.updated_at)}
+                                        </p>
+                                    </div>
+                                    <Button variant="ghost" size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                        Open
+                                    </Button>
+                                </Link>
+                            ))
+                        )}
                     </div>
                     <div className="mt-6 flex justify-between items-center">
-                        <Button variant="outline" onClick={onNavigateToConversations}>
+                        <Button variant="outline" onClick={onNavigateToConversations} disabled={conversations.length === 0}>
                             View All Conversations →
                         </Button>
-                        <Button>
-                            <Link href="/chat">
-                                New Conversation
-                            </Link>
-                        </Button>
-                    </div>
-                </CardContent>
-            </Card>
-
-            {/* Quick Actions */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Quick Actions</CardTitle>
-                    <CardDescription>Common tasks and shortcuts</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="grid gap-2 md:grid-cols-2">
-                        <Link href="/chat">
-                            <Button variant="outline" className="justify-start">
-                                <MessageSquare className="mr-2 h-4 w-4" />
-                                Start New Chat
-                            </Button>
+                        <Link href="/chat" className={buttonVariants()}>
+                            New Conversation
                         </Link>
-                        <Button variant="outline" className="justify-start">
-                            <Shield className="mr-2 h-4 w-4" />
-                            Manage Sessions
-                        </Button>
                     </div>
                 </CardContent>
             </Card>

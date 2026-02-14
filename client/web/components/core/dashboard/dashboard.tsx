@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Overview } from "./overview";
 import { Conversations } from "./conversations";
@@ -11,13 +9,13 @@ import { Settings } from "./settings";
 import { Admin } from "./admin";
 import { Notifications } from "./notifications";
 import { LayoutDashboard, MessageSquare, Shield, User, Settings as SettingsIcon, ShieldCheck, Bell } from "lucide-react";
-import { useUi } from "@/context/ui-context";
 import { useAuth } from "@/context/auth-context";
-
+import { useUi, DashboardView } from "@/context/ui-context";
 
 export const DashboardUI = () => {
     const { user } = useAuth();
-    const { activeDashboardTab, setActiveDashboardTab } = useUi();
+    const { activeDashboardView, setActiveDashboardView } = useUi();
+
     return (
         <div className="container mx-auto p-6 max-w-6xl">
             <div className="space-y-6">
@@ -30,7 +28,7 @@ export const DashboardUI = () => {
                 </div>
 
                 {/* Dashboard Tabs */}
-                <Tabs value={activeDashboardTab} onValueChange={setActiveDashboardTab} className="space-y-6">
+                <Tabs value={activeDashboardView} onValueChange={(v) => setActiveDashboardView(v as DashboardView)} className="space-y-6">
                     <TabsList className={`grid w-full grid-cols-2 ${user?.role === 'admin' ? 'lg:grid-cols-6' : 'lg:grid-cols-5'} gap-2`}>
                         <TabsTrigger value="overview">
                             <LayoutDashboard className="mr-2 h-4 w-4" />
@@ -61,7 +59,7 @@ export const DashboardUI = () => {
                     </TabsList>
 
                     <TabsContent value="overview">
-                        <Overview onNavigateToConversations={() => setActiveDashboardTab("conversations")} />
+                        <Overview onNavigateToConversations={() => setActiveDashboardView("conversations")} />
                     </TabsContent>
 
                     <TabsContent value="conversations">
@@ -78,7 +76,7 @@ export const DashboardUI = () => {
 
 
                     <TabsContent value="settings">
-                        <Settings onNavigateToSessions={() => setActiveDashboardTab("sessions")} />
+                        <Settings onNavigateToSessions={() => setActiveDashboardView("sessions")} />
                     </TabsContent>
 
                     {user?.role === "admin" && (
