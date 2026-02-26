@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     sources JSONB NOT NULL DEFAULT '[]',
     -- RAG sources used
     metadata JSONB NOT NULL DEFAULT '{}',
+    parent_id UUID REFERENCES chat_messages(id) ON DELETE
+    SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 -- Create indexes

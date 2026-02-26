@@ -97,12 +97,47 @@ class ChatService:
             )
 
             # 2. Save User Message
-            await conv_storage.add_message(
-                conversation_id=conv.id,
-                role="user",
-                content=message,
-                metadata=metadata or {},
+            metadata_dict = dict(metadata) if metadata else {}
+            parent_id_str = metadata_dict.get("parent_id")
+            parent_id_uuid = uuid.UUID(parent_id_str) if parent_id_str else None
+
+            user_msg_id_str = metadata_dict.pop("user_message_id", None)
+            user_msg_id = (
+                uuid.UUID(user_msg_id_str) if user_msg_id_str else uuid.uuid4()
             )
+
+            assistant_msg_id_str = metadata_dict.pop("assistant_message_id", None)
+            assistant_msg_id = (
+                uuid.UUID(assistant_msg_id_str)
+                if assistant_msg_id_str
+                else uuid.uuid4()
+            )
+
+            regenerate_user_msg_id_str = metadata_dict.pop(
+                "regenerate_user_msg_id", None
+            )
+
+            if regenerate_user_msg_id_str:
+                regenerate_uuid = uuid.UUID(regenerate_user_msg_id_str)
+                user_msg = await conv_storage.get_message(regenerate_uuid)
+                if not user_msg:
+                    user_msg = await conv_storage.add_message(
+                        conversation_id=conv.id,
+                        role="user",
+                        content=message,
+                        metadata=metadata_dict,
+                        parent_id=parent_id_uuid,
+                        message_id=regenerate_uuid,
+                    )
+            else:
+                user_msg = await conv_storage.add_message(
+                    conversation_id=conv.id,
+                    role="user",
+                    content=message,
+                    metadata=metadata_dict,
+                    parent_id=parent_id_uuid,
+                    message_id=user_msg_id,
+                )
 
             # 3. Fetch History for Context
             all_messages = await conv_storage.get_messages(conv.id)
@@ -134,6 +169,8 @@ class ChatService:
                 content=query_response.response,
                 sources=query_response.sources,
                 metadata={"metrics": query_response.metrics or {}},
+                parent_id=user_msg.id,
+                message_id=assistant_msg_id,
             )
 
             # Commit transaction to ensure persistence
@@ -207,24 +244,63 @@ class ChatService:
                 user_id=user_id, conversation_id=conversation_id
             )
 
-            # Save User Message
-            await conv_storage.add_message(
-                conversation_id=conv.id,
-                role="user",
-                content=message,
-                metadata=metadata or {},
+            # Extract parent_id from metadata
+            metadata_dict = dict(metadata) if metadata else {}
+            parent_id_str = metadata_dict.get("parent_id")
+            parent_id_uuid = uuid.UUID(parent_id_str) if parent_id_str else None
+
+            user_msg_id_str = metadata_dict.pop("user_message_id", None)
+            user_msg_id = (
+                uuid.UUID(user_msg_id_str) if user_msg_id_str else uuid.uuid4()
             )
 
-            message_id = str(uuid.uuid4())
+            assistant_msg_id_str = metadata_dict.pop("assistant_message_id", None)
+            assistant_msg_id = (
+                uuid.UUID(assistant_msg_id_str)
+                if assistant_msg_id_str
+                else uuid.uuid4()
+            )
+
+            regenerate_user_msg_id_str = metadata_dict.pop(
+                "regenerate_user_msg_id", None
+            )
+
+            if regenerate_user_msg_id_str:
+                regenerate_uuid = uuid.UUID(regenerate_user_msg_id_str)
+                user_msg = await conv_storage.get_message(regenerate_uuid)
+                if not user_msg:
+                    user_msg = await conv_storage.add_message(
+                        conversation_id=conv.id,
+                        role="user",
+                        content=message,
+                        metadata=metadata_dict,
+                        parent_id=parent_id_uuid,
+                        message_id=regenerate_uuid,
+                    )
+            else:
+                user_msg = await conv_storage.add_message(
+                    conversation_id=conv.id,
+                    role="user",
+                    content=message,
+                    metadata=metadata_dict,
+                    parent_id=parent_id_uuid,
+                    message_id=user_msg_id,
+                )
+
+            message_id = str(assistant_msg_id)
             full_response = ""
             all_sources = []
             retrieval_metrics = {}
             generation_metrics = {}
 
-            # Fetch History for Context
-            all_messages = await conv_storage.get_messages(conv.id)
+            # Fetch Branch History for Context
+            active_lineage = await conv_storage.get_message_lineage(
+                conversation_id=conv.id, leaf_message_id=str(user_msg.id)
+            )
+
             history = [
-                {"role": msg.role, "content": msg.content} for msg in all_messages[:-1]
+                {"role": msg.role, "content": msg.content}
+                for msg in active_lineage[:-1]
             ]
 
             # Fetch Long-term Memory
@@ -257,6 +333,7 @@ class ChatService:
                                 document_id=s["document_id"],
                                 relevance_score=s["relevance_score"],
                                 content=s.get("content", ""),
+                                document_title=s.get("document_title") or "",
                             ),
                             is_final=False,
                         )
@@ -337,35 +414,42 @@ class ChatService:
                 is_final=True,
             )
 
-            # Finally, save assistant message and update memory
+            # Save assistant message with the user message as its parent
             msg = await conv_storage.add_message(
                 conversation_id=conv.id,
                 role="assistant",
                 content=full_response,
                 sources=all_sources,
-                metadata={"metrics": {**retrieval_metrics, **generation_metrics}},
+                metadata={
+                    "metrics": {**retrieval_metrics, **generation_metrics},
+                },
+                parent_id=user_msg.id,
+                message_id=assistant_msg_id,
             )
             await session.commit()
 
-            # Trigger proactive memory update
-            new_history = all_messages + [msg]
-            updated_memory = await self.query_pipeline.generate_memory_update(
-                current_memory=user_memory,
-                recent_messages=[
-                    {"role": m.role, "content": m.content} for m in new_history
-                ],
-            )
-            if updated_memory is False:
-                # User asked to forget
-                async with get_session() as mem_session:
-                    await MemoryStorage(mem_session).delete_memory(user_id)
-                    await mem_session.commit()
-            elif updated_memory:
-                async with get_session() as mem_session:
-                    await MemoryStorage(mem_session).update_memory(
-                        user_id, updated_memory
-                    )
-                    await mem_session.commit()
+            # Trigger proactive memory update based on the active lineage
+            try:
+                new_history = active_lineage[:-1] + [user_msg, msg]
+                updated_memory = await self.query_pipeline.generate_memory_update(
+                    current_memory=user_memory,
+                    recent_messages=[
+                        {"role": m.role, "content": m.content} for m in new_history
+                    ],
+                )
+                if updated_memory is False:
+                    # User asked to forget
+                    async with get_session() as mem_session:
+                        await MemoryStorage(mem_session).delete_memory(user_id)
+                        await mem_session.commit()
+                elif updated_memory:
+                    async with get_session() as mem_session:
+                        await MemoryStorage(mem_session).update_memory(
+                            user_id, updated_memory
+                        )
+                        await mem_session.commit()
+            except Exception as e:
+                logger.error(f"Failed to perform proactive memory update: {e}")
 
     # Expose persistence methods if needed by Engine, or Engine can call storage directly.
     # But Engine delegates everything Chat related here.
@@ -442,6 +526,9 @@ class ChatService:
                         ),
                         content=m.content,
                         created_at=ts,
+                        parent_id=m.metadata_.get("parent_id")
+                        if isinstance(m.metadata_, dict)
+                        else None,
                     )
                 )
 

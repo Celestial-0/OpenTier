@@ -39,35 +39,42 @@ async fn main() {
 
     // Attempt connection with graceful degradation
     // If Intelligence service is unavailable, log warning but continue startup
-    let intelligence_client = match crate::grpc::client::IntelligenceClient::connect(&intelligence_url).await {
-        Ok(client) => {
-            tracing::info!("✅ Connected to Intelligence service at {}", intelligence_url);
-            client
-        }
-        Err(e) => {
-            tracing::warn!(
-                "⚠️ Failed to connect to Intelligence service at {}: {}. \
+    let intelligence_client =
+        match crate::grpc::client::IntelligenceClient::connect(&intelligence_url).await {
+            Ok(client) => {
+                tracing::info!(
+                    "✅ Connected to Intelligence service at {}",
+                    intelligence_url
+                );
+                client
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "⚠️ Failed to connect to Intelligence service at {}: {}. \
                  Starting with lazy reconnection. AI features may be unavailable.",
-                intelligence_url,
-                e
-            );
-            // Create client that will attempt lazy reconnection on first use
-            match crate::grpc::client::IntelligenceClient::connect_lazy(&intelligence_url).await {
-                Ok(client) => client,
-                Err(lazy_err) => {
-                    tracing::error!(
-                        "❌ Failed to create lazy connection to Intelligence service: {}. \
+                    intelligence_url,
+                    e
+                );
+                // Create client that will attempt lazy reconnection on first use
+                match crate::grpc::client::IntelligenceClient::connect_lazy(&intelligence_url).await
+                {
+                    Ok(client) => client,
+                    Err(lazy_err) => {
+                        tracing::error!(
+                            "❌ Failed to create lazy connection to Intelligence service: {}. \
                          AI features will be unavailable.",
-                        lazy_err
-                    );
-                    // Still try to create the client - it will error on actual use
-                    crate::grpc::client::IntelligenceClient::connect(&intelligence_url)
-                        .await
-                        .expect("Failed to connect to intelligence service after multiple attempts")
+                            lazy_err
+                        );
+                        // Still try to create the client - it will error on actual use
+                        crate::grpc::client::IntelligenceClient::connect(&intelligence_url)
+                            .await
+                            .expect(
+                                "Failed to connect to intelligence service after multiple attempts",
+                            )
+                    }
                 }
             }
-        }
-    };
+        };
 
     // ---- Router ----
     let app = gateway::router(db.clone(), config.clone(), intelligence_client);

@@ -31,7 +31,7 @@ impl AddResourceRequest {
             _ => {
                 return Err(ResourceError::UnsupportedResourceType(
                     self.resource_type.clone(),
-                ))
+                ));
             }
         }
 

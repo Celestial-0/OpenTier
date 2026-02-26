@@ -77,7 +77,7 @@ pub async fn get_conversation(
     // Note: Python Intelligence service persists to 'chat_messages'
     let messages = sqlx::query!(
         r#"
-        SELECT id, role::text as "role!", content, sources, metadata, created_at
+        SELECT id, role::text as "role!", content, sources, metadata, created_at, parent_id
         FROM chat_messages
         WHERE conversation_id = $1
         ORDER BY created_at ASC
@@ -100,6 +100,7 @@ pub async fn get_conversation(
             content: msg.content,
             created_at: msg.created_at.timestamp(),
             sources: serde_json::from_value(msg.sources).unwrap_or_default(),
+            parent_id: msg.parent_id.map(|u| u.to_string()),
         })
         .collect();
 
@@ -305,7 +306,7 @@ pub async fn generate_conversation_title(
 
     // 2. Forward to intelligence service (all AI logic happens there)
     use crate::grpc::proto::opentier::intelligence::v1 as pb;
-    
+
     let grpc_request = pb::GenerateTitleRequest {
         conversation_id: conversation_id.to_string(),
         user_message: req.user_message,
@@ -330,7 +331,7 @@ pub async fn generate_conversation_title(
 
 /// Send a message to a conversation (non-streaming)
 /// POST /chat/conversations/{id}/messages
-/// 
+///
 /// NOTE: Message persistence is handled by the Intelligence service to avoid
 /// dual storage and data inconsistency. The API only validates and forwards.
 pub async fn send_message(
@@ -368,11 +369,25 @@ pub async fn send_message(
     // Intelligence service handles message persistence (single source of truth)
     let mut client = state.intelligence_client.clone();
 
+    let mut metadata = std::collections::HashMap::new();
+    if let Some(parent_id) = req.parent_id {
+        metadata.insert("parent_id".to_string(), parent_id);
+    }
+    if let Some(user_id) = req.user_message_id {
+        metadata.insert("user_message_id".to_string(), user_id);
+    }
+    if let Some(assist_id) = req.assistant_message_id {
+        metadata.insert("assistant_message_id".to_string(), assist_id);
+    }
+    if let Some(regen_id) = req.regenerate_user_msg_id {
+        metadata.insert("regenerate_user_msg_id".to_string(), regen_id);
+    }
+
     let grpc_req = crate::grpc::proto::opentier::intelligence::v1::ChatRequest {
         user_id: user_id.to_string(),
         conversation_id: conversation_id.to_string(),
         message: req.message.clone(),
-        metadata: std::collections::HashMap::new(),
+        metadata,
         config: req.config.as_ref().map(|c| {
             crate::grpc::proto::opentier::intelligence::v1::ChatConfig {
                 temperature: c.temperature,
@@ -445,27 +460,44 @@ pub async fn send_message(
 // ============================================================================
 
 /// Stream chat response in real-time (Server-Sent Events)
-/// GET /chat/conversations/{id}/stream?message=hello&temperature=0.7
+/// POST /chat/conversations/{id}/stream
 pub async fn stream_chat(
     State(state): State<AppState>,
     Extension(user_id): Extension<Uuid>,
     Path(conversation_id): Path<Uuid>,
-    Query(params): Query<StreamChatQuery>,
-) -> ChatResult<Sse<impl Stream<Item = Result<Event, Infallible>>>> {
+    Json(req): Json<StreamChatRequest>,
+) -> ChatResult<(
+    axum::http::HeaderMap,
+    Sse<impl Stream<Item = Result<Event, Infallible>>>,
+)> {
     use futures::StreamExt;
 
     let mut client = state.intelligence_client.clone();
 
+    let mut metadata = std::collections::HashMap::new();
+    if let Some(parent_id) = req.parent_id {
+        metadata.insert("parent_id".to_string(), parent_id);
+    }
+    if let Some(user_message_id) = req.user_message_id {
+        metadata.insert("user_message_id".to_string(), user_message_id);
+    }
+    if let Some(assist_id) = req.assistant_message_id {
+        metadata.insert("assistant_message_id".to_string(), assist_id);
+    }
+    if let Some(regen_id) = req.regenerate_user_msg_id {
+        metadata.insert("regenerate_user_msg_id".to_string(), regen_id);
+    }
+
     let request = crate::grpc::proto::opentier::intelligence::v1::ChatRequest {
         user_id: user_id.to_string(),
         conversation_id: conversation_id.to_string(),
-        message: params.message,
-        metadata: std::collections::HashMap::new(),
+        message: req.message,
+        metadata,
         config: Some(crate::grpc::proto::opentier::intelligence::v1::ChatConfig {
-            temperature: Some(params.temperature),
-            max_tokens: Some(params.max_tokens),
-            use_rag: Some(params.use_rag),
-            model: params.model,
+            temperature: Some(req.temperature),
+            max_tokens: Some(req.max_tokens),
+            use_rag: Some(req.use_rag),
+            model: req.model,
             context_limit: None,
         }),
     };
@@ -513,11 +545,25 @@ pub async fn stream_chat(
                     None => Ok(Event::default().event("ping").data("")),
                 }
             }
-            Err(e) => Ok(Event::default()
-                .event("error")
-                .data(format!("Stream error: {}", e))),
+            Err(e) => {
+                let err_msg = format!("gRPC Error: {:?}", e);
+                Ok(Event::default().event("error").data(err_msg))
+            }
         }
     });
 
-    Ok(Sse::new(sse_stream).keep_alive(KeepAlive::default()))
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert(
+        "x-accel-buffering",
+        axum::http::HeaderValue::from_static("no"),
+    );
+    headers.insert(
+        "cache-control",
+        axum::http::HeaderValue::from_static("no-cache, no-transform"),
+    );
+
+    Ok((
+        headers,
+        Sse::new(sse_stream).keep_alive(KeepAlive::default()),
+    ))
 }
