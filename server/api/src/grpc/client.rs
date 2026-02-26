@@ -1,6 +1,6 @@
 use std::time::Duration;
-use tonic::transport::{Channel, Endpoint};
 use tokio::time::sleep;
+use tonic::transport::{Channel, Endpoint};
 use uuid::Uuid;
 
 use crate::grpc::proto::opentier::intelligence::v1 as pb;
@@ -105,10 +105,7 @@ impl IntelligenceClient {
         retry_config: RetryConfig,
     ) -> Result<Self, tonic::transport::Error> {
         // Use the longest timeout as the channel default
-        let max_timeout = timeouts
-            .chat
-            .max(timeouts.stream)
-            .max(timeouts.resource);
+        let max_timeout = timeouts.chat.max(timeouts.stream).max(timeouts.resource);
 
         let endpoint = Endpoint::from_shared(uri.to_string())?
             .timeout(max_timeout)
@@ -140,10 +137,7 @@ impl IntelligenceClient {
     ) -> Result<Self, tonic::transport::Error> {
         // Use the longest timeout as the channel default
         // Per-RPC timeouts are set via request metadata
-        let max_timeout = timeouts
-            .chat
-            .max(timeouts.stream)
-            .max(timeouts.resource);
+        let max_timeout = timeouts.chat.max(timeouts.stream).max(timeouts.resource);
 
         let endpoint = Endpoint::from_shared(uri.to_string())?
             .timeout(max_timeout)
@@ -176,14 +170,16 @@ impl IntelligenceClient {
     fn request_with_correlation<T>(&self, inner: T, timeout: Duration) -> tonic::Request<T> {
         let mut request = tonic::Request::new(inner);
         request.set_timeout(timeout);
-        
+
         // Add correlation ID for distributed tracing
         let correlation_id = Uuid::new_v4().to_string();
         request.metadata_mut().insert(
             "x-correlation-id",
-            correlation_id.parse().unwrap_or_else(|_| "unknown".parse().unwrap()),
+            correlation_id
+                .parse()
+                .unwrap_or_else(|_| "unknown".parse().unwrap()),
         );
-        
+
         request
     }
 
@@ -425,7 +421,7 @@ impl IntelligenceClient {
     }
 
     /// Upload a large file using chunked streaming
-    /// 
+    ///
     /// This method handles files > 100MB by streaming chunks to the server.
     /// The file is split into 10MB chunks and streamed with integrity verification.
     pub async fn chunked_upload(
@@ -440,20 +436,20 @@ impl IntelligenceClient {
         metadata: std::collections::HashMap<String, String>,
         config: Option<pb::IngestionConfig>,
     ) -> Result<tonic::Response<pb::ChunkedUploadResponse>, tonic::Status> {
-        use sha2::{Sha256, Digest};
-        
+        use sha2::{Digest, Sha256};
+
         const CHUNK_SIZE: usize = 10 * 1024 * 1024; // 10MB chunks
-        
+
         let total_size = file_data.len() as i64;
         let total_chunks = ((file_data.len() + CHUNK_SIZE - 1) / CHUNK_SIZE) as i32;
-        
+
         // Compute checksum
         let mut hasher = Sha256::new();
         hasher.update(&file_data);
         let checksum = format!("{:x}", hasher.finalize());
-        
+
         let resource_id = resource_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-        
+
         // Build data chunks first (collect to owned Vec to avoid lifetime issues)
         let file_len = file_data.len();
         let data_chunks: Vec<pb::FileChunk> = file_data
@@ -468,7 +464,7 @@ impl IntelligenceClient {
                 }
             })
             .collect();
-        
+
         // Build complete chunk stream with metadata first
         let metadata_chunk = pb::FileChunk {
             payload: Some(pb::file_chunk::Payload::Metadata(pb::ChunkMetadata {
@@ -487,18 +483,17 @@ impl IntelligenceClient {
             chunk_index: 0,
             is_last: false,
         };
-        
-        let chunks: Vec<pb::FileChunk> = std::iter::once(metadata_chunk)
-            .chain(data_chunks)
-            .collect();
-        
+
+        let chunks: Vec<pb::FileChunk> =
+            std::iter::once(metadata_chunk).chain(data_chunks).collect();
+
         let request = tonic::Request::new(futures::stream::iter(chunks));
-        
+
         self.resource_client.chunked_upload(request).await
     }
 
     /// Synchronize resource metadata between API and Intelligence databases
-    /// 
+    ///
     /// This method enables eventual consistency between the two databases by
     /// comparing resource states and detecting conflicts.
     pub async fn sync_resource_metadata(

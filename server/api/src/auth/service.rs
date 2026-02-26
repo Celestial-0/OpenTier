@@ -8,8 +8,8 @@ use super::{
     SignInResponse, SignUpRequest, SignUpResponse, VerifyEmailRequest, VerifyEmailResponse,
     password, session, tokens,
 };
-use sqlx::types::ipnetwork::IpNetwork;
 use crate::email::EmailService;
+use sqlx::types::ipnetwork::IpNetwork;
 
 // ===== Email/Password Authentication =====
 

@@ -149,6 +149,7 @@ message ChatMessage {
   string content = 3;
   repeated ContextChunk sources = 4;
   int64 created_at = 5;
+  optional string parent_id = 6;
 }
 
 enum MessageRole {

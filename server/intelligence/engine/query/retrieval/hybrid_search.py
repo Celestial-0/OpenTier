@@ -3,9 +3,9 @@
 import uuid
 from typing import List, Optional
 from dataclasses import dataclass
-import numpy as np
 
 from sqlalchemy import select, func, cast
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from pgvector.sqlalchemy import Vector
 from core.database import get_session, DocumentChunk, Document
 from core.logging import get_logger
@@ -23,6 +23,7 @@ class SearchResult:
     content: str
     similarity_score: float
     rank: int
+    document_title: Optional[str] = None
 
 
 class HybridSearchEngine:
@@ -50,7 +51,7 @@ class HybridSearchEngine:
         async with get_session() as session:
             # Using SQLAlchemy func to call the stored procedure
             # Note: We cast the list to Vector to ensure proper parameter binding
-            stmt = select(
+            sp_call = (
                 func.hybrid_search(
                     cast(embedding_list, Vector(384)),
                     query,
@@ -58,9 +59,31 @@ class HybridSearchEngine:
                     top_k,
                     self.vector_weight,
                     self.keyword_weight,
-                ).table_valued(
+                )
+                .table_valued(
                     "chunk_id", "document_id", "content", "similarity_score", "rank"
                 )
+                .alias("sp")
+            )
+
+            stmt = (
+                select(
+                    sp_call.c.chunk_id,
+                    sp_call.c.document_id,
+                    sp_call.c.content,
+                    sp_call.c.similarity_score,
+                    sp_call.c.rank,
+                    Document.title,
+                )
+                .join(
+                    Document,
+                    Document.id
+                    == cast(
+                        sp_call.c.document_id,
+                        PG_UUID(as_uuid=True),
+                    ),
+                )
+                .order_by(sp_call.c.rank)
             )
 
             result = await session.execute(stmt)
@@ -73,6 +96,7 @@ class HybridSearchEngine:
                     content=row[2],
                     similarity_score=float(row[3]),
                     rank=int(row[4]),
+                    document_title=row[5] if len(row) > 5 else None,
                 )
                 for row in rows
             ]
@@ -105,6 +129,7 @@ class HybridSearchEngine:
                     DocumentChunk.content,
                     (1 - distance).label("similarity_score"),
                     func.row_number().over(order_by=distance).label("rank"),
+                    Document.title,
                 )
                 .join(Document, DocumentChunk.document_id == Document.id)
                 .where(Document.user_id == user_id)
@@ -122,6 +147,7 @@ class HybridSearchEngine:
                     content=row[2],
                     similarity_score=float(row[3]),
                     rank=int(row[4]),
+                    document_title=row[5] if len(row) > 5 else None,
                 )
                 for row in rows
             ]
