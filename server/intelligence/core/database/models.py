@@ -1,8 +1,10 @@
 """Database models for the intelligence engine."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
+
+from core.config import IST
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
@@ -44,13 +46,17 @@ class Document(Base):
     )
     is_global: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        default=lambda: datetime.now(IST),
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
-        onupdate=func.now(),
+        default=lambda: datetime.now(IST),
+        onupdate=lambda: datetime.now(IST),
     )
 
     # Relationships
@@ -82,7 +88,10 @@ class DocumentChunk(Base):
         "metadata", JSON, nullable=False, default=dict
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        default=lambda: datetime.now(IST),
     )
 
     # Relationships
@@ -107,7 +116,10 @@ class IngestionJob(Base):
     errors: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     progress_percent: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     started_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        default=lambda: datetime.now(IST),
     )
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -128,13 +140,17 @@ class Conversation(Base):
         "metadata", JSON, nullable=False, default=dict
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        default=lambda: datetime.now(IST),
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
-        onupdate=func.now(),
+        default=lambda: datetime.now(IST),
+        onupdate=lambda: datetime.now(IST),
     )
 
     # Relationships
@@ -167,8 +183,16 @@ class ChatMessage(Base):
     metadata_: Mapped[dict[str, Any]] = mapped_column(
         "metadata", JSON, nullable=False, default=dict
     )
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("chat_messages.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        default=lambda: datetime.now(IST),
     )
 
     # Relationships
@@ -191,5 +215,6 @@ class UserMemory(Base):
         DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
-        onupdate=func.now(),
+        default=lambda: datetime.now(IST),
+        onupdate=lambda: datetime.now(IST),
     )

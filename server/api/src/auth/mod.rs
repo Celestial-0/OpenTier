@@ -11,7 +11,7 @@ pub mod tokens;
 pub mod types;
 
 pub use errors::AuthError;
-pub use handlers::*; 
+pub use handlers::*;
 // pub use models::*;
-pub use role::Role; 
+pub use role::Role;
 pub use types::*;

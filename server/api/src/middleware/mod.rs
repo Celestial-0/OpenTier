@@ -5,7 +5,7 @@
 #![allow(dead_code)]
 use axum::{
     extract::FromRequestParts,
-    http::{request::Parts, StatusCode},
+    http::{StatusCode, request::Parts},
 };
 use uuid::Uuid;
 

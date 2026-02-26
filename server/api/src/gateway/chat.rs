@@ -1,6 +1,6 @@
 use axum::{
-    routing::{get, post},
     Router,
+    routing::{get, post},
 };
 
 use crate::chat::handlers::*;
@@ -26,5 +26,5 @@ pub fn routes() -> Router<AppState> {
         // Messaging
         .route("/conversations/{id}/messages", post(send_message))
         // Streaming
-        .route("/conversations/{id}/stream", get(stream_chat))
+        .route("/conversations/{id}/stream", post(stream_chat))
 }

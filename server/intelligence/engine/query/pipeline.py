@@ -216,6 +216,7 @@ class QueryPipeline:
                 "document_id": str(c.document_id),
                 "relevance_score": c.similarity_score,
                 "content": c.content,
+                "document_title": c.document_title,
             }
             for c in query_context.chunks
         ]
@@ -266,6 +267,7 @@ class QueryPipeline:
                 "document_id": str(c.document_id),
                 "relevance_score": c.similarity_score,
                 "content": c.content,
+                "document_title": c.document_title,
             }
             for c in query_context.chunks
         ]
@@ -401,9 +403,9 @@ class QueryPipeline:
             ✓ CORRECT: NO_UPDATE (this is a question, not a statement)
             ✗ WRONG: Extracting anything
             
-            User: "My name is Sarah and I live in Boston"
+            User: "My name is Sarah and I live in India"
             ✓ CORRECT: - User's name is Sarah
-                        - User lives in Boston
+                        - User lives in India
             ✗ WRONG: Adding anything else not stated
             
             OUTPUT FORMAT:
