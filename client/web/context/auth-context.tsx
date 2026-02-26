@@ -1,7 +1,7 @@
 "use strict";
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useUserStore } from "@/store/user-store";
 import { UserResponse, SignInRequest, SignUpRequest } from "@/lib/api-types";
@@ -33,6 +33,21 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function AuthActionHandler({ openModal }: { openModal: (view: AuthView) => void }) {
+    const searchParams = useSearchParams();
+    const authAction = searchParams.get('auth');
+
+    useEffect(() => {
+        if (authAction === 'signin') {
+            openModal('signin');
+        } else if (authAction === 'signup') {
+            openModal('signup');
+        }
+    }, [authAction, openModal]);
+
+    return null;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const router = useRouter();
 
@@ -47,9 +62,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [authView, setAuthView] = useState<AuthView>('signin');
     const [authError, setAuthError] = useState<string | null>(null);
     const [attemptedEmail, setAttemptedEmail] = useState("");
-
-    const searchParams = useSearchParams();
-    const authAction = searchParams.get('auth');
 
     const openModal = (view: AuthView = 'signin') => {
         setAuthView(view);
@@ -66,14 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }, 300);
     };
 
-    // Auto-open based on query params on mount
-    useEffect(() => {
-        if (authAction === 'signin') {
-            openModal('signin');
-        } else if (authAction === 'signup') {
-            openModal('signup');
-        }
-    }, [authAction]);
+    // Auto-open logic moved to AuthActionHandler
 
     const checkAuth = async () => {
         try {
@@ -325,6 +330,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 setAuthError
             }}
         >
+            <Suspense fallback={null}>
+                <AuthActionHandler openModal={openModal} />
+            </Suspense>
             {children}
         </AuthContext.Provider>
     );

@@ -8,6 +8,14 @@ import { Button } from "@/components/ui/button"
 import { useAuth } from "@/context/auth-context"
 
 export default function VerifyEmailPage() {
+    return (
+        <React.Suspense fallback={<div className="flex min-h-screen items-center justify-center p-4 bg-background"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+            <VerifyEmailContent />
+        </React.Suspense>
+    )
+}
+
+function VerifyEmailContent() {
     const searchParams = useSearchParams()
     const router = useRouter()
     const { verifyEmail, openModal } = useAuth()

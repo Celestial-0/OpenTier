@@ -13,6 +13,14 @@ import { resetPasswordSchema } from "@/components/core/auth/constants"
 import { toast } from "sonner"
 
 export default function ResetPasswordPage() {
+    return (
+        <React.Suspense fallback={<div className="flex min-h-screen items-center justify-center p-4 bg-background"><Loader2 className="h-8 w-8 animate-spin" /></div>}>
+            <ResetPasswordContent />
+        </React.Suspense>
+    )
+}
+
+function ResetPasswordContent() {
     const searchParams = useSearchParams()
     const router = useRouter()
     const { resetPassword, openModal } = useAuth()
