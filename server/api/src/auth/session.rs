@@ -2,8 +2,8 @@ use chrono::{DateTime, Duration, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use sqlx::types::ipnetwork::IpNetwork;
 use super::{AuthError, Role, tokens};
+use sqlx::types::ipnetwork::IpNetwork;
 
 /// Create a new session for a user with their role
 /// Returns (session_token, expires_at)

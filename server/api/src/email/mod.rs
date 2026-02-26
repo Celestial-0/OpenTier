@@ -67,7 +67,10 @@ impl EmailService {
         to_email: &str,
         reset_token: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let reset_url = format!("{}/auth/reset-password?token={}", self.frontend_url, reset_token);
+        let reset_url = format!(
+            "{}/auth/reset-password?token={}",
+            self.frontend_url, reset_token
+        );
 
         let email_body = format!(
             r#"

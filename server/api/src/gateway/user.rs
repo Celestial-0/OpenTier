@@ -5,8 +5,7 @@ use axum::{
 
 use crate::gateway::AppState;
 use crate::user::{
-    change_password, delete_account, list_sessions, me, revoke_session,
-    update_profile,
+    change_password, delete_account, list_sessions, me, revoke_session, update_profile,
 };
 
 pub fn routes() -> Router<AppState> {

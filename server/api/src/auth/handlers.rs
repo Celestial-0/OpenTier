@@ -1,7 +1,7 @@
 use axum::{
     Json,
     extract::{ConnectInfo, Query, State},
-    http::{header, HeaderMap},
+    http::{HeaderMap, header},
 };
 pub use sqlx::types::ipnetwork::IpNetwork;
 use std::net::SocketAddr;

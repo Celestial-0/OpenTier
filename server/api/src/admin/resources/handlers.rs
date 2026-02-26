@@ -1,13 +1,13 @@
 use axum::{
-    extract::{Extension, Path, Query, State},
-    http::{header, HeaderMap},
-    body::Bytes,
     Json,
+    body::Bytes,
+    extract::{Extension, Path, Query, State},
+    http::{HeaderMap, header},
 };
 use uuid::Uuid;
 
-use super::types::*;
 use super::errors::ResourceError;
+use super::types::*;
 use crate::gateway::AppState;
 use crate::grpc::proto::opentier::intelligence::v1 as pb;
 
@@ -57,7 +57,11 @@ pub async fn add_resource(
         "file" => Some(pb::add_resource_request::Content::FileContent(
             req.content.as_bytes().to_vec(),
         )),
-        _ => return Err(ResourceError::UnsupportedResourceType(req.resource_type.clone())),
+        _ => {
+            return Err(ResourceError::UnsupportedResourceType(
+                req.resource_type.clone(),
+            ));
+        }
     };
 
     let resource_type = match req.resource_type.to_lowercase().as_str() {
@@ -72,7 +76,7 @@ pub async fn add_resource(
     };
 
     let mut metadata = req.metadata.clone().unwrap_or_default();
-    
+
     // Ensure title is preserved in metadata
     if let Some(ref t) = req.title {
         metadata.insert("title".to_string(), t.clone());
@@ -81,7 +85,7 @@ pub async fn add_resource(
         let generated: String = req.content.chars().take(50).collect();
         metadata.insert("title".to_string(), generated);
     }
-    
+
     // Preserve original requested type
     metadata.insert("original_type".to_string(), req.resource_type.clone());
 
@@ -138,8 +142,10 @@ pub async fn list_resources(
 ) -> Result<Json<ListResourcesResponse>, ResourceError> {
     let mut client = state.intelligence_client.clone();
 
-    let type_filter = params.resource_type.as_ref().map(|t| {
-        match t.to_lowercase().as_str() {
+    let type_filter = params
+        .resource_type
+        .as_ref()
+        .map(|t| match t.to_lowercase().as_str() {
             "text" => pb::ResourceType::Text as i32,
             "markdown" => pb::ResourceType::Markdown as i32,
             "pdf" => pb::ResourceType::Pdf as i32,
@@ -147,19 +153,19 @@ pub async fn list_resources(
             "website" => pb::ResourceType::Website as i32,
             "code" => pb::ResourceType::Code as i32,
             _ => pb::ResourceType::Unspecified as i32,
-        }
-    });
+        });
 
-    let status_filter = params.status.as_ref().map(|s| {
-        match s.to_lowercase().as_str() {
+    let status_filter = params
+        .status
+        .as_ref()
+        .map(|s| match s.to_lowercase().as_str() {
             "queued" => pb::ResourceStatus::Queued as i32,
             "processing" => pb::ResourceStatus::Processing as i32,
             "completed" => pb::ResourceStatus::Completed as i32,
             "failed" => pb::ResourceStatus::Failed as i32,
             "partial" => pb::ResourceStatus::Partial as i32,
             _ => pb::ResourceStatus::Unspecified as i32,
-        }
-    });
+        });
 
     // Validate limit
     let limit = params.limit.unwrap_or(20);
@@ -213,7 +219,7 @@ pub async fn list_resources(
                 .to_string();
 
             let title = item.metadata.get("title").cloned();
-            
+
             // Prefer original type from metadata if available, otherwise use mapped type
             let final_type = if let Some(orig) = item.metadata.get("original_type") {
                 orig.clone()
