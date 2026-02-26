@@ -1,7 +1,7 @@
 use crate::gateway::AppState;
 use axum::{
-    routing::{get, patch, post},
     Router,
+    routing::{get, patch, post},
 };
 
 use crate::admin::{management, resources};

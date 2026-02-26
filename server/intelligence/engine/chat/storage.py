@@ -40,6 +40,13 @@ class ConversationStorage:
         )
         return result.scalar_one_or_none()
 
+    async def get_message(self, message_id: uuid.UUID) -> ChatMessage | None:
+        """Get message by ID."""
+        result = await self.session.execute(
+            select(ChatMessage).where(ChatMessage.id == message_id)
+        )
+        return result.scalar_one_or_none()
+
     async def get_or_create_conversation(
         self, user_id: str, conversation_id: str | None = None
     ) -> Conversation:
@@ -68,14 +75,18 @@ class ConversationStorage:
         content: str,
         sources: list[dict[str, Any]] | None = None,
         metadata: dict[str, Any] | None = None,
+        parent_id: uuid.UUID | None = None,
+        message_id: uuid.UUID | None = None,
     ) -> ChatMessage:
         """Add a message to a conversation."""
         msg = ChatMessage(
+            id=message_id or uuid.uuid4(),
             conversation_id=conversation_id,
             role=role,
             content=content,
             sources=sources or [],
             metadata_=metadata or {},
+            parent_id=parent_id,
         )
         self.session.add(msg)
         await self.session.flush()
@@ -87,7 +98,8 @@ class ConversationStorage:
         limit: int = 100,
         offset: int = 0,
     ) -> list[ChatMessage]:
-        """Get messages for a conversation."""
+        """Get ALL messages for a conversation, ordered chronologically.
+        Useful for building the message tree on the client."""
         result = await self.session.execute(
             select(ChatMessage)
             .where(ChatMessage.conversation_id == conversation_id)
@@ -96,6 +108,55 @@ class ConversationStorage:
             .offset(offset)
         )
         return list(result.scalars().all())
+
+    async def get_message_lineage(
+        self, conversation_id: uuid.UUID, leaf_message_id: str | None = None
+    ) -> list[ChatMessage]:
+        """
+        Get the linear conversation history by tracing parent_id pointers backwards.
+        If leaf_message_id is not provided, defaults to the most recent message.
+        """
+        all_messages = await self.get_messages(conversation_id, limit=500)
+        if not all_messages:
+            return []
+
+        msg_dict = {str(m.id): m for m in all_messages}
+
+        # If no leaf provided, find the most chronological message
+        if not leaf_message_id or leaf_message_id not in msg_dict:
+            leaf_msg = all_messages[-1]
+            leaf_message_id = str(leaf_msg.id)
+
+        # Trace backwards
+        lineage = []
+        current_id = leaf_message_id
+
+        # Guard against infinite loops in corrupted metadata
+        visited = set()
+
+        while current_id and current_id in msg_dict and current_id not in visited:
+            visited.add(current_id)
+            msg = msg_dict[current_id]
+            lineage.append(msg)
+
+            # Get parent_id from metadata
+            metadata = msg.metadata_
+            parent_id = (
+                metadata.get("parent_id") if isinstance(metadata, dict) else None
+            )
+
+            # If no explicit parent, assume the message directly before it in time is its parent
+            # (Fallback for old messages before branching was implemented)
+            if not parent_id:
+                idx = all_messages.index(msg)
+                if idx > 0:
+                    parent_id = str(all_messages[idx - 1].id)
+
+            current_id = parent_id
+
+        # Reverse to return chronological order (oldest to newest)
+        lineage.reverse()
+        return lineage
 
     async def delete_conversation(self, conversation_id: uuid.UUID) -> bool:
         """Delete conversation and all messages."""

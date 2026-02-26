@@ -1,7 +1,9 @@
 """Storage layer for document ingestion."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
+
+from core.config import IST
 from typing import Any
 
 from sqlalchemy import delete, select, update
@@ -250,5 +252,5 @@ class JobStorage:
             await self.update_job_status(
                 job_id,
                 status=status,
-                completed_at=datetime.now(timezone.utc),
+                completed_at=datetime.now(IST),
             )

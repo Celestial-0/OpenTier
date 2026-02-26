@@ -1,7 +1,11 @@
 """Configuration management for the intelligence engine."""
 
+from datetime import timezone, timedelta
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Indian Standard Time (UTC+5:30)
+IST = timezone(timedelta(hours=5, minutes=30), name="IST")
 
 
 class DatabaseConfig(BaseSettings):

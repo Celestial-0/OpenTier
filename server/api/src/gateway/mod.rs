@@ -84,7 +84,7 @@ pub fn router(db: PgPool, config: Config, intelligence_client: IntelligenceClien
 
 async fn home() -> Html<&'static str> {
     Html(
-    r##"
+        r##"
       <!DOCTYPE html>
       <html lang="en">
         <head>

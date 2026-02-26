@@ -63,6 +63,10 @@ pub struct GenerateTitleResponse {
 pub struct SendMessageRequest {
     pub message: String,
     pub config: Option<ChatConfig>,
+    pub parent_id: Option<String>,
+    pub user_message_id: Option<String>,
+    pub assistant_message_id: Option<String>,
+    pub regenerate_user_msg_id: Option<String>,
 }
 
 /// Chat configuration
@@ -79,9 +83,9 @@ fn default_use_rag() -> bool {
     true
 }
 
-/// Stream chat query parameters (SSE)
+/// Stream chat request body (SSE via POST)
 #[derive(Debug, Deserialize)]
-pub struct StreamChatQuery {
+pub struct StreamChatRequest {
     pub message: String,
     #[serde(default = "default_temperature")]
     pub temperature: f32,
@@ -90,6 +94,10 @@ pub struct StreamChatQuery {
     #[serde(default = "default_use_rag")]
     pub use_rag: bool,
     pub model: Option<String>,
+    pub parent_id: Option<String>,
+    pub user_message_id: Option<String>,
+    pub assistant_message_id: Option<String>,
+    pub regenerate_user_msg_id: Option<String>,
 }
 
 fn default_temperature() -> f32 {
@@ -153,6 +161,8 @@ pub struct ChatMessage {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub sources: Vec<SourceChunk>,
     pub created_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_id: Option<String>,
 }
 
 /// Message role
