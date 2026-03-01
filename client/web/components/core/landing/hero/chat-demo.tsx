@@ -53,11 +53,11 @@ export const HeroChatDemo = () => {
                 initial={{ opacity: 0, y: 24 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, ease: "easeOut" }}
-                className="relative rounded-2xl md:rounded-[28px] border border-border/40 dark:border-white/10 bg-gradient-to-b from-background/80 to-background/60 backdrop-blur-xl shadow-[0_20px_60px_-20px_rgba(0,0,0,0.3)] overflow-hidden"
+                className="relative rounded-2xl md:rounded-[28px] border border-border/40 dark:border-white/10 bg-linear-to-b from-background/80 to-background/60 backdrop-blur-xl shadow-[0_20px_60px_-20px_rgba(0,0,0,0.3)] overflow-hidden"
             >
                 {/* Energy rails */}
-                <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/70 to-transparent" />
-                <div className="absolute inset-y-0 left-0 w-px bg-gradient-to-b from-transparent via-primary/40 to-transparent" />
+                <div className="absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-primary/70 to-transparent" />
+                <div className="absolute inset-y-0 left-0 w-px bg-linear-to-b from-transparent via-primary/40 to-transparent" />
 
                 {/* Header */}
                 <div className="relative flex items-center justify-between px-3 sm:px-6 md:px-8 py-3 sm:py-4 md:py-5 border-b border-border/40 dark:border-white/10 bg-background/40">
@@ -80,10 +80,10 @@ export const HeroChatDemo = () => {
                 {/* Messages */}
                 <div
                     ref={scrollRef}
-                    className="relative h-[300px] sm:h-[380px] md:h-[460px] overflow-y-auto px-3 sm:px-6 md:px-8 py-4 sm:py-6 md:py-10 space-y-4 sm:space-y-6 md:space-y-8"
+                    className="relative h-75 sm:h-95 md:h-115 overflow-y-auto px-3 sm:px-6 md:px-8 py-4 sm:py-6 md:py-10 space-y-4 sm:space-y-6 md:space-y-8"
                 >
                     {/* Scanline overlay */}
-                    <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[length:100%_3px] opacity-20" />
+                    <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px)] bg-size-[100%_3px] opacity-20" />
 
                     <AnimatePresence>
                         {messages.map((msg) => (
@@ -95,7 +95,7 @@ export const HeroChatDemo = () => {
                                 className="relative z-10 flex justify-end gap-2 sm:gap-3 md:gap-4"
                             >
                                 <div className="relative max-w-[85%] sm:max-w-[80%] md:max-w-[75%]">
-                                    <div className="absolute -inset-px rounded-2xl bg-gradient-to-br from-primary/40 to-transparent opacity-70" />
+                                    <div className="absolute -inset-px rounded-2xl bg-linear-to-br from-primary/40 to-transparent opacity-70" />
                                     <div className="relative rounded-xl md:rounded-2xl bg-primary/90 px-3 sm:px-4 md:px-6 py-2 sm:py-2.5 md:py-3.5 text-xs sm:text-sm font-medium text-primary-foreground shadow-lg backdrop-blur">
                                         {msg.content}
                                     </div>
@@ -123,12 +123,12 @@ export const HeroChatDemo = () => {
                                 </div>
 
                                 <div className="relative max-w-[85%] sm:max-w-[80%] md:max-w-[75%]">
-                                    <div className="absolute -inset-px rounded-2xl bg-gradient-to-br from-primary/30 to-transparent opacity-60" />
+                                    <div className="absolute -inset-px rounded-2xl bg-linear-to-br from-primary/30 to-transparent opacity-60" />
                                     <div className="relative rounded-xl md:rounded-2xl bg-muted/40 px-3 sm:px-4 md:px-6 py-2.5 sm:py-3 md:py-4 text-xs sm:text-sm leading-relaxed backdrop-blur shadow-md text-left">
                                         {streamedContent}
                                         {isTyping && (
                                             <motion.span
-                                                className="ml-1 inline-block h-4 w-[2px] bg-primary rounded"
+                                                className="ml-1 inline-block h-4 w-0.5 bg-primary rounded"
                                                 animate={{ opacity: [0, 1, 0] }}
                                                 transition={{ duration: 0.9, repeat: Infinity }}
                                             />

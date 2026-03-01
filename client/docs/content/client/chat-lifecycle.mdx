@@ -1,0 +1,144 @@
+# Chat Lifecycle
+
+## Conversation Model
+
+Every conversation is a tree of messages connected by `parent_id`. The client tracks the "active leaf" — the currently selected branch tip — per conversation in `activeMessageId`.
+
+```typescript
+interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  sources?: SourceChunk[]
+  created_at: number
+  parent_id?: string       // enables tree branching
+}
+
+interface SendMessageRequest {
+  message: string
+  config?: { temperature?, max_tokens?, use_rag?, model? }
+  parent_id?: string              // parent in message tree
+  user_message_id?: string        // pre-assigned ID for optimistic update
+  assistant_message_id?: string   // pre-assigned ID for the response
+  regenerate_user_msg_id?: string // for regeneration flow
+}
+```
+
+## Chat Store State Machine
+
+```mermaid
+%%{init: {'flowchart': {'nodeSpacing': 80, 'rankSpacing': 120}}}%%
+flowchart LR
+    Idle(["Idle"])
+
+    Idle -->|"fetchConversations()"| LC["Loading\nConversations"]
+    LC -->|"loaded"| Idle
+
+    Idle -->|"selectConversation(id)"| LM["Loading\nMessages"]
+    LM -->|"loaded"| Idle
+
+    Idle -->|"createNewConversation()"| CC["Creating\nConversation"]
+    CC -->|"created"| Idle
+
+    Idle -->|"editMessage(id, content)"| EM["Editing\nMessage"]
+    EM -->|"branch created"| Idle
+
+    Idle -->|"sendMessage(content)"| SM["Sending\nMessage"]
+    SM -->|"stream=true"| ST["Streaming"]
+    SM -->|"stream=false"| WR["Waiting\nResponse"]
+    ST -->|"is_final=true"| Idle
+    ST -->|"abort()"| Idle
+    WR -->|"response received"| Idle
+```
+
+## Free Tier Limit
+
+Unauthenticated users are limited to **5 free messages** tracked client-side:
+
+```typescript
+const FREE_MESSAGE_LIMIT = 5
+
+// In sendMessage():
+if (!isAuthenticated && freeMessageCount >= FREE_MESSAGE_LIMIT) {
+  openModal('signin')  // triggers auth modal
+  return
+}
+```
+
+`freeMessageCount` is persisted in `localStorage` via Zustand's `persist` middleware. This limit is enforced client-side only — there is no server-side enforcement for unauthenticated chat.
+
+## Streaming vs Non-Streaming
+
+`sendMessage(content, useStream?)` selects the endpoint based on the `useStream` flag:
+
+| Flow | Endpoint | Response format |
+|------|----------|----------------|
+| Streaming | `POST /chat/conversations/{id}/stream` | SSE (`text/event-stream`) |
+| Non-streaming | `POST /chat/conversations/{id}/messages` | JSON `MessageResponse` |
+
+The streaming flow uses an `AbortController` stored in the Zustand store. `stopGeneration()` calls `abortController.abort()`, which closes the SSE connection.
+
+## SSE Chat Sequence
+
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant NextProxy as "Next.js /api"
+    participant Rust as "Rust: stream_chat()"
+    participant Tonic as "tonic gRPC streaming"
+    participant Python as "Python: ChatService"
+    participant LLM
+
+    Browser->>NextProxy: POST /api/chat/conversations/id/stream
+    NextProxy->>Rust: POST /chat/conversations/id/stream
+    Rust->>Rust: auth_middleware (session DB lookup)
+    Rust->>Tonic: StreamChat(ChatRequest) → server-streaming
+    Tonic->>Python: RPC call
+    Python->>Python: get/create conversation, save user message
+    Python->>Python: retrieve RAG context (hybrid search)
+    Python->>LLM: stream tokens
+    loop Token streaming
+        LLM-->>Python: token chunk
+        Python-->>Tonic: ChatStreamChunk token
+        Tonic-->>Rust: ChatStreamChunk
+        Rust-->>NextProxy: SSE data chunk_type token
+        NextProxy-->>Browser: SSE event
+        Browser->>Browser: append token to message
+    end
+    Python-->>Tonic: ChatStreamChunk sources is_final true
+    Tonic-->>Rust: final chunk
+    Rust-->>Browser: SSE data sources + metrics + is_final true
+    Browser->>Browser: render sources panel
+```
+
+## Message Branching (Edit & Regenerate)
+
+**`editMessage(messageId, newContent)`**: Creates a new conversation branch:
+1. Calls `createNewConversation()` — creates a sibling fork
+2. Copies messages up to `messageId` into the new conversation
+3. Sends `newContent` as the new user message with `parent_id` set appropriately
+
+**`regenerateLastResponse()`**: Re-sends the last user message:
+1. Identifies the last `user` role message
+2. Calls `sendMessage()` with `regenerate_user_msg_id` set to that message's ID
+
+**`switchBranch(messageId)`**: Sets `activeMessageId` for the current conversation, causing the UI to render the message tree from that leaf node upward.
+
+## Title Generation
+
+After a successful message exchange, if `useAiTitleGeneration` is `true`, the store calls:
+
+```
+POST /chat/conversations/{id}/generate-title
+Body: { user_message: string, assistant_message: string }
+```
+
+This triggers the Intelligence service to generate a concise title via the LLM. If `useAiTitleGeneration` is `false`, a simple title heuristic is used client-side (first N characters of the first user message).
+
+## Conversation List Pagination
+
+`fetchConversations(reset?)` supports cursor-based pagination:
+- `reset = true` fetches page 1 (`cursor = null`)
+- Subsequent calls pass `nextCursor` from the previous response
+- Conversations are sorted by `updated_at DESC`
+- `totalConversationsCount` is tracked for infinite scroll triggering

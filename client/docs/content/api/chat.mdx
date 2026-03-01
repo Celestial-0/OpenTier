@@ -1,0 +1,117 @@
+# Chat Handlers
+
+## Handler Overview
+
+Chat handlers in `chat/handlers.rs` split into two categories:
+1. **Pure DB operations** — conversation CRUD handled entirely in Rust against PostgreSQL
+2. **gRPC-proxied operations** — message sending and streaming delegated to the Intelligence service
+
+## Conversation CRUD (Pure Rust + DB)
+
+### `create_conversation`
+```
+POST /chat/conversations
+Body: { title?: string, metadata?: object }
+```
+- Generates a new `Uuid::new_v4()` for the conversation ID (note: the `conversations` table has `id UUID PRIMARY KEY` with **no** `DEFAULT gen_random_uuid()` — the caller must provide the UUID)
+- Inserts row into `conversations` with `user_id` from `auth_middleware` extension
+- Returns: `{ id, user_id, title, metadata, created_at, updated_at }`
+
+### `list_conversations`
+```
+GET /chat/conversations?cursor=<uuid>&limit=<n>
+```
+- Cursor-based pagination ordered by `updated_at DESC`
+- Filters by `user_id` from session
+- Returns: `{ conversations[], next_cursor?, total_count }`
+
+### `get_conversation`
+```
+GET /chat/conversations/{id}
+```
+- Fetches from `conversations` table (verifies `user_id` ownership)
+- Fetches messages from `chat_messages` table (written by Python Intelligence)
+- Ownership check: `WHERE id = $1 AND user_id = $2`
+- Returns full conversation with messages and source chunks
+
+### `update_conversation` / `delete_conversation`
+- Both verify `user_id` ownership before mutation
+- DELETE cascades to `chat_messages` via foreign key
+
+## Message Operations (gRPC-proxied)
+
+### `send_message` (Non-streaming)
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Rust as "Rust: send_message()"
+    participant Python as "Python Intelligence"
+    participant DB as PostgreSQL
+
+    Client->>Rust: POST /chat/conversations/id/messages
+    Rust->>Rust: auth_middleware (session lookup)
+    Rust->>Rust: verify conversation ownership (DB query)
+    Rust->>Python: gRPC ChatRequest with user_id + conversation_id + message + config
+    Note over Rust,Python: Timeout: 1200s (20 min)
+    Python->>DB: save user message, retrieve RAG context, generate response, save assistant message
+    Python-->>Rust: ChatResponse with message_id + response + sources + metrics
+    Rust-->>Client: 200 MessageResponse with message_id + conversation_id + role + content + sources
+```
+
+### `stream_chat` (SSE Streaming)
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Rust as "Rust: stream_chat()"
+    participant Python as "Python Intelligence"
+
+    Client->>Rust: POST /chat/conversations/id/stream
+    Rust->>Rust: auth_middleware + ownership check
+    Rust->>Python: gRPC StreamChat ChatRequest server-streaming RPC
+    Note over Rust,Python: Timeout: 300s (5 min)
+    Rust-->>Client: HTTP 200 Content-Type: text/event-stream
+    loop Streaming
+        Python-->>Rust: ChatStreamChunk token chunk
+        Rust-->>Client: SSE data token chunk
+    end
+    Python-->>Rust: ChatStreamChunk sources is_final true
+    Rust-->>Client: SSE data sources + is_final true
+    Rust-->>Client: SSE close
+```
+
+**SSE Bridge implementation** uses `async-stream` + Axum's `Sse<impl Stream<Item = Event>>`:
+```rust
+let stream = async_stream::stream! {
+    while let Some(chunk) = grpc_stream.message().await? {
+        let event = Event::default().data(serde_json::to_string(&chunk)?);
+        yield Ok::<Event, Error>(event);
+    }
+}
+Sse::new(stream).keep_alive(KeepAlive::default())
+```
+
+### `generate_conversation_title`
+```
+POST /chat/conversations/{id}/generate-title
+Body: { user_message: string, assistant_message: string }
+```
+- Calls gRPC `Chat.GenerateTitle(GenerateTitleRequest)`
+- Intelligence service uses the LLM to generate a concise title
+- Rust updates `conversations.title` in DB
+- Returns: `{ title: string }`
+
+## Error Handling
+
+Chat handler errors are typed in `chat/error.rs`. gRPC status codes are mapped to HTTP status codes:
+
+| gRPC Status | HTTP Status | Scenario |
+|-------------|------------|---------|
+| `NOT_FOUND` | 404 | Conversation not found in Intelligence |
+| `PERMISSION_DENIED` | 403 | User doesn't own the conversation |
+| `INVALID_ARGUMENT` | 400 | Malformed request message |
+| `RESOURCE_EXHAUSTED` | 429 | Rate limited by Intelligence |
+| `UNAVAILABLE` | 503 | Intelligence service down |
+| `DEADLINE_EXCEEDED` | 504 | LLM timeout (> 1200s for chat) |
+| `INTERNAL` | 500 | Unhandled Python exception |

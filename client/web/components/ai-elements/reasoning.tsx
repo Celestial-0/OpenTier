@@ -2,7 +2,7 @@
 
 import type { ComponentProps, ReactNode } from "react";
 
-import { useControllableState } from "@radix-ui/react-use-controllable-state";
+import { useControllableState } from "@/hooks/use-controllable-state";
 import {
   Collapsible,
   CollapsibleContent,

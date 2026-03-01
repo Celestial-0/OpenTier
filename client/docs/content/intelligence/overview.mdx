@@ -1,0 +1,142 @@
+# Intelligence Service — Overview & Startup
+
+## Responsibilities
+
+The Python Intelligence service is the **cognitive layer** of OpenTier. It handles all operations that require ML inference or complex data retrieval:
+
+- Chat message processing (RAG-augmented generation)
+- Token streaming (gRPC server-streaming → Rust SSE bridge)
+- Document ingestion (scraping, chunking, embedding, storage)
+- Hybrid semantic + keyword search
+- User memory persistence
+- LLM client abstraction (OpenAI-compatible + Google GenAI)
+- Health and readiness probing
+
+It exposes **no HTTP endpoints** — its only interface is the gRPC server on port 50051.
+
+## Technology Stack
+
+| Category | Package | Version |
+|----------|---------|---------|
+| gRPC | `grpcio` + `grpcio-tools` | ≥ 1.76.0 |
+| Protobuf | `protobuf` | ≥ 6.33.3 |
+| DB async driver | `asyncpg` | ≥ 0.30.0 |
+| DB sync driver | `psycopg[binary]` | ≥ 3.3.2 |
+| ORM | `sqlalchemy` | ≥ 2.0.45 |
+| Vector DB | `pgvector` | ≥ 0.4.2 |
+| Embeddings | `sentence-transformers` | ≥ 5.2.2 |
+| Deep learning | `torch` | ≥ 2.10.0 |
+| Numerical | `numpy` | ≥ 2.4.1 |
+| LLM (primary) | `google-genai` | ≥ 1.63.0 |
+| HTTP client | `httpx` | ≥ 0.28.1 |
+| Web scraping | `playwright` + `beautifulsoup4` + `lxml` | ≥ 1.48.0 |
+| GitHub client | `pygithub` | ≥ 2.1.0 |
+| Validation | `pydantic` + `pydantic-settings` | ≥ 2.12.5 |
+| Retry | `tenacity` | ≥ 8.2.3 |
+| Markdown | `markdown` | ≥ 3.5.0 |
+| Python | `≥ 3.14` | — |
+
+## Startup Sequence
+
+```mermaid
+sequenceDiagram
+    participant SystemD as Process Manager
+    participant Main as main.py
+    participant Lifecycle as core/lifecycle.py
+    participant DB as PostgreSQL
+    participant EmbModel as sentence-transformers
+    participant gRPC as grpcio-aio Server
+
+    SystemD->>Main: start process
+    Main->>Main: load .env (python-dotenv)
+    Main->>Lifecycle: startup()
+    Lifecycle->>Lifecycle: configure logging
+    Lifecycle->>Lifecycle: validate config (pydantic-settings)
+    Lifecycle->>DB: init_db() — create SQLAlchemy engine + asyncpg pool
+    DB-->>Lifecycle: pool ready
+    Lifecycle-->>Main: startup OK
+    Main->>EmbModel: EmbeddingModel.__init__() — load all-MiniLM-L6-v2
+    Note over EmbModel: auto-detect CUDA/CPU, FP16 on GPU
+    Main->>Main: IntelligenceEngine() — compose LLMClient + QueryPipeline + ChatService
+    Main->>gRPC: grpc.aio.server(options=[max_msg=100MB, keepalive=60s])
+    Main->>gRPC: add_HealthService()
+    Main->>gRPC: add_ChatService(engine)
+    Main->>gRPC: add_ResourceService(engine)
+    Main->>gRPC: server.add_insecure_port on GRPC_PORT
+    Main->>gRPC: await server.start()
+    gRPC-->>Main: listening on port 50051
+    Main->>Main: register SIGTERM/SIGINT → graceful shutdown (30s grace)
+    Main->>Main: await server.wait_for_termination()
+```
+
+## Configuration
+
+Loaded from environment via `pydantic-settings` with typed validation:
+
+### Core Config
+| Variable | Default | Type |
+|----------|---------|------|
+| `ENVIRONMENT` | `development` | str |
+| `LOG_LEVEL` | `INFO` | str |
+| `GRPC_PORT` | `50051` | int |
+
+### Database (`DB_` prefix)
+| Variable | Default |
+|----------|---------|
+| `DB_URL` | `postgresql://postgres:postgres@localhost:5432/opentier` |
+| `DB_POOL_SIZE` | `10` |
+| `DB_MAX_OVERFLOW` | `20` |
+| `DB_POOL_TIMEOUT` | `30` |
+| `DB_POOL_RECYCLE` | `3600` |
+
+### Embedding (`EMBEDDING_` prefix)
+| Variable | Default |
+|----------|---------|
+| `EMBEDDING_MODEL_NAME` | `sentence-transformers/all-MiniLM-L6-v2` |
+| `EMBEDDING_DIMENSIONS` | `384` |
+| `EMBEDDING_BATCH_SIZE` | `32` |
+| `EMBEDDING_DEVICE` | `None` (auto: CUDA if available, else CPU) |
+| `EMBEDDING_NORMALIZE` | `True` |
+| `EMBEDDING_CACHE_SIZE` | `10000` |
+
+### LLM (`LLM_` prefix)
+| Variable | Default |
+|----------|---------|
+| `LLM_PROVIDER` | `openai` |
+| `LLM_API_KEY` | `""` |
+| `LLM_MODEL` | `gpt-4o` |
+| `LLM_BASE_URL` | `https://api.openai.com/v1` |
+| `LLM_TEMPERATURE` | `0.7` |
+| `LLM_MAX_TOKENS` | `1000` |
+
+### Ingestion (`INGESTION_` prefix)
+| Variable | Default |
+|----------|---------|
+| `INGESTION_CHUNK_SIZE` | `512` |
+| `INGESTION_CHUNK_OVERLAP` | `50` |
+| `INGESTION_MAX_BATCH_SIZE` | `100` |
+| `INGESTION_AUTO_CLEAN` | `True` |
+| `INGESTION_CLEANING_STRATEGY` | `standard` |
+| `INGESTION_GENERATE_EMBEDDINGS` | `True` |
+| `INGESTION_MAX_CONTENT_LENGTH` | `1_000_000` |
+
+## Graceful Shutdown
+
+On `SIGTERM` or `SIGINT`:
+1. `server.stop(grace=30)` — stops accepting new connections, waits up to 30 seconds for in-flight RPCs to complete
+2. `Lifecycle.shutdown()` — calls `close_db()` to drain the connection pool
+3. Process exits
+
+## Readiness Probe
+
+`Health.Ready` RPC returns:
+```python
+ReadyCheckResponse(
+    ready=db_healthy and embedding_model_loaded,
+    dependencies=["database", "embedding_model"],
+    dependency_status={
+        "database": db_health_check(),       # SELECT 1
+        "embedding_model": model_is_loaded,  # in-memory flag
+    }
+)
+```

@@ -133,7 +133,7 @@ export const HeroContent = () => {
                 className="max-w-3xl text-lg sm:text-xl text-muted-foreground mb-10 leading-relaxed"
             >
                 OpenTier turns organizational knowledge into real-time, actionable intelligence.
-                It's secure by design, fast by default, and built to scale with your business.
+                It&apos;s secure by design, fast by default, and built to scale with your business.
             </TextEffect>
 
             {/* Responsive CTA - Mobile: Button, Desktop: Keyboard Hint */}

@@ -1,0 +1,113 @@
+# State Management
+
+All client state is managed via **Zustand** stores. Four stores serve distinct concerns.
+
+## Store Overview
+
+| Store | File | Persist | devtools | Concern |
+|-------|------|---------|----------|---------|
+| `useChatStore` | `store/chat-store.ts` | Yes (`chat-storage`) | Yes | Conversations, messages, streaming |
+| `useUserStore` | `store/user-store.ts` | Yes (`user-storage`) | Yes | Current user, sessions, preferences |
+| `useAdminStore` | `store/admin-store.ts` | No | Yes | Admin stats, user list, resources |
+| `useNotificationStore` | `store/notification-store.ts` | Yes (`notification-storage`) | No | In-app notifications |
+
+## `useChatStore`
+
+```typescript
+interface ChatStoreState {
+  conversations: ConversationSummary[]
+  activeConversationId: string | null
+  messages: Record<string, ChatMessage[]>      // keyed by conversation ID
+  activeMessageId: Record<string, string | null> // leaf node per conversation
+  nextCursor: string | null                    // pagination cursor
+  totalConversationsCount: number
+  freeMessageCount: number                     // for unauthenticated users
+  useAiTitleGeneration: boolean
+  isLoadingConversations: boolean
+  isLoadingMessages: boolean
+  isSendingMessage: boolean
+  isTyping: boolean
+  error: string | null
+  abortController: AbortController | null
+}
+```
+
+**Persistence**: `messages`, `conversations`, `activeConversationId`, `freeMessageCount`, and `useAiTitleGeneration` are persisted. In-flight state (`isLoading*`, `abortController`) is excluded.
+
+**Race condition guard**: `selectConversation()` checks `isSendingMessage` before loading messages for a different conversation — prevents switching conversations mid-stream.
+
+## `useUserStore`
+
+```typescript
+interface UserStoreState {
+  user: UserResponse | null
+  sessions: DashboardSession[]
+  preferences: UserPreferences
+}
+
+interface UserPreferences {
+  theme: 'system' | 'light' | 'dark'
+  fontSize: 'small' | 'medium' | 'large'
+  notificationsEnabled: boolean
+  emailNotifications: boolean
+  pushNotifications: boolean
+}
+```
+
+**401 handling**: `fetchUser()` catches 401 responses and sets `user = null`, effectively signing the user out without throwing. This makes the store safe to call on app boot.
+
+**Session management**: `fetchSessions()` loads all active sessions; `revokeSession(sessionId)` calls `DELETE /user/sessions/{sessionId}` and removes the entry from local state immediately (optimistic update).
+
+## `useAdminStore`
+
+No persistence — admin data is always fetched fresh on dashboard load.
+
+```typescript
+interface AdminStats {
+  total_users: number
+  active_users_today: number
+  total_conversations: number
+  total_messages: number
+  total_resources: number
+  // ...
+}
+```
+
+**Pagination**:
+- Users: offset-based (`{ total, limit, offset }`)
+- Resources: cursor-based (`{ total, cursor }`)
+
+All actions validate responses with Zod schemas (`AdminStatsSchema`, `UserListResponseSchema`, etc.) before writing to state. Zod parse failures surface as `error` state rather than crashing.
+
+## `useNotificationStore`
+
+```typescript
+interface Notification {
+  id: string
+  type: 'system' | 'conversation' | 'security' | 'admin'
+  title: string
+  message: string
+  timestamp: number
+  read: boolean
+}
+```
+
+Notifications are purely client-local — there is no server-side notification endpoint. They are generated programmatically by other store actions (e.g., admin actions produce `admin` type notifications; errors produce `system` type).
+
+## Context → Store Delegation
+
+The `AdminProvider` context is a thin wrapper over `useAdminStore`:
+
+```typescript
+// context/admin-context.tsx
+const value: AdminContextValue = {
+  isAdmin: user?.role === 'admin' || user?.role === 'superadmin',
+  isLoading: adminStore.isLoading,
+  error: adminStore.error,
+  fetchStats: adminStore.fetchStats,
+  fetchUsers: adminStore.fetchUsers,
+  // ... full delegation
+}
+```
+
+This pattern keeps Zustand stores as the single source of truth while allowing the context to inject role-based guards (`isAdmin`) computed from `AuthContext`'s `user` object.

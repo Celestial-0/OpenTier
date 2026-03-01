@@ -1,0 +1,163 @@
+# Engine Architecture
+
+## `IntelligenceEngine` — Composition Root
+
+```python
+class IntelligenceEngine:
+    def __init__(self):
+        self.llm_client = LLMClient()
+        self.query_pipeline = QueryPipeline(llm_client=self.llm_client)
+        self.chat_service = ChatService(self.query_pipeline)
+```
+
+```mermaid
+flowchart TB
+    Engine["IntelligenceEngine\nengine/__init__.py"]
+
+    subgraph CHAT["Chat Layer"];
+        direction TB;
+        ChatSvc["ChatService\nengine/chat/service.py"]
+        ConvStorage["ConversationStorage\nengine/chat/storage.py"]
+        MemStorage["MemoryStorage\nengine/chat/storage.py"]
+    end
+
+    subgraph QUERY["Query Layer"];
+        direction LR;
+        QueryPipe["QueryPipeline\nengine/query/pipeline.py"]
+        LLMClient["LLMClient\nengine/query/llm/"]
+        HybridSearch["HybridSearchEngine\nengine/query/retrieval/"]
+        EmbModel["EmbeddingModel\nengine/embedding/models.py"]
+        QueryPipe --> LLMClient
+        QueryPipe --> HybridSearch
+        HybridSearch --> EmbModel
+    end
+
+    subgraph INGEST["Ingestion Layer"];
+        direction LR;
+        DocProcessor["DocumentProcessor\nengine/ingestion/processor.py"]
+        DocStorage["DocumentStorage\nengine/ingestion/storage.py"]
+        EmbStorage["EmbeddingStorage\nengine/embedding/storage.py"]
+        JobStorage["JobStorage\nengine/ingestion/storage.py"]
+        DocProcessor --> DocStorage
+        DocProcessor --> EmbStorage
+        DocProcessor --> JobStorage
+    end
+
+    DB[("PostgreSQL\npgvector")]
+
+    Engine --> CHAT
+    Engine --> INGEST
+    ChatSvc --> QueryPipe
+    ChatSvc --> ConvStorage
+    ChatSvc --> MemStorage
+    ConvStorage --> DB
+    MemStorage --> DB
+    HybridSearch --> DB
+    DocStorage --> DB
+    EmbStorage --> DB
+    JobStorage --> DB
+```
+
+## `ChatService` (`engine/chat/service.py`)
+
+Orchestrates a full chat turn:
+
+```python
+async def send_message(
+    user_id: str,
+    conversation_id: str,
+    message: str,
+    metadata: dict = {},
+    config: ChatConfig = None
+) -> ChatResponse:
+    conversation = await ConversationStorage.get_or_create(conversation_id, user_id)
+    await ConversationStorage.save_message(role="user", content=message, parent_id=config.parent_id)
+    memory = await MemoryStorage.get_user_memory(user_id)
+    response: QueryResponse = await self.query_pipeline.run(
+        query=message,
+        user_id=user_id,
+        conversation_id=conversation_id,
+        memory=memory,
+        config=config
+    )
+    await ConversationStorage.save_message(role="assistant", content=response.response, sources=response.sources)
+    return ChatResponse(response=response.response, sources=response.sources, metrics=response.metrics)
+```
+
+`stream_chat` is the same flow but returns an `AsyncGenerator[ChatStreamChunk]` — the LLM call is replaced with a streaming call, and each token is immediately yielded.
+
+## Stream Error Code Mapping
+
+The `ChatService` maps Python exceptions to gRPC stream error chunk types:
+
+| Exception | `ChatStreamChunk.error_code` |
+|-----------|------------------------------|
+| `TimeoutError` | `TIMEOUT` |
+| `RateLimitError` | `RATE_LIMITED` |
+| `ContextTooLongError` | `CONTEXT_TOO_LONG` |
+| `ModelUnavailableError` | `MODEL_UNAVAILABLE` |
+| `ValidationError` | `INVALID_REQUEST` |
+| All others | `INTERNAL_ERROR` |
+
+Error chunks are sent as a terminal `ChatStreamChunk` with `is_final=True` before the stream closes.
+
+## `QueryPipeline` (`engine/query/pipeline.py`)
+
+```python
+class QueryPipeline:
+    def __init__(
+        self,
+        llm_client: LLMClient,
+        top_k: int = 5,
+        max_context_length: int = 2000,
+        vector_weight: float = 0.7,
+        keyword_weight: float = 0.3,
+    )
+
+    async def run(query, user_id, conversation_id, memory, config) -> QueryResponse:
+        context: QueryContext = await self.retrieve_context(query, user_id)
+        optimized_context = self._optimize_context(context, max_context_length)
+        response = await self.llm_client.generate(
+            query=query,
+            context=optimized_context,
+            memory=memory,
+            config=config
+        )
+        return QueryResponse(response=response, context=context, sources=context.chunks)
+```
+
+`QueryContext`:
+```python
+@dataclass
+class QueryContext:
+    chunks: List[SearchResult]     # top_k results from hybrid search
+    context_text: str              # concatenated chunk content
+    total_chunks: int
+    avg_similarity: float
+```
+
+`QueryResponse`:
+```python
+@dataclass
+class QueryResponse:
+    response: str
+    context: QueryContext
+    sources: List[SearchResult]
+    metrics: Optional[ChatMetrics]
+```
+
+## Internal Data Flow — Non-Streaming
+
+```mermaid
+flowchart TD
+    RPC["gRPC: ChatRequest arrives"]
+    SaveUser["ConversationStorage\nsave user message to chat_messages"]
+    GetMemory["MemoryStorage\nget user_memories WHERE user_id"]
+    HSearch["HybridSearchEngine\nhybrid_search() SQL function\nvector + keyword RRF"]
+    BuildPrompt["QueryPipeline\nbuild prompt:\nmemory + context chunks + conversation history + message"]
+    LLMGen["LLMClient.generate()\nOpenAI-compatible API call"]
+    SaveAssist["ConversationStorage\nsave assistant message + sources"]
+    Return["Return ChatResponse"]
+
+    RPC --> SaveUser --> GetMemory --> HSearch --> BuildPrompt --> LLMGen --> SaveAssist --> Return
+```

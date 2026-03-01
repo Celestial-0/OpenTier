@@ -1,0 +1,129 @@
+# Auth Flow
+
+## Auth Lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> Unauthenticated: App load, no token in localStorage
+
+    Unauthenticated --> ModalOpen: openModal() / ?auth=signin param
+    ModalOpen --> SignIn: authView = "signin"
+    ModalOpen --> SignUp: authView = "signup"
+    ModalOpen --> ForgotPassword: authView = "forgot-password"
+
+    SignIn --> WaitingVerification: POST /auth/signin → 403 unverified
+    SignIn --> Authenticated: POST /auth/signin → 200 + session_token
+    SignUp --> WaitingVerification: POST /auth/signup → 200
+    WaitingVerification --> VerifyEmail: user enters OTP
+    VerifyEmail --> Authenticated: POST /auth/verify-email → 200
+
+    ForgotPassword --> ResetEmailSent: POST /auth/forgot-password
+    ResetEmailSent --> ResetPassword: user clicks email link → /auth/reset-password?token=
+    ResetPassword --> Authenticated: POST /auth/reset-password → 200
+
+    Authenticated --> Unauthenticated: logout() / 401 response from fetchUser()
+    Authenticated --> [*]
+```
+
+## Token Storage
+
+```typescript
+// lib/auth-utils.ts
+const TOKEN_KEY = process.env.NEXT_PUBLIC_AUTH_TOKEN_KEY || 'opentier_auth_token'
+
+getAuthToken()    // localStorage.getItem(TOKEN_KEY)
+setAuthToken(t)   // localStorage.setItem(TOKEN_KEY, t)
+removeAuthToken() // localStorage.removeItem(TOKEN_KEY)
+getAuthHeaders()  // { Authorization: 'Bearer <token>' } | {}
+```
+
+Token is a 64-character random alphanumeric string (generated server-side). It is stored in `localStorage` — **not** `httpOnly` cookies. This makes it accessible to JavaScript but vulnerable to XSS attacks (see [Security Model](/security/overview)).
+
+The environment variable `NEXT_PUBLIC_AUTH_TOKEN_KEY` allows the key name to be overridden at build time.
+
+## `AuthContext` Interface
+
+```typescript
+interface AuthContextType {
+  // State
+  user: UserResponse | null
+  isLoading: boolean
+  isAuthenticated: boolean
+
+  // Actions
+  signIn(data: SignInRequest): Promise<void>   // → POST /auth/signin
+  signUp(data: any): Promise<void>             // → POST /auth/signup
+  logout(): Promise<void>                      // → POST /auth/signout
+  checkAuth(): Promise<void>                   // → calls fetchUser()
+  resendVerification(email: string): Promise<void>
+  verifyEmail(email: string, otp: string, token?: string): Promise<void>
+  forgotPassword(email: string): Promise<void>
+  resetPassword(password: string, token: string): Promise<void>
+
+  // Modal state
+  isModalOpen: boolean
+  authView: AuthView
+  authError: string | null
+  attemptedEmail: string | null
+  openModal(view?: AuthView): void
+  closeModal(): void
+  setAuthView(view: AuthView): void
+  setAuthError(error: string | null): void
+}
+```
+
+## Sign-In Sequence
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant Modal as Auth Modal
+    participant AC as AuthContext
+    participant API as Next.js /api proxy
+    participant Rust as Rust API
+    participant DB as PostgreSQL
+
+    U->>Modal: submits email + password
+    Modal->>AC: signIn with email + password
+    AC->>API: POST /api/auth/signin
+    API->>Rust: POST /auth/signin
+    Rust->>DB: SELECT session WHERE token matches
+    DB-->>Rust: user row
+    Rust-->>API: user_id, email, session_token, expires_at
+    API-->>AC: 200 SignInResponse
+    AC->>AC: setAuthToken(session_token) → localStorage
+    AC->>API: GET /api/user/me (Bearer token)
+    API->>Rust: GET /user/me
+    Rust->>DB: SELECT user JOIN session WHERE session_token
+    DB-->>Rust: UserResponse
+    Rust-->>AC: UserResponse
+    AC->>AC: setUser(user), isAuthenticated = true
+    AC->>AC: router.push('/chat')
+    AC-->>Modal: closeModal()
+```
+
+## `SignInResponse` Type
+
+```typescript
+interface SignInResponse {
+  user_id: string
+  email: string
+  session_token: string  // 64-char random alphanumeric
+  expires_at: string     // ISO 8601, 7-day window
+}
+```
+
+## OAuth Flow (Google / GitHub)
+
+On OAuth login:
+
+1. Browser redirects to `GET /auth/oauth/{provider}/authorize` → Rust builds authorization URL and redirects to provider
+2. Provider callback hits `GET /auth/oauth/{provider}/callback` with `code` and `state`
+3. Rust exchanges code for access token, fetches user profile, creates/links account in `accounts` table
+4. Session is created; redirect to frontend with session token
+
+The `accounts` table stores `provider`, `provider_account_id`, `access_token`, `refresh_token` per user. One user can link multiple providers.
+
+## Account Recovery
+
+Soft-deleted users (those with `deleted_at IS NOT NULL`) can be restored via `POST /auth/recover-account`. This sets `deleted_at = NULL` and creates a new session. This pattern avoids permanent data loss for users who delete their account accidentally.

@@ -1,0 +1,93 @@
+# gRPC Client
+
+## `IntelligenceClient` Structure
+
+`grpc/client.rs` wraps three generated tonic clients into a single struct:
+
+```rust
+pub struct IntelligenceClient {
+    chat_client: ChatClient<Channel>,
+    resource_client: ResourceServiceClient<Channel>,
+    health_client: HealthClient<Channel>,
+}
+```
+
+The client is instantiated once at startup, stored in `AppState`, and cloned per request (tonic clients are `Clone + Send + Sync`).
+
+## Startup Connection Strategy
+
+```mermaid
+flowchart TD
+    Start["Server startup"]
+    Attempt["Attempt eager connect\ntonic::transport::Channel::connect(intelligence_url)"]
+    Success["Store connected client in AppState"]
+    Failure["Connection failed\n(Intelligence service down)"]
+    LazyConnect["Fall back to connect_lazy()\n(dials on first RPC call)"]
+    LogWarn["Log WARNING: Intelligence service unavailable"]
+    Boot["Server boots and starts accepting requests"]
+
+    Start --> Attempt
+    Attempt -- "OK" --> Success --> Boot
+    Attempt -- "Error" --> Failure --> LazyConnect --> LogWarn --> Boot
+```
+
+This means auth, user, and admin endpoints remain fully operational even when the Intelligence service is down. Chat endpoints will fail at the RPC call with `UNAVAILABLE` → mapped to HTTP 503.
+
+## RPC Timeouts
+
+All RPC calls use per-operation timeout guards:
+
+```rust
+pub struct RpcTimeouts {
+    pub chat: Duration,      // 1200s = 20 minutes
+    pub stream: Duration,    // 300s  = 5 minutes
+    pub resource: Duration,  // 3000s = 50 minutes
+    pub health: Duration,    // 5s
+}
+```
+
+The `chat` timeout accommodates long multi-turn context windows with large LLM responses. The `resource` timeout accommodates large document ingestion with web scraping.
+
+## Retry Configuration
+
+```rust
+pub struct RetryConfig {
+    pub max_retries: u32,          // 3
+    pub initial_backoff: Duration, // 100ms
+    pub max_backoff: Duration,     // 10s
+    pub multiplier: f64,           // 2.0 (exponential)
+}
+```
+
+**Retryable gRPC status codes**:
+- `Unavailable` — service temporarily down
+- `DeadlineExceeded` — transient timeout (retried with fresh timeout)
+- `ResourceExhausted` — rate limit, retried after backoff
+- `Aborted` — optimistic concurrency failure
+
+**Non-retryable codes**: `NotFound`, `PermissionDenied`, `InvalidArgument`, `Unauthenticated`, `Internal` (bug, not transient).
+
+## gRPC Channel Configuration
+
+| Parameter | Value |
+|-----------|-------|
+| Max message size (send) | 100 MB |
+| Max message size (receive) | 100 MB |
+| Keepalive interval | 60s |
+| Service URL | `INTELLIGENCE_SERVICE_URL` env, default `http://[::1]:50051` |
+| Transport | HTTP/2 (clear-text in development, TLS-capable via tonic feature flags) |
+
+## Method Reference
+
+| Method | Timeout | Retryable | gRPC RPC |
+|--------|---------|-----------|---------|
+| `send_message` | 1200s | Yes | `Chat.SendMessage` |
+| `stream_chat` | 300s | No (streaming) | `Chat.StreamChat` |
+| `generate_title` | 30s | Yes | `Chat.GenerateTitle` |
+| `add_resource` | 3000s | No (idempotency risk) | `ResourceService.AddResource` |
+| `get_resource_status` | 10s | Yes | `ResourceService.GetResourceStatus` |
+| `list_resources` | 30s | Yes | `ResourceService.ListResources` |
+| `delete_resource` | 30s | No (idempotency risk) | `ResourceService.DeleteResource` |
+| `health_check` | 5s | Yes | `Health.Check` |
+
+> **Streaming retries**: `stream_chat` is not retried because the SSE response has already started streaming to the client. A mid-stream retry would result in duplicate tokens. The client must reconnect.

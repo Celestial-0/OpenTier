@@ -1,0 +1,91 @@
+# Client Layer — Overview & Routing
+
+## Technology Stack
+
+| Concern | Solution |
+|---------|----------|
+| Framework | Next.js 16
+ App Router |
+| Styling | Tailwind CSS |
+| State | Zustand (devtools + persist) |
+| Validation | Zod (runtime schema enforcement) |
+| Fonts | Geist, Geist Mono, JetBrains Mono |
+| Notifications | Sonner |
+| Theming | next-themes |
+| Icons | Custom `components/ui/icons.tsx` |
+
+## App Router — Route Tree
+
+```mermaid
+flowchart TD
+    Root[app/layout.tsx - Root Layout]
+    Landing["app/page.tsx - Landing Page"]
+    NotFound[app/not-found.tsx - 404]
+    ChatLayout[app/chat/layout.tsx - Chat Shell]
+    ChatIndex["app/chat/page.tsx - New chat"]
+    ChatId["app/chat/id/page.tsx - Conversation"]
+    Dashboard["app/dashboard/page.tsx - ProtectedRoute"]
+    AuthVerify[app/auth/verify-email]
+    AuthReset[app/auth/reset-password]
+
+    Root --> Landing
+    Root --> NotFound
+    Root --> ChatLayout
+    Root --> Dashboard
+    Root --> AuthVerify
+    Root --> AuthReset
+    ChatLayout --> ChatIndex
+    ChatLayout --> ChatId
+```
+
+## Provider Wrapping Order
+
+Providers in `app/layout.tsx` are nested in this exact order (outermost → innermost):
+
+```
+ThemeProvider            ← next-themes (SSR-safe dark/light)
+  └─ AuthProvider        ← session token, auth modal state
+       └─ AdminProvider  ← admin context (delegates to useAdminStore)
+            └─ UiProvider ← sidebar, modal, dashboard view state
+                 └─ TooltipProvider
+                      └─ {children}
+       Toaster           ← Sonner (sibling of AdminProvider, inside AuthProvider)
+```
+
+**Significance of ordering**: `AdminProvider` reads `user.role` from `AuthProvider`, so it must be nested inside it. `UiProvider` reads nothing from auth — it is purely UI state. `Toaster` is placed inside `AuthProvider` so auth-triggered toasts are rendered correctly.
+
+## Route-Level Component Mapping
+
+| Route | Key Components | Notes |
+|-------|---------------|-------|
+| `/` | `Navbar`, `Hero`, `Feature`, `FAQ`, `Contacts`, `Footer`, `Auth` (modal) | Landing page, fully static |
+| `/chat` | `Chat` (shell) → `ChatArea` (empty state) | New conversation entry point |
+| `/chat/[id]` | `Chat` (shell) → `ChatArea` (messages) | `[id]` = conversation UUID |
+| `/dashboard` | `ProtectedRoute` → `DashboardUI` | Redirects unauthenticated users |
+| `/auth/verify-email` | Email OTP verification form | Token + OTP from URL params |
+| `/auth/reset-password` | Password reset form | Token from URL params |
+
+## URL Parameter Auth Triggering
+
+`AuthActionHandler` is a sub-component inside `AuthProvider` that reads query params on mount:
+
+- `?auth=signin` → opens auth modal in sign-in view
+- `?auth=signup` → opens auth modal in sign-up view
+
+This enables deep-linking into auth flows from external sources (e.g., email CTAs, marketing pages).
+
+## `DashboardView` Navigation
+
+The `UiProvider` manages which sub-view is active in the dashboard:
+
+```typescript
+type DashboardView =
+  | "overview"
+  | "conversations"
+  | "sessions"
+  | "notifications"
+  | "profile"
+  | "settings"
+```
+
+`navigateToDashboard(view)` — navigates to `/dashboard` if not already there, then sets the active view. This allows components anywhere in the tree to deep-link into a specific dashboard tab.

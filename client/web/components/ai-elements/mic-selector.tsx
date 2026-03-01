@@ -2,7 +2,7 @@
 
 import type { ComponentProps, ReactNode } from "react";
 
-import { useControllableState } from "@radix-ui/react-use-controllable-state";
+import { useControllableState } from "@/hooks/use-controllable-state";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -138,9 +138,9 @@ export const MicSelectorTrigger = ({
 
   return (
     <PopoverTrigger render={<Button variant="outline" {...props} ref={ref} />}>{children}<ChevronsUpDownIcon
-                className="shrink-0 text-muted-foreground"
-                size={16}
-              /></PopoverTrigger>
+      className="shrink-0 text-muted-foreground"
+      size={16}
+    /></PopoverTrigger>
   );
 };
 

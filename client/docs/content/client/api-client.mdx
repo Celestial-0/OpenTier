@@ -1,0 +1,116 @@
+# API Client & Types
+
+## `apiClient<T>()` Abstraction
+
+All API calls from Zustand stores and context providers go through a single fetch wrapper in `lib/api-client.ts`:
+
+```typescript
+async function apiClient<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  // Prepend /api if not already present
+  const url = endpoint.startsWith('/api') ? endpoint : `/api${endpoint}`
+
+  const response = await fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...getAuthHeaders(),      // { Authorization: 'Bearer <token>' } | {}
+      ...options?.headers,
+    },
+  })
+
+  if (response.status === 204) return undefined as T  // No Content
+
+  const data = await response.json()
+
+  if (!response.ok) {
+    throw new Error(data.message ?? 'Request failed')
+  }
+
+  return data as T
+}
+```
+
+**Responsibilities**:
+- URL normalization (always absolute `/api/*`)
+- Auth header injection from `localStorage` token
+- 204 handling (DELETE endpoints)
+- Error normalization (throws `Error` with `data.message`)
+
+**Limitations**: No retry logic, no request deduplication, no caching. Each store manages its own `isLoading` flags. Caching is handled by Zustand's persisted state.
+
+## Next.js API Proxy
+
+`next.config.ts` rewrites `/api/*` requests to the Rust backend. All client-side API calls use relative URLs (`/api/...`) — no direct references to the backend host. This means:
+
+1. CORS is never an issue in production (same-origin from the browser's perspective)
+2. The backend URL is a server-side secret (not exposed to the browser)
+3. Next.js can add request headers or transform responses at the proxy layer
+
+## Zod Schema Validation
+
+`lib/api-types.ts` defines Zod schemas for every API response type. Stores validate API responses before writing to state:
+
+```typescript
+// In admin-store.ts:
+const parsed = AdminStatsSchema.safeParse(data)
+if (!parsed.success) {
+  set({ error: 'Invalid response from server', isLoading: false })
+  return
+}
+set({ stats: parsed.data })
+```
+
+### Complete Type Inventory
+
+**Auth types**:
+
+| Schema | Type | Key fields |
+|--------|------|------------|
+| `SignInRequestSchema` | `SignInRequest` | `email`, `password` |
+| `SignInResponseSchema` | `SignInResponse` | `user_id`, `email`, `session_token`, `expires_at` |
+| `SignUpRequestSchema` | `SignUpRequest` | `email`, `password`, `name?`, `username?` |
+| `SignUpResponseSchema` | `SignUpResponse` | `user_id`, `email`, `message` |
+
+**User types**:
+
+| Schema | Type | Key fields |
+|--------|------|------------|
+| `UserResponseSchema` | `UserResponse` | `id`, `email`, `email_verified`, `name?`, `username?`, `avatar_url?`, `role`, `created_at` |
+| `UpdateProfileRequestSchema` | `UpdateProfileRequest` | `name?`, `username?`, `avatar_url?` |
+| `ChangePasswordRequestSchema` | `ChangePasswordRequest` | `current_password`, `new_password` |
+| `SessionSchema` | `Session` | `id`, `user_id`, `session_token`, `expires_at`, `ip_address?`, `user_agent?`, `created_at` |
+| `SessionListResponseSchema` | `SessionListResponse` | `sessions: Session[]` |
+
+**Chat types**:
+
+| Schema | Type | Key fields |
+|--------|------|------------|
+| `MessageRoleSchema` | `MessageRole` | `"user" \| "assistant" \| "system"` |
+| `SourceChunkSchema` | `SourceChunk` | `chunk_id`, `document_id`, `content`, `relevance_score`, `document_title?`, `source_url?` |
+| `ChatMessageSchema` | `ChatMessage` | `id`, `role`, `content`, `sources[]`, `created_at`, `parent_id?` |
+| `ConversationSummarySchema` | `ConversationSummary` | `id`, `title?`, `message_count`, `last_message_preview?`, `created_at`, `updated_at` |
+| `ConversationListResponseSchema` | `ConversationListResponse` | `conversations[]`, `next_cursor?`, `total_count` |
+
+**Admin types**:
+
+| Schema | Type | Key fields |
+|--------|------|------------|
+| `AdminStatsSchema` | `AdminStats` | `total_users`, `active_users_today`, `total_conversations`, `total_messages`, `total_resources` |
+| `UserAdminView` | — | `id`, `email`, `role`, `email_verified`, `created_at`, `deleted_at?` |
+| `UserListResponseSchema` | `UserListResponse` | `users[]`, `total`, `limit`, `offset` |
+| `ResourceItemResponse` | — | `resource_id`, `job_id`, `status`, `title?`, `resource_type`, `is_global`, `created_at` |
+| `ListResourcesResponseSchema` | `ListResourcesResponse` | `resources[]`, `total`, `cursor?` |
+| `AddResourceRequest` | — | `resource_type`, `content`, `title`, `is_global`, `config?: ResourceConfig` |
+| `UpdateRoleRequest` | — | `role: "user" \| "admin"` |
+
+## Health Response
+
+```typescript
+interface HealthResponse {
+  status: string     // "healthy"
+  version: string    // semver
+  uptime_seconds: number
+}
+```
+
+The client calls `GET /api/health/api` and `GET /api/health/intelligence` to display system status in the admin dashboard.

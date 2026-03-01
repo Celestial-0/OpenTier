@@ -2,6 +2,7 @@ import { ArchitectureDiagram } from "@/components/core/landing/features/architec
 import { ArchitectureExplanation } from "@/components/core/landing/features/architecture-explanation";
 import { FeatureGrid } from "@/components/core/landing/features/feature-grid";
 import { FeatureTechStack } from "@/components/core/landing/features/tech-stack";
+import { QuickStart } from "@/components/core/landing/features/quick-start";
 import { BackgroundRippleEffect } from "@/components/ui/background-ripple-effect";
 
 export const Feature = () => {
@@ -31,6 +32,7 @@ export const Feature = () => {
                 <ArchitectureExplanation />
                 <FeatureGrid />
                 <FeatureTechStack />
+                <QuickStart />
             </div>
         </section>
     );

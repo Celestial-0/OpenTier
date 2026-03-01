@@ -1,0 +1,132 @@
+# Security Model
+
+## Token Lifecycle
+
+```mermaid
+flowchart TD
+    Start(["POST /auth/signin — 200 OK"])
+    TokenIssued["Token issued\n64-char random string"]
+    ActiveSession["Active Session\nBearer header on every request\nDB lookup per request"]
+    Expired["Expired\nexpires_at exceeded 7 days"]
+    Revoked["Revoked\nPOST /auth/signout"]
+    AllRevoked["All Sessions Revoked\nDELETE /user/delete-account"]
+    SessionRevoked["Single Session Revoked\nDELETE /user/revoke-session/id"]
+    End(["Row deleted from sessions table"])
+
+    Start --> TokenIssued --> ActiveSession
+    ActiveSession -->|"expires_at < NOW()"| Expired
+    ActiveSession -->|"user signs out"| Revoked
+    ActiveSession -->|"account deleted"| AllRevoked
+    ActiveSession -->|"session revoked by user"| SessionRevoked
+    Expired -->|"background cleanup task"| End
+    Revoked --> End
+    AllRevoked --> End
+    SessionRevoked --> End
+```
+
+## Auth Middleware Security Chain
+
+```mermaid
+flowchart TD
+    Request["Incoming request - Authorization: Bearer token"]
+    ExtractToken["Extract token from header"]
+    DBLookup["SELECT user_id, role FROM sessions WHERE token=$1"]
+    Found{"Row found?"}
+    Inject["Inject user_id + role into request Extensions"]
+    Reject401["Return 401 Unauthorized"]
+    Handler["Route handler executes"]
+
+    Request --> ExtractToken --> DBLookup --> Found
+    Found -- Yes --> Inject --> Handler
+    Found -- No --> Reject401
+```
+
+**Timing attack risk**: The session token lookup uses a standard `WHERE session_token = $1` comparison. PostgreSQL string comparisons are not constant-time. An attacker with network timing access could theoretically infer token values byte-by-byte. Mitigation: use `HMAC` comparison or a token hash column.
+
+## OAuth Security Flow
+
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant Rust as Rust API
+    participant Provider as OAuth Provider
+    participant DB
+
+    Browser->>Rust: GET /auth/oauth/google/authorize
+    Rust->>Rust: Generate PKCE code_verifier + code_challenge
+    Rust->>Rust: Generate random state parameter
+    Note over Rust: state stored server-side to prevent CSRF
+    Rust-->>Browser: 302 → provider with state + code_challenge
+    Browser->>Provider: User authenticates
+    Provider-->>Browser: 302 → /callback?code=X&state=Y
+    Browser->>Rust: GET /callback?code=X&state=Y
+    Rust->>Rust: Verify state matches stored value
+    Rust->>Provider: Exchange code + code_verifier for tokens (PKCE)
+    Provider-->>Rust: access_token + id_token
+    Rust->>Rust: Verify id_token signature
+    Rust->>DB: Upsert user + account
+    Rust->>DB: INSERT session
+    Rust-->>Browser: 302 → FRONTEND_URL/chat?token=session_token
+```
+
+**PKCE**: The OAuth2 flow uses PKCE (Proof Key for Code Exchange) to prevent authorization code interception attacks. The `code_verifier` never leaves the server.
+
+**Token in redirect**: The session token is passed as a URL query parameter (`?token=...`) in the OAuth callback redirect. This exposes the token in browser history and server logs. A more secure pattern would be an `httpOnly` cookie or a short-lived exchange token.
+
+## RBAC Enforcement
+
+| Layer | Enforcement | DB queries |
+|-------|-------------|-----------|
+| Session validation | `auth_middleware` | 1 (per request) |
+| Role check | `require_admin` extractor | 0 (reads Extension) |
+| Resource ownership | Per-handler `WHERE user_id = $1` | 1 (per operation) |
+
+There are exactly **two roles**: `user` and `admin`. There is no privilege escalation within the `user` role — all users have identical capabilities. Admins have full access to all admin endpoints.
+
+## Attack Surface Analysis
+
+### 1. localStorage Token Storage
+
+**Risk**: High  
+**Description**: The session token is stored in `localStorage`, accessible to any JavaScript running in the same origin. An XSS vulnerability anywhere in the Next.js app could exfiltrate all users' tokens.  
+**Mitigation**: Content Security Policy headers, strict Next.js escaping. No `httpOnly` cookie alternative is implemented.
+
+### 2. Rate Limit Bypass (Reverse Proxy)
+
+**Risk**: Medium  
+**Description**: `PeerIpKeyExtractor` uses the direct TCP peer IP for rate limiting. Behind a load balancer or reverse proxy (Nginx, Cloudflare), all requests appear to originate from the proxy IP. All users share a single rate limit bucket.  
+**Mitigation**: Use `X-Forwarded-For` header extraction. `tower_governor` supports custom key extractors.
+
+### 3. Role Change Not Reflected in Active Sessions
+
+**Risk**: Medium  
+**Description**: When an admin demotes a user from `admin` to `user`, all existing sessions for that user retain `role = 'admin'` until they expire (up to 7 days) or the user explicitly logs out.  
+**Mitigation**: On `update_user_role`, invalidate all existing sessions for the affected user.
+
+### 4. Shared Database Ownership
+
+**Risk**: Medium  
+**Description**: Both Rust and Python services have full read/write access to the entire PostgreSQL database via their respective connection strings. A bug in the Python service could corrupt identity tables (`users`, `sessions`).  
+**Mitigation**: Use separate PostgreSQL roles with table-level GRANT permissions: Python role gets no access to `users`, `sessions`, `accounts`, `verification_tokens`, `password_reset_tokens`.
+
+### 5. OAuth Token in URL
+
+**Risk**: Low-Medium  
+**Description**: The OAuth callback redirect includes the session token as `?token=<value>` in the URL. This is logged by web servers, browser history, and referrer headers.  
+**Mitigation**: Use a one-time exchange code server-side; set `httpOnly` cookie on redirect.
+
+### 6. Unconstrained Memory Growth
+
+**Risk**: Low  
+**Description**: `user_memories.memory` is an unbounded TEXT column. Without truncation, a malicious user generating thousands of conversations could cause the memory column to grow to hundreds of KB, increasing LLM prompt costs and context window usage.  
+**Mitigation**: Cap memory length in `MemoryStorage.update_user_memory()`.
+
+### 7. Free Tier Client-Side Only
+
+**Risk**: Low  
+**Description**: `FREE_MESSAGE_LIMIT = 5` is enforced only in the browser via `localStorage`. A user can bypass it by clearing `localStorage` or calling the API directly (no session required for... wait, all chat endpoints require auth). Since `/chat` routes require authentication, unauthenticated users can only bypass this limit if they create accounts.  
+**Actual impact**: Minimal — the purpose is UX-level gatekeeping, not security.
+
+## SMTP Security
+
+Email transport uses `lettre` with `tokio1-rustls-tls` — TLS is enforced for SMTP connections. Credentials are environment variables (`SMTP_USERNAME`, `SMTP_PASSWORD`). No DKIM/SPF enforcement at the application level — that is the SMTP server's responsibility.

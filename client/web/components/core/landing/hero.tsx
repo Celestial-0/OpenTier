@@ -4,7 +4,7 @@ import { HeroChatDemo } from "@/components/core/landing/hero/chat-demo";
 
 export const Hero = () => {
     return (
-        <div className="relative min-h-[calc(100vh-4rem)] flex flex-col overflow-hidden bg-background">
+        <div className="relative min-h-screen flex flex-col overflow-hidden bg-background">
             <HeroBackground />
 
             <main className="flex-1 flex flex-col relative z-10 pt-20 md:pt-32">

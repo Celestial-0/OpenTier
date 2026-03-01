@@ -1,0 +1,131 @@
+# Hybrid Retrieval
+
+## Retrieval Architecture
+
+OpenTier uses Reciprocal Rank Fusion (RRF) combining two complementary search strategies:
+
+| Strategy | Index | Strength | Weakness |
+|----------|-------|----------|---------|
+| Vector search | HNSW (cosine distance) | Semantic similarity, handles synonyms | Misses exact keywords, opaque |
+| Keyword search | GIN (tsvector BM25) | Exact terms, proper nouns, code | Fails on paraphrasing, semantic gap |
+
+RRF normalizes both ranked lists into a single unified score, combining their strengths.
+
+## `hybrid_search()` SQL Function
+
+Defined in migration `20260115000006`:
+
+```sql
+CREATE OR REPLACE FUNCTION hybrid_search(
+    query_embedding vector(384),   -- encoded query
+    query_text text,               -- raw query text for keyword search
+    p_user_id text,                -- restrict to user's documents + global
+    p_limit integer DEFAULT 20,
+    vector_weight float DEFAULT 0.7,
+    keyword_weight float DEFAULT 0.3
+) RETURNS TABLE (
+    chunk_id uuid,
+    document_id uuid,
+    content text,
+    similarity_score float,
+    rank integer
+)
+```
+
+**Algorithm**:
+
+```sql
+-- Vector search branch
+WITH vector_results AS (
+    SELECT dc.id, dc.document_id, dc.content,
+           1 - (dc.embedding <=> query_embedding) AS sim,
+           ROW_NUMBER() OVER (ORDER BY dc.embedding <=> query_embedding) AS vrank
+    FROM document_chunks dc
+    JOIN documents d ON dc.document_id = d.id
+    WHERE d.user_id = p_user_id OR d.is_global = true
+    ORDER BY dc.embedding <=> query_embedding
+    LIMIT p_limit * 2
+),
+-- Keyword search branch
+keyword_results AS (
+    SELECT dc.id, dc.document_id, dc.content,
+           ts_rank_cd(to_tsvector('english', dc.content),
+                      plainto_tsquery('english', query_text)) AS krank_score,
+           ROW_NUMBER() OVER (ORDER BY krank_score DESC) AS krank
+    FROM document_chunks dc
+    JOIN documents d ON dc.document_id = d.id
+    WHERE d.user_id = p_user_id OR d.is_global = true
+      AND to_tsvector('english', dc.content) @@ plainto_tsquery('english', query_text)
+    ORDER BY krank_score DESC
+    LIMIT p_limit * 2
+),
+-- Reciprocal Rank Fusion
+rrf AS (
+    SELECT
+        COALESCE(v.id, k.id) AS chunk_id,
+        COALESCE(v.document_id, k.document_id) AS document_id,
+        COALESCE(v.content, k.content) AS content,
+        COALESCE(vector_weight / (60 + v.vrank), 0)
+          + COALESCE(keyword_weight / (60 + k.krank), 0) AS rrf_score
+    FROM vector_results v
+    FULL OUTER JOIN keyword_results k ON v.id = k.id
+)
+SELECT chunk_id, document_id, content, rrf_score, ROW_NUMBER() OVER (ORDER BY rrf_score DESC)
+FROM rrf
+ORDER BY rrf_score DESC
+LIMIT p_limit
+```
+
+**RRF formula**: `score = vector_weight / (60 + vector_rank) + keyword_weight / (60 + keyword_rank)`
+
+The constant `60` is the standard RRF smoothing parameter — prevents top-1 results from dominating when rank differences are large.
+
+## Pipeline: `HybridSearchEngine`
+
+```mermaid
+flowchart TD
+    Query["User query string"]
+    Encode["EmbeddingModel.encode(query)\nquery → vector(384)"]
+    SQL["hybrid_search() SQL function\n(pgvector cosine + tsvector BM25 + RRF)"]
+    Results["List of SearchResult\nchunk_id, document_id, content, relevance_score"]
+    TopK["Take top_k=5 results\nfor context building"]
+    Context["QueryContext\nchunks + context_text + avg_similarity"]
+
+    Query --> Encode --> SQL --> Results --> TopK --> Context
+```
+
+## Index Specifications
+
+**Vector index** (HNSW):
+```sql
+CREATE INDEX ON document_chunks USING hnsw (embedding vector_cosine_ops)
+WITH (m = 16, ef_construction = 64);
+```
+- `m = 16`: number of bi-directional links per node (higher = more accurate, more memory)
+- `ef_construction = 64`: search width during index build (higher = more accurate index)
+- Search operator: `<=>` (cosine distance; 0 = identical, 2 = maximally different)
+
+**Full-text search index** (GIN):
+```sql
+CREATE INDEX ON document_chunks USING gin(to_tsvector('english', content));
+```
+- `'english'` dictionary: stemming, stopword removal
+- `ts_rank_cd`: rank by cover density (proximity of matched terms)
+- `plainto_tsquery`: converts raw user query to tsquery without requiring special syntax
+
+## Access Control in Search
+
+The `WHERE d.user_id = p_user_id OR d.is_global = true` clause enforces document-level access control at the database layer:
+
+- A user can only retrieve chunks from documents they own
+- Global documents (`is_global = true`, set by admins) are available to all users
+- There is **no role-based document access** beyond this binary global/private distinction
+- Access control is enforced in SQL — not in application code — making it harder to bypass accidentally
+
+## `QueryPipeline` Weights
+
+Default weights (configurable):
+- `vector_weight = 0.7` (70% semantic)
+- `keyword_weight = 0.3` (30% keyword)
+
+These can be overridden per-request via `ChatConfig.context_limit` (though the proto does not expose `vector_weight` directly — weights are currently service-level config, not per-request).

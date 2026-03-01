@@ -1,0 +1,93 @@
+# Monorepo Architecture Overview
+
+## Repository Layout
+
+```
+OpenTier/
+├── client/
+│   ├── package.json          # Turborepo workspace root
+│   ├── turbo.json            # Pipeline definitions
+│   └── web/                  # Next.js 16 application
+│   |   ├── app/              # App Router pages
+│   |   ├── components/       # UI, AI elements, core modules
+│   |   ├── context/          # React context providers
+│   |   ├── store/            # Zustand state stores
+│   |   ├── lib/              # API client, type schemas
+│   |   ├── hooks/            # Custom React hooks
+│   |   └── types/            # Shared TypeScript types
+|   └──docs/                 # Documentation content (MDX)
+|
+└── server/
+    ├── api/                  # Rust/Axum API gateway (Cargo workspace)
+    │   ├── src/              # Service source modules
+    │   ├── migrations/       # sqlx migrations (identity + chat)
+    │   └── .sqlx/            # Offline query cache (CI safety)
+    ├── intelligence/         # Python gRPC intelligence engine
+    │   ├── core/             # Config, DB session, lifecycle
+    │   ├── engine/           # Business logic (chat, ingestion, retrieval)
+    │   ├── interfaces/       # gRPC servicers
+    │   └── migrations/       # pgvector / document schema migrations
+    └── proto/
+        └── intelligence.proto # Shared Protobuf contract
+```
+
+## Isolation Boundaries
+
+```mermaid
+%%{init: {'theme': 'base', 'flowchart': {'curve': 'linear', 'nodeSpacing': 80, 'rankSpacing': 140}, 'themeVariables': {'primaryColor': '#151618', 'primaryTextColor': '#e2e8f0', 'primaryBorderColor': '#5d6b7d', 'lineColor': '#94a3b8', 'clusterBkg': '#151618', 'clusterBorder': '#5d6b7d', 'edgeLabelBackground': '#0f172a', 'tertiaryColor': '#1e293b', 'fontSize': '16px'}}}%%
+
+flowchart TB
+
+Browser["Browser"]
+
+subgraph CLIENT["Client  ·  Bun / Node"];
+    NextJS["Next.js 16\nApp Router + Zustand"]
+end
+
+subgraph RUST["API  ·  Rust / Tokio"];
+    RustAPI["Axum + Tower\nHTTP Gateway"]
+end
+
+subgraph ROW3["Data + Intelligence + External"];
+    direction LR
+    subgraph PYTHON["Intelligence  ·  Python"];
+        PyService["IntelligenceEngine\ngrpcio-aio + asyncpg"]
+    end
+    subgraph DB["PostgreSQL"];
+        PG["Core Tables\n+\nVector Tables"]
+    end
+    subgraph EXT["External Services"];
+        direction TB
+        LLM["LLM Provider\nOpenAI / Gemini"]
+        OAuth["OAuth Provider\nGoogle / GitHub"]
+        SMTP["SMTP Server"]
+    end
+end
+
+Browser -->|"HTTPS  fetch + SSE"| NextJS
+NextJS -->|"HTTP/1.1  REST + SSE  —  next.config proxy"| RustAPI
+RustAPI -->|"sqlx  TCP"| PG
+RustAPI -->|"gRPC  HTTP/2  —  tonic + Protobuf"| PyService
+PyService -->|"asyncpg + pgvector"| PG
+PyService -->|"httpx"| LLM
+RustAPI -->|"OAuth2 + PKCE"| OAuth
+RustAPI -->|"lettre  SMTP"| SMTP
+```
+
+## Language Boundaries
+
+| Boundary | Mechanism | Protocol | Schema enforcement |
+|----------|-----------|----------|--------------------|
+| Browser ↔ Next.js | Fetch API + SSE | HTTP/1.1 | Zod (`api-types.ts`) |
+| Next.js ↔ Rust API | HTTP Proxy (`next.config`) | HTTP/1.1 | None (passthrough) |
+| Rust ↔ Python | tonic client / grpcio server | HTTP/2 gRPC | Protobuf v3 |
+| Rust ↔ PostgreSQL | sqlx (offline-verified) | TCP | Compile-time query checks |
+| Python ↔ PostgreSQL | asyncpg / SQLAlchemy | TCP | SQLAlchemy ORM models |
+
+## Deployment Implications
+
+- **Three independent processes**: client (Node/Bun), API (Rust binary), Intelligence (Python). Each can be scaled, restarted, and deployed independently.
+- **Single database**: both Rust and Python connect to the same PostgreSQL instance. Schema ownership is split: Rust manages `sqlx migrate` (identity + sessions + conversations + messages); Python manages its own migration scripts (pgvector + documents + chat_messages + user_memories).
+- **Port assignments**: API default `8080`, Intelligence gRPC default `50051` (configurable via `INTELLIGENCE_SERVICE_URL`).
+- **gRPC lazy connect**: if the Intelligence service is down, the Rust API boots successfully (with degraded chat functionality). Auth, user, and admin endpoints remain fully operational.
+- **`.sqlx/` offline cache**: Rust sqlx queries are verified at compile time against the query cache checked into source control. CI does not need a live database to compile.

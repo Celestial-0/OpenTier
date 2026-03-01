@@ -1,0 +1,173 @@
+# Transactional Schema
+
+## Schema Ownership
+
+OpenTier uses a **single PostgreSQL database** shared between both services. Schema management is split:
+
+| Owner | Migration Tool | Tables |
+|-------|---------------|--------|
+| Rust API | `sqlx-migrate` (in `server/api/migrations/`) | users, sessions, accounts, verification_tokens, password_reset_tokens, conversations, messages |
+| Python Intelligence | Manual/Alembic (in `server/intelligence/migrations/`) | documents, document_chunks, ingestion_jobs, chat_messages, user_memories |
+| Shared | — | `conversations` (written by Rust, read by both) |
+
+Migrations run in sequence. Python migrations depend on the `conversations` table existing (created by Rust migration `20260114000001`).
+
+## Entity Relationship Diagram
+
+```mermaid
+erDiagram
+    users {
+        uuid id PK
+        varchar email UK
+        boolean email_verified
+        varchar password_hash
+        varchar name
+        varchar username UK
+        text avatar_url
+        user_role role
+        timestamptz deleted_at
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    sessions {
+        uuid id PK
+        uuid user_id FK
+        varchar session_token UK
+        timestamptz expires_at
+        user_role role
+        inet ip_address
+        text user_agent
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    accounts {
+        uuid id PK
+        uuid user_id FK
+        varchar provider
+        varchar provider_account_id
+        text access_token
+        text refresh_token
+        timestamptz expires_at
+        varchar token_type
+        text scope
+        text id_token
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    verification_tokens {
+        uuid id PK
+        uuid user_id FK
+        varchar token UK
+        varchar otp
+        timestamptz expires_at
+        timestamptz created_at
+    }
+
+    password_reset_tokens {
+        uuid id PK
+        uuid user_id FK
+        varchar token UK
+        timestamptz expires_at
+        timestamptz created_at
+    }
+
+    conversations {
+        uuid id PK
+        varchar user_id
+        varchar title
+        json metadata
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    messages {
+        uuid id PK
+        uuid conversation_id FK
+        message_role role
+        text content
+        jsonb metadata
+        timestamptz created_at
+    }
+
+    chat_messages {
+        uuid id PK
+        uuid conversation_id FK
+        varchar role
+        text content
+        jsonb sources
+        jsonb metadata
+        uuid parent_id FK
+        timestamptz created_at
+    }
+
+    users ||--o{ sessions : "has"
+    users ||--o{ accounts : "links"
+    users ||--o{ verification_tokens : "has"
+    users ||--o{ password_reset_tokens : "has"
+    conversations ||--o{ messages : "contains"
+    conversations ||--o{ chat_messages : "contains"
+    chat_messages ||--o| chat_messages : "branches from parent"
+```
+
+## Table Details
+
+### `users`
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | UUID | `gen_random_uuid()` |
+| `email` | VARCHAR(255) | Unique, indexed |
+| `email_verified` | BOOLEAN | Default `false`; OAuth users set `true` immediately |
+| `password_hash` | VARCHAR(255) | `bcrypt`; `NULL` for OAuth-only accounts |
+| `role` | `user_role` ENUM | `user` or `admin` |
+| `deleted_at` | TIMESTAMPTZ | Soft-delete; `NULL` = active |
+
+**Indexes**: `idx_users_email`, `idx_users_username`, `idx_users_role`, `idx_users_created_at`, `idx_users_deleted_at` (partial, WHERE `deleted_at IS NULL`)  
+**Trigger**: `update_updated_at_column()` updates `updated_at` on every `UPDATE`
+
+### `sessions`
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `session_token` | VARCHAR(255) | 64-char random alphanumeric; unique |
+| `expires_at` | TIMESTAMPTZ | `NOW() + 7 days` |
+| `role` | `user_role` ENUM | **Duplicated from `users.role` at session creation time** |
+| `ip_address` | INET | Client IP (IPv4 or IPv6) |
+
+**Key design note**: `role` in sessions is a snapshot taken at login. Role changes do not propagate to active sessions.
+
+### `accounts` (OAuth)
+
+Enforces `UNIQUE(provider, provider_account_id)` — one account per provider per external identity. One user can link multiple providers.
+
+### `conversations`
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `id` | UUID | **No DEFAULT** — caller provides UUID |
+| `user_id` | VARCHAR(255) | Not a foreign key to `users.id` — loose coupling |
+
+**Critical**: `user_id` in `conversations` is a `VARCHAR(255)`, not a `UUID` FK referencing `users`. This allows the Python Intelligence service to create or reference conversations without strict FK integrity — enabling the shared-table architecture without Rust owning all writes.
+
+### `messages` vs `chat_messages`
+
+Two tables store message content. This is the most architecturally significant split in the schema:
+
+| Table | Written by | Read by | Contains |
+|-------|-----------|---------|---------|
+| `messages` | Rust API | Rust API | Minimal message rows (role, content, metadata); **no sources** |
+| `chat_messages` | Python Intelligence | Both services | Full AI messages with `sources` (JSONB), `parent_id` for branching |
+
+In practice the Rust API uses `chat_messages` (via `get_conversation`) and `messages` appears to be vestigial or used for audit logging. This creates a dual-table situation that must be managed carefully during schema changes.
+
+### Enums
+
+```sql
+CREATE TYPE user_role AS ENUM ('user', 'admin');
+CREATE TYPE message_role AS ENUM ('user', 'assistant', 'system');
+```
+
+`user_role` is used in both `users.role` and `sessions.role`. In `chat_messages`, role is `VARCHAR(50)` (written by Python) — not the PostgreSQL enum type.

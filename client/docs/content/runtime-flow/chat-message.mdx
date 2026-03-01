@@ -1,0 +1,166 @@
+# Chat Message: End-to-End Runtime Flow
+
+This page traces a single streaming chat message from the browser click to the last token rendered on screen, annotating each hop with DB queries, latency expectations, and failure modes.
+
+## Full Sequence Diagram
+
+```mermaid
+sequenceDiagram
+participant Browser
+participant Proxy as Next.js Proxy
+participant Rust as Rust API
+participant SessionDB as sessions
+participant ConvDB as conversations
+participant Python as Python Intelligence
+participant ChatDB as chat_messages
+participant VectorDB as documents/chunks
+participant MemDB as user_memories
+participant LLM as LLM Provider
+
+Note over Browser,Proxy: same-origin ~1 ms
+Browser->>Proxy: POST /api/chat/conversations/id/stream
+Proxy->>Rust: POST /chat/conversations/id/stream
+
+Note over Rust,SessionDB: indexed token lookup ~2-5 ms
+Rust->>SessionDB: SELECT user_id, role WHERE token=$1
+SessionDB-->>Rust: user_id, role
+
+Note over Rust,ConvDB: composite index ~2-5 ms
+Rust->>ConvDB: SELECT id WHERE id=$1 AND user_id=$2
+ConvDB-->>Rust: row confirmed
+
+Rust->>Python: gRPC StreamChat — ChatRequest
+
+Note over Python,ChatDB: conversation bootstrap ~5-15 ms
+Python->>ConvDB: SELECT conversation WHERE id=$1
+ConvDB-->>Python: conversation row
+Python->>ChatDB: INSERT role=USER content=$message
+ChatDB-->>Python: message_id
+
+Note over Python,MemDB: indexed by user_id ~2-5 ms
+Python->>MemDB: SELECT content FROM user_memories WHERE user_id=$1
+MemDB-->>Python: memory rows
+
+Note over Python,VectorDB: HNSW + GIN hybrid search ~15-50 ms
+Python->>VectorDB: hybrid_search embedding top_k=5
+VectorDB-->>Python: ranked chunks via RRF
+
+Python->>Python: build_prompt — memory + context + history + query
+
+Note over Python,LLM: LLM network latency ~200-2000 ms
+Python->>LLM: POST /v1/chat/completions — stream=true
+
+loop Token streaming
+    LLM-->>Python: SSE token delta
+    Python-->>Rust: ChatStreamChunk — token, is_final=false
+    Rust-->>Proxy: SSE event — token
+    Proxy-->>Browser: SSE event — token
+    Browser->>Browser: append token to assistant message
+end
+
+LLM-->>Python: stream complete
+Python->>ChatDB: INSERT role=ASSISTANT, content, sources
+Python->>MemDB: UPSERT user_memories
+Python-->>Rust: ChatStreamChunk — sources, metrics, is_final=true
+Rust-->>Proxy: SSE event — sources + metrics + is_final
+Proxy-->>Browser: SSE event — sources + metrics + is_final
+Browser->>Browser: render sources panel, finalise message
+Rust-->>Browser: SSE stream closed
+```
+
+## DB Query Count Per Request
+
+| Service | Query | Purpose |
+|---------|-------|---------|
+| Rust #1 | `sessions` | Authentication + role resolution |
+| Rust #2 | `conversations` | Ownership verification |
+| Python #1 | `conversations` | gRPC-side ownership (redundant by design) |
+| Python #2 | `chat_messages` INSERT | Persisting user message |
+| Python #3 | `user_memories` SELECT | Loading user context |
+| Python #4 | `hybrid_search()` | Vector + full-text retrieval |
+| Python #5 | `chat_messages` INSERT | Persisting assistant message |
+| Python #6 | `user_memories` UPSERT | Updating user memory |
+
+**Total**: 2 Rust queries + 6 Python queries = **8 DB round-trips per streaming chat message**
+
+This is the steady-state count. First message in a new conversation adds one INSERT for the conversation row.
+
+## Latency Budget
+
+| Segment | Typical | Worst Case |
+|---------|---------|-----------|
+| Browser → Next.js proxy | &lt;1 ms | 1 ms |
+| auth_middleware DB lookup | 2–5 ms | 20 ms |
+| Ownership check DB lookup | 2–5 ms | 20 ms |
+| gRPC channel (tonic) | 0.5 ms | 2 ms |
+| Python conversation + save | 5–15 ms | 50 ms |
+| Memory retrieval | 2–5 ms | 20 ms |
+| Hybrid search (HNSW + GIN) | 15–50 ms | 200 ms |
+| Prompt construction | &lt;1 ms | 1 ms |
+| **Time to first token** | **~30–90 ms** | **~300 ms** |
+| Per-token delivery (LLM) | 20–50 ms | 200 ms |
+| Post-generation saves | 5–10 ms | 50 ms |
+
+## Failure Modes
+
+```mermaid
+flowchart TD
+    Request["Incoming streaming chat request"]
+
+    AuthFail["Auth middleware — token invalid or expired"]
+    Auth401["HTTP 401 Unauthorized\nSSE never opens"]
+
+    OwnerFail["Conversation not found or wrong user_id"]
+    Own404["HTTP 404 Not Found\nSSE never opens"]
+
+    GrpcFail["Intelligence service unavailable\ngRPC UNAVAILABLE"]
+    SSE503["HTTP 503 Service Unavailable\nSSE never opens"]
+
+    LLMFail["LLM provider timeout or rate limit"]
+    SSE504["SSE error chunk — error_code 504 or 429"]
+
+    MidStream["gRPC error mid-stream\nafter tokens already sent"]
+    SSEError["SSE error event\nfinal chunk with error_code"]
+
+    Request --> AuthFail --> Auth401
+    Request --> OwnerFail --> Own404
+    Request --> GrpcFail --> SSE503
+    Request --> LLMFail --> SSE504
+    Request --> MidStream --> SSEError
+```
+
+**SSE error handling in browser**: The chat store listens for SSE `error` events via `EventSource.onerror`. Mid-stream errors append an error token to the assistant message and set `state.error` in the Zustand chat store.
+
+## Rust → Python Data Fidelity
+
+The Rust API passes `user_id` and `conversation_id` as plain strings — no type or ownership validation occurs in the Protobuf layer. Python performs its own `SELECT` to validate ownership against the `conversations` table, creating a **duplicate ownership check** across the language boundary. This is intentional defensive programming: the Python service cannot trust that all future callers will have performed the same validation.
+
+However, there is a subtle inconsistency: the `conversations.user_id` column is `VARCHAR` without a foreign key to `users.id`. Python can insert conversations for users that do not exist in the `users` table. If such a "ghost" conversation is ever retrieved, the Rust API's JOIN with `users` will find no matching row and the conversation will be silently omitted from list results.
+
+## Token Streaming from Browser's Perspective
+
+```typescript
+// client/web/components/ai-elements/chat-area/index.tsx (simplified)
+const eventSource = new EventSource(`/api/chat/conversations/${id}/stream`, {
+  // fetch-based SSE with POST body
+});
+
+eventSource.onmessage = (event) => {
+  const chunk: ChatStreamChunk = JSON.parse(event.data);
+  if (chunk.token) {
+    appendToken(chunk.token);
+  }
+  if (chunk.is_final) {
+    setSources(chunk.sources);
+    setMetrics(chunk.metrics);
+    eventSource.close();
+  }
+};
+
+eventSource.addEventListener('error', () => {
+  setError('Stream interrupted');
+  eventSource.close();
+});
+```
+
+The Zustand `chat-store.ts` manages the `streamingMessageId` state — while a message is streaming, the store marks it with a dedicated ID. When `is_final` arrives, the store transitions the message from streaming to complete, triggering re-render with the full message content and sources.

@@ -1,0 +1,160 @@
+# Ingestion Pipeline
+
+## `DocumentProcessor` — 9-Step Pipeline
+
+`engine/ingestion/processor.py` processes every incoming document through a fixed pipeline:
+
+```mermaid
+%%{init: {'flowchart': {'wrappingWidth': 380}}}%%
+flowchart TB
+    Input["AddResourceRequest\nuser_id · content · type · title · config"]
+
+    subgraph VAL["Validation"];
+        direction TB;
+        V1["1. validate_user_id()\nNon-empty string check"]
+        V2["2. Validate content\nNon-empty check"]
+        V3["3. validate_document_title()\nLength + character check"]
+        V4["4. sanitize_metadata()\nRemove reserved keys, validate types"]
+        V1 --> V2 --> V3 --> V4
+    end
+
+    subgraph PROC["Text Processing"];
+        direction TB;
+        Clean["5. clean_with_strategy()\nminimal / standard / aggressive"]
+        Chunk["6. TextChunker.chunk()\nSplit into TextChunk objects"]
+        Clean --> Chunk
+    end
+
+    subgraph STORE["Storage"];
+        direction TB;
+        StoreDoc["7. DocumentStorage.store_document()\nINSERT INTO documents"]
+        Embed["8. batch_generate_embeddings()\nsentence-transformers → numpy arrays"]
+        StoreEmbed["9. EmbeddingStorage.store_chunks()\nINSERT document_chunks · vector(384)"]
+        StoreDoc --> Embed --> StoreEmbed
+    end
+
+    Track["JobStorage.update_progress()\nUPDATE ingestion_jobs SET progress_percent"]
+
+    Input --> VAL --> PROC --> STORE --> Track
+```
+
+Any step failure is caught, logged, and recorded in `ingestion_jobs.errors` (JSONB array). Partial failures result in job `status = 'partial'`.
+
+## Text Cleaning Strategies
+
+| Strategy | Operations |
+|----------|-----------|
+| `minimal` | Strip leading/trailing whitespace |
+| `standard` | Minimal + remove excessive blank lines, normalize Unicode whitespace |
+| `aggressive` | Standard + remove HTML tags, collapse multiple spaces, remove control characters |
+
+Strategy is controlled per-resource via `config.auto_clean` flag and `INGESTION_CLEANING_STRATEGY` env default.
+
+## `TextChunker` (`engine/ingestion/chunker.py`)
+
+```python
+@dataclass
+class TextChunk:
+    content: str
+    index: int          # sequential chunk index
+    start_char: int     # character offset in source
+    end_char: int
+    metadata: dict      # inherited from document + chunk-level
+
+class TextChunker:
+    def __init__(self, chunk_size=512, chunk_overlap=50, separator="\n\n"):
+        ...
+
+    def chunk(self, text: str, metadata: dict = {}) -> list[TextChunk]:
+        # Split by paragraph separator ("\n\n")
+        # If paragraph > chunk_size, split by sentence
+        # Maintain overlap of chunk_overlap chars between consecutive chunks
+        # Validate: no chunk > 10MB, no empty chunks
+```
+
+**Algorithm**:
+1. Split on `separator` (`"\n\n"` = paragraph breaks)
+2. If any paragraph exceeds `chunk_size`, split further by sentence boundary
+3. Slide a window of `chunk_size` chars with `chunk_overlap` stride
+4. Track `start_char` / `end_char` for source attribution
+
+**Constraints**:
+- `chunk_size` default: 512 characters
+- `chunk_overlap` default: 50 characters
+- Maximum content length enforced before chunking: `INGESTION_MAX_CONTENT_LENGTH = 1,000,000` chars
+
+## `EmbeddingModel` (`engine/embedding/models.py`)
+
+```python
+class EmbeddingModel:
+    model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
+    dimensions: int = 384
+    _cache: dict[str, np.ndarray]  # in-memory LRU, max 10,000 entries
+
+    def __init__(self):
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.model = SentenceTransformer(model_name, device=self.device)
+        if self.device == "cuda":
+            self.model.half()  # FP16 on GPU for throughput
+        self._cache = {}
+
+    def encode(
+        self,
+        texts: list[str],
+        batch_size: int = 32,
+        show_progress: bool = False
+    ) -> np.ndarray:
+        # Check cache first
+        # Encode uncached texts in batches of batch_size
+        # L2-normalize if config.normalize = True
+        # Store results in _cache
+        # Return numpy array of shape (len(texts), 384)
+```
+
+**Cache behavior**: The in-memory dict cache maps `text → embedding vector`. Cache size is bounded by `EMBEDDING_CACHE_SIZE = 10,000`. No eviction policy is specified — the cache grows until the bound is reached, at which point caching stops (not LRU; effectively a "fill then bypass" strategy).
+
+## Batch Embedding Pipeline (`engine/embedding/batch.py`)
+
+```python
+async def batch_generate_embeddings(
+    chunks: list[TextChunk],
+    model: EmbeddingModel,
+    batch_size: int = 32
+) -> list[np.ndarray]:
+    # Process in batches to avoid OOM on large documents
+    # Returns list of 384-dim vectors, one per chunk
+```
+
+## `EmbeddingStorage` (`engine/embedding/storage.py`)
+
+Persists vectors to PostgreSQL:
+
+```sql
+INSERT INTO document_chunks (document_id, content, chunk_index, embedding, metadata)
+VALUES ($1, $2, $3, $4::vector, $5)
+```
+
+The `$4::vector` cast stores the numpy array as a pgvector `vector(384)` column, enabling HNSW index searches.
+
+## Web Scraping Subsystem (`engine/ingestion/scrapers/`)
+
+For `ResourceType.WEBSITE`, the ingestion pipeline routes through:
+
+1. **Playwright scraper**: headless Chromium renders JavaScript-heavy pages
+2. **httpx scraper**: lightweight HTTP fetch for static HTML
+3. **BeautifulSoup + lxml**: HTML parsing, tag extraction, link discovery
+
+Configuration via `ScrapingConfig`:
+- `timeout: 30s`
+- `max_retries: 3`
+- `user_agent: "OpenTier Intelligence Bot/1.0"`
+
+Crawled content is converted to Markdown via `markdown` library before entering the standard text chunking pipeline.
+
+## GitHub Integration (`engine/ingestion/scrapers/`)
+
+For `ResourceType.CODE` with a GitHub URL, `PyGithub` is used to:
+1. Fetch repository tree
+2. Enumerate files by extension
+3. Fetch file contents
+4. Feed into the ingestion pipeline as `CODE` type documents

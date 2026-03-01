@@ -1,0 +1,104 @@
+# Component Architecture
+
+## Layer Separation
+
+The `components/` directory is split into three distinct layers with different responsibilities:
+
+```mermaid
+flowchart LR
+    Provider["provider/\nTheme context"]
+    Core["core/\nauth · chat\ndashboard · landing"]
+    AI["ai-elements/\nmessage · sources\ncode-block · tools\n+ 38 more"]
+    UI["ui/\nRadix primitives\nforms · layout\nanimations"]
+
+    Provider -->|"wraps"| Core
+    Core -->|"uses"| AI
+    Core -->|"uses"| UI
+    AI -->|"uses"| UI
+```
+
+## `components/ai-elements/` — All 44 Components
+
+These are AI-interface-specific components that have no use outside a chat/AI context:
+
+| Component | Purpose |
+|-----------|---------|
+| `agent.tsx` | Agent execution display |
+| `artifact.tsx` | Generated artifact display (code, files) |
+| `attachments.tsx` | File attachment upload UI |
+| `audio-player.tsx` | Audio playback for voice responses |
+| `canvas.tsx` | Drawing/whiteboard canvas |
+| `chain-of-thought.tsx` | Reasoning chain expansion |
+| `checkpoint.tsx` | Pipeline checkpoint status |
+| `code-block.tsx` | Syntax-highlighted code with copy |
+| `commit.tsx` | Git commit display |
+| `confirmation.tsx` | Action confirmation prompt |
+| `connection.tsx` | Service connection status |
+| `context.tsx` | Context window display |
+| `controls.tsx` | Chat generation controls |
+| `conversation.tsx` | Conversation thread display |
+| `edge.tsx` | Graph edge rendering |
+| `environment-variables.tsx` | Env var display |
+| `file-tree.tsx` | File system tree view |
+| `image.tsx` | AI-generated image display |
+| `inline-citation.tsx` | Inline RAG source citation `[1]` |
+| `jsx-preview.tsx` | Live JSX component preview |
+| `message.tsx` | Core chat message renderer |
+| `mic-selector.tsx` | Microphone input selector |
+| `model-selector.tsx` | LLM model picker |
+| `node.tsx` | Graph node rendering |
+| `open-in-chat.tsx` | "Open in chat" action |
+| `package-info.tsx` | NPM/PyPI package details |
+| `panel.tsx` | Side panel container |
+| `persona.tsx` | AI persona selector |
+| `plan.tsx` | Task plan display |
+| `prompt-input.tsx` | Chat input textarea + actions |
+| `queue.tsx` | Task queue status |
+| `reasoning.tsx` | Extended reasoning display |
+| `sandbox.tsx` | Code execution sandbox |
+| `schema-display.tsx` | JSON schema viewer |
+| `shimmer.tsx` | Loading skeleton shimmer |
+| `snippet.tsx` | Code snippet display |
+| `sources.tsx` | RAG sources list panel |
+| `speech-input.tsx` | Voice-to-text input |
+| `stack-trace.tsx` | Error stack trace display |
+| `suggestion.tsx` | Suggested prompt chips |
+| `task.tsx` | Individual task status |
+| `terminal.tsx` | Terminal command output |
+| `test-results.tsx` | Test suite results |
+| `tool.tsx` | Tool call display |
+| `toolbar.tsx` | Chat action toolbar |
+| `transcription.tsx` | Audio transcription display |
+| `voice-selector.tsx` | TTS voice picker |
+| `web-preview.tsx` | Embedded web preview |
+
+## `components/core/` — Page Modules
+
+### `core/auth/`
+- `constants.ts` — `AuthView` union type: `"signin" | "signup" | "verify" | "forgot-password" | "reset-password"`
+- `sign-in.tsx`, `sign-up.tsx`, `verify.tsx`, `forgot-password.tsx` — form components wired to `AuthContext`
+- `otp-input.tsx` — 6-digit OTP input with auto-focus advancement
+- `protected-route.tsx` — HOC that reads `isAuthenticated` from `AuthContext` and redirects to `/` with `?auth=signin` if false
+
+### `core/chat/`
+- `chat.tsx` — top-level chat shell: renders sidebar + main area, handles conversation selection
+- `chatarea/chatarea.tsx` — message list + input, auto-scroll, streaming state
+- `sidebar/` — conversation list with search, new chat button, conversation items
+
+### `core/dashboard/`
+- `dashboard.tsx` — reads `activeDashboardView` from `UiContext`, renders the correct sub-view
+- Sub-views: `overview.tsx` (stats), `conversations.tsx` (user's conversations), `sessions.tsx` (active sessions), `notifications.tsx`, `profile.tsx`, `settings.tsx`, `admin.tsx` (admin-only: user management + resources)
+
+### `core/landing/`
+- Full marketing landing page split into section components
+- `data/` directory contains static content data (FAQ answers, feature list, etc.) — no API calls
+
+## `components/ui/` — Design System
+
+72 components following a consistent API pattern. Key categories:
+
+- **Radix UI wrappers**: `accordion`, `alert-dialog`, `dialog`, `dropdown-menu`, `popover`, `select`, `tabs`, `tooltip` — all use Radix headless primitives with Tailwind styling
+- **Animation primitives**: `animated-beam`, `border-beam`, `ripple-button`, `rainbow-button`, `shimmer`, `spotlight-new` — CSS/Framer Motion animations
+- **Layout**: `sidebar`, `resizable`, `scroll-area`, `sheet`, `drawer` — structural layout components
+- **Data display**: `table`, `chart`, `badge`, `avatar`, `carousel`
+- **Form primitives**: `button`, `input`, `textarea`, `checkbox`, `radio-group`, `switch`, `slider`, `calendar`
