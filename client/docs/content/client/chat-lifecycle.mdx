@@ -26,7 +26,8 @@ interface SendMessageRequest {
 
 ## Chat Store State Machine
 
-```mermaid
+
+<Mermaid chart={`
 %%{init: {'flowchart': {'nodeSpacing': 80, 'rankSpacing': 120}}}%%
 flowchart LR
     Idle(["Idle"])
@@ -49,7 +50,8 @@ flowchart LR
     ST -->|"is_final=true"| Idle
     ST -->|"abort()"| Idle
     WR -->|"response received"| Idle
-```
+`} />
+
 
 ## Free Tier Limit
 
@@ -80,7 +82,8 @@ The streaming flow uses an `AbortController` stored in the Zustand store. `stopG
 
 ## SSE Chat Sequence
 
-```mermaid
+
+<Mermaid chart={`
 sequenceDiagram
     participant Browser
     participant NextProxy as "Next.js /api"
@@ -109,7 +112,8 @@ sequenceDiagram
     Tonic-->>Rust: final chunk
     Rust-->>Browser: SSE data sources + metrics + is_final true
     Browser->>Browser: render sources panel
-```
+`} />
+
 
 ## Message Branching (Edit & Regenerate)
 

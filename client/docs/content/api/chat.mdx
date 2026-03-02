@@ -42,11 +42,12 @@ GET /chat/conversations/{id}
 
 ### `send_message` (Non-streaming)
 
-```mermaid
+
+<Mermaid chart={`
 sequenceDiagram
     participant Client
-    participant Rust as "Rust: send_message()"
-    participant Python as "Python Intelligence"
+    participant Rust as Rust: send_message()
+    participant Python as Python Intelligence
     participant DB as PostgreSQL
 
     Client->>Rust: POST /chat/conversations/id/messages
@@ -57,15 +58,17 @@ sequenceDiagram
     Python->>DB: save user message, retrieve RAG context, generate response, save assistant message
     Python-->>Rust: ChatResponse with message_id + response + sources + metrics
     Rust-->>Client: 200 MessageResponse with message_id + conversation_id + role + content + sources
-```
+`} />
+
 
 ### `stream_chat` (SSE Streaming)
 
-```mermaid
+
+<Mermaid chart={`
 sequenceDiagram
     participant Client
-    participant Rust as "Rust: stream_chat()"
-    participant Python as "Python Intelligence"
+    participant Rust as Rust: stream_chat()
+    participant Python as Python Intelligence
 
     Client->>Rust: POST /chat/conversations/id/stream
     Rust->>Rust: auth_middleware + ownership check
@@ -79,7 +82,8 @@ sequenceDiagram
     Python-->>Rust: ChatStreamChunk sources is_final true
     Rust-->>Client: SSE data sources + is_final true
     Rust-->>Client: SSE close
-```
+`} />
+
 
 **SSE Bridge implementation** uses `async-stream` + Axum's `Sse<impl Stream<Item = Event>>`:
 ```rust

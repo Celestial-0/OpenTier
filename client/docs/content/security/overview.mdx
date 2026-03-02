@@ -2,7 +2,8 @@
 
 ## Token Lifecycle
 
-```mermaid
+
+<Mermaid chart={`
 flowchart TD
     Start(["POST /auth/signin — 200 OK"])
     TokenIssued["Token issued\n64-char random string"]
@@ -22,11 +23,13 @@ flowchart TD
     Revoked --> End
     AllRevoked --> End
     SessionRevoked --> End
-```
+`} />
+
 
 ## Auth Middleware Security Chain
 
-```mermaid
+
+<Mermaid chart={`
 flowchart TD
     Request["Incoming request - Authorization: Bearer token"]
     ExtractToken["Extract token from header"]
@@ -39,13 +42,15 @@ flowchart TD
     Request --> ExtractToken --> DBLookup --> Found
     Found -- Yes --> Inject --> Handler
     Found -- No --> Reject401
-```
+`} />
+
 
 **Timing attack risk**: The session token lookup uses a standard `WHERE session_token = $1` comparison. PostgreSQL string comparisons are not constant-time. An attacker with network timing access could theoretically infer token values byte-by-byte. Mitigation: use `HMAC` comparison or a token hash column.
 
 ## OAuth Security Flow
 
-```mermaid
+
+<Mermaid chart={`
 sequenceDiagram
     participant Browser
     participant Rust as Rust API
@@ -67,7 +72,8 @@ sequenceDiagram
     Rust->>DB: Upsert user + account
     Rust->>DB: INSERT session
     Rust-->>Browser: 302 → FRONTEND_URL/chat?token=session_token
-```
+`} />
+
 
 **PKCE**: The OAuth2 flow uses PKCE (Proof Key for Code Exchange) to prevent authorization code interception attacks. The `code_verifier` never leaves the server.
 

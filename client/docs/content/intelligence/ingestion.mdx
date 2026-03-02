@@ -4,7 +4,8 @@
 
 `engine/ingestion/processor.py` processes every incoming document through a fixed pipeline:
 
-```mermaid
+
+<Mermaid chart={`
 %%{init: {'flowchart': {'wrappingWidth': 380}}}%%
 flowchart TB
     Input["AddResourceRequest\nuser_id · content · type · title · config"]
@@ -36,7 +37,8 @@ flowchart TB
     Track["JobStorage.update_progress()\nUPDATE ingestion_jobs SET progress_percent"]
 
     Input --> VAL --> PROC --> STORE --> Track
-```
+`} />
+
 
 Any step failure is caught, logged, and recorded in `ingestion_jobs.errors` (JSONB array). Partial failures result in job `status = 'partial'`.
 

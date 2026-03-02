@@ -38,7 +38,8 @@ It exposes **no HTTP endpoints** — its only interface is the gRPC server on po
 
 ## Startup Sequence
 
-```mermaid
+
+<Mermaid chart={`
 sequenceDiagram
     participant SystemD as Process Manager
     participant Main as main.py
@@ -67,7 +68,8 @@ sequenceDiagram
     gRPC-->>Main: listening on port 50051
     Main->>Main: register SIGTERM/SIGINT → graceful shutdown (30s grace)
     Main->>Main: await server.wait_for_termination()
-```
+`} />
+
 
 ## Configuration
 

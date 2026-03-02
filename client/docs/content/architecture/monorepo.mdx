@@ -78,7 +78,8 @@ The proto file is the single source of truth for the Rust↔Python interface. It
 - **Rust**: `build.rs` → `tonic-prost-build` → generated to `OUT_DIR`
 - **Python**: `grpcio-tools` → `python -m grpc_tools.protoc` → `intelligence/generated/`
 
-```mermaid
+
+<Mermaid chart={`
 graph LR
     Proto["proto/intelligence.proto"]
     BuildRS["server/api/build.rs\n(tonic-prost-build)"]
@@ -88,6 +89,7 @@ graph LR
 
     Proto --> BuildRS --> RustGenerated
     Proto --> PythonScript --> PythonGenerated
-```
+`} />
+
 
 Any change to `intelligence.proto` requires regenerating both sides before the services can communicate. The proto package uses `reserved` field ranges 1000–1999 (internal use) and 2000–2999 (future extensions), and follows a v1 → v2 versioning policy with a 6-month migration window for breaking changes.

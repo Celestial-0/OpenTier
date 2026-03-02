@@ -13,7 +13,8 @@ All tokens are generated via `rand::thread_rng()` — cryptographically secure r
 
 ## Auth State Lifecycle
 
-```mermaid
+
+<Mermaid chart={`
 stateDiagram-v2
     [*] --> Registered: POST /auth/signup
     Registered --> PendingVerification: verification email sent
@@ -27,11 +28,13 @@ stateDiagram-v2
     Active --> SoftDeleted: DELETE /user/delete-account
     SoftDeleted --> Active: POST /auth/recover-account
     Authenticated --> SoftDeleted: DELETE /user/delete-account (cascade sessions)
-```
+`} />
+
 
 ## Signup Flow
 
-```mermaid
+
+<Mermaid chart={`
 sequenceDiagram
     participant Client
     participant API as Rust API
@@ -51,7 +54,8 @@ sequenceDiagram
     API->>DB: INSERT INTO verification_tokens (user_id, token, otp, expires_at=+24h)
     API->>Email: send_verification_email(email, token, otp)
     API-->>Client: 200 user_id + email + verify message
-```
+`} />
+
 
 ## Password Requirements
 
@@ -96,7 +100,8 @@ pub fn start_session_cleanup_task(db: PgPool) -> tokio::task::JoinHandle<()>
 
 ## OAuth Flow
 
-```mermaid
+
+<Mermaid chart={`
 sequenceDiagram
     participant Browser
     participant API as Rust API
@@ -122,7 +127,8 @@ sequenceDiagram
     end
     API->>DB: INSERT session → session_token
     API-->>Browser: 302 Redirect → FRONTEND_URL/chat?token=session_token
-```
+`} />
+
 
 ## Role Model
 

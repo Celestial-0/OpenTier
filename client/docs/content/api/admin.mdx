@@ -7,7 +7,8 @@ Authorization is enforced at two layers:
 1. **`auth_middleware`** — validates the session token and injects `role: Role` into request extensions. All `/admin` routes require this middleware.
 2. **`require_admin`** — reads `role` from extensions and returns `403 Forbidden` if not `Role::Admin`. Zero additional DB queries.
 
-```mermaid
+
+<Mermaid chart={`
 flowchart TD
     Request["Incoming /admin/* request"]
     AuthMiddleware["auth_middleware\nSELECT user_id + role FROM sessions\nWHERE token=$1 AND not expired"]
@@ -21,7 +22,8 @@ flowchart TD
     AuthMiddleware -- "Token invalid/expired" --> Unauthorized
     RoleCheck -- "Yes" --> Handler
     RoleCheck -- "No (Role::User)" --> Forbidden
-```
+`} />
+
 
 ## Admin Stats
 
@@ -47,7 +49,8 @@ flowchart TD
 
 Resources (documents for RAG ingestion) are managed by the Intelligence service. The Rust admin handlers act as a proxy layer:
 
-```mermaid
+
+<Mermaid chart={`
 sequenceDiagram
     participant Admin as Admin Browser
     participant Rust as Rust API
@@ -66,7 +69,8 @@ sequenceDiagram
     Rust->>Python: gRPC GetResourceStatus resource_id
     Python-->>Rust: status=processing progress_percent=45.0
     Rust-->>Admin: ResourceStatusResponse
-```
+`} />
+
 
 **Resource types** (mapped from string to `pb::ResourceType` enum):
 - `"text"` → `TEXT`

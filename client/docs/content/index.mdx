@@ -22,7 +22,8 @@ This boundary is not a convention — it is enforced at the process level. No Py
 
 ## System Topology
 
-```mermaid
+
+<Mermaid chart={`
 %%{init: {'flowchart': {'nodeSpacing': 50, 'rankSpacing': 70}}}%%
 flowchart TB
     Browser(["Browser\nNext.js App Router"])
@@ -48,7 +49,8 @@ flowchart TB
     Embed -->|"asyncpg"| PgVec
     Chat -->|"OpenAI API"| LLM
     Ingest -->|"scrape"| Scraper
-```
+`} />
+
 
 ## Guiding Design Decisions
 

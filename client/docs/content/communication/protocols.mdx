@@ -2,7 +2,8 @@
 
 ## Protocol Layers
 
-```mermaid
+
+<Mermaid chart={`
 graph TD
     Browser["Browser"]
     NextJS["Next.js — Bun/Node"]
@@ -17,7 +18,8 @@ graph TD
     Rust -- TCP sqlx --> DB
     Python -- TCP asyncpg --> DB
     Python -- HTTPS REST --> LLM
-```
+`} />
+
 
 ## REST API (Browser ↔ Rust)
 
@@ -104,7 +106,8 @@ message AddResourceRequest {
 
 ## Sync vs Async Communication
 
-```mermaid
+
+<Mermaid chart={`
 sequenceDiagram
     participant Browser
     participant Rust
@@ -131,11 +134,13 @@ sequenceDiagram
     Note over Python: Background processing continues
     Rust->>Python: gRPC GetResourceStatus polling
     Python-->>Rust: status processing, progress 45pct
-```
+`} />
+
 
 ## Error Propagation Chain
 
-```mermaid
+
+<Mermaid chart={`
 flowchart LR
     PythonException["Python Exception\ne.g. ModelUnavailableError"]
     GrpcStatus["gRPC Status Code\nUNAVAILABLE"]
@@ -145,7 +150,8 @@ flowchart LR
     UINotification["UI: Sonner toast\nerror notification"]
 
     PythonException --> GrpcStatus --> RustMapping --> ClientError --> ZustandError --> UINotification
-```
+`} />
+
 
 **Error transparency**: Python exception details are **not** propagated to the browser. The gRPC status code is mapped to an HTTP status, and the Rust layer generates a generic error message. This prevents internal stack traces from leaking to clients.
 

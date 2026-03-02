@@ -2,7 +2,8 @@
 
 ## Auth Lifecycle
 
-```mermaid
+
+<Mermaid chart={`
 stateDiagram-v2
     [*] --> Unauthenticated: App load, no token in localStorage
 
@@ -23,7 +24,8 @@ stateDiagram-v2
 
     Authenticated --> Unauthenticated: logout() / 401 response from fetchUser()
     Authenticated --> [*]
-```
+`} />
+
 
 ## Token Storage
 
@@ -74,7 +76,8 @@ interface AuthContextType {
 
 ## Sign-In Sequence
 
-```mermaid
+
+<Mermaid chart={`
 sequenceDiagram
     participant U as User
     participant Modal as Auth Modal
@@ -100,7 +103,8 @@ sequenceDiagram
     AC->>AC: setUser(user), isAuthenticated = true
     AC->>AC: router.push('/chat')
     AC-->>Modal: closeModal()
-```
+`} />
+
 
 ## `SignInResponse` Type
 

@@ -4,7 +4,8 @@
 
 The `components/` directory is split into three distinct layers with different responsibilities:
 
-```mermaid
+
+<Mermaid chart={`
 flowchart LR
     Provider["provider/\nTheme context"]
     Core["core/\nauth · chat\ndashboard · landing"]
@@ -15,7 +16,8 @@ flowchart LR
     Core -->|"uses"| AI
     Core -->|"uses"| UI
     AI -->|"uses"| UI
-```
+`} />
+
 
 ## `components/ai-elements/` — All 44 Components
 

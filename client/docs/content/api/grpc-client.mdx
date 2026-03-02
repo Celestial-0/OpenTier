@@ -16,7 +16,8 @@ The client is instantiated once at startup, stored in `AppState`, and cloned per
 
 ## Startup Connection Strategy
 
-```mermaid
+
+<Mermaid chart={`
 flowchart TD
     Start["Server startup"]
     Attempt["Attempt eager connect\ntonic::transport::Channel::connect(intelligence_url)"]
@@ -29,7 +30,8 @@ flowchart TD
     Start --> Attempt
     Attempt -- "OK" --> Success --> Boot
     Attempt -- "Error" --> Failure --> LazyConnect --> LogWarn --> Boot
-```
+`} />
+
 
 This means auth, user, and admin endpoints remain fully operational even when the Intelligence service is down. Chat endpoints will fail at the RPC call with `UNAVAILABLE` → mapped to HTTP 503.
 

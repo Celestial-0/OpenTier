@@ -12,7 +12,8 @@ This adds the `vector(n)` data type, enabling storage of fixed-dimension floatin
 
 ## Document Storage Model
 
-```mermaid
+
+<Mermaid chart={`
 erDiagram
     documents {
         uuid id PK
@@ -58,7 +59,8 @@ erDiagram
     }
 
     documents ||--o{ document_chunks : "split into"
-```
+`} />
+
 
 ## `documents` Table
 
@@ -130,7 +132,8 @@ CREATE TABLE user_memories (
 
 ## Data Lifecycle
 
-```mermaid
+
+<Mermaid chart={`
 flowchart TD
     Upload["Admin uploads resource\n(POST /admin/resources)"]
     IngestJob["ingestion_jobs row\nstatus: queued"]
@@ -145,7 +148,8 @@ flowchart TD
 
     Upload --> IngestJob --> Scrape --> Clean --> Chunk --> DocRow --> EmbedChunks --> ChunkRows --> JobDone
     ChunkRows --> Search
-```
+`} />
+
 
 ## Consistency Risks
 

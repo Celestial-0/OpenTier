@@ -33,8 +33,8 @@ OpenTier/
 
 ## Isolation Boundaries
 
-```mermaid
-%%{init: {'theme': 'base', 'flowchart': {'curve': 'linear', 'nodeSpacing': 80, 'rankSpacing': 140}, 'themeVariables': {'primaryColor': '#151618', 'primaryTextColor': '#e2e8f0', 'primaryBorderColor': '#5d6b7d', 'lineColor': '#94a3b8', 'clusterBkg': '#151618', 'clusterBorder': '#5d6b7d', 'edgeLabelBackground': '#0f172a', 'tertiaryColor': '#1e293b', 'fontSize': '16px'}}}%%
+
+<Mermaid chart={`
 
 flowchart TB
 
@@ -72,7 +72,8 @@ PyService -->|"asyncpg + pgvector"| PG
 PyService -->|"httpx"| LLM
 RustAPI -->|"OAuth2 + PKCE"| OAuth
 RustAPI -->|"lettre  SMTP"| SMTP
-```
+`} />
+
 
 ## Language Boundaries
 

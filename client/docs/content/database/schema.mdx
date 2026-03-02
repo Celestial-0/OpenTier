@@ -14,7 +14,8 @@ Migrations run in sequence. Python migrations depend on the `conversations` tabl
 
 ## Entity Relationship Diagram
 
-```mermaid
+
+<Mermaid chart={`
 erDiagram
     users {
         uuid id PK
@@ -110,7 +111,8 @@ erDiagram
     conversations ||--o{ messages : "contains"
     conversations ||--o{ chat_messages : "contains"
     chat_messages ||--o| chat_messages : "branches from parent"
-```
+`} />
+
 
 ## Table Details
 

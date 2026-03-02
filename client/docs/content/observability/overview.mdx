@@ -49,7 +49,8 @@ logging.basicConfig(
 | `GET /health/intelligence` | Liveness | gRPC `Health.Check` (5s timeout) |
 | gRPC `Health.Ready` | Readiness | DB health (`SELECT 1`) + embedding model loaded |
 
-```mermaid
+
+<Mermaid chart={`
 flowchart TD
     LB["Load Balancer"]
     APILiveness["GET /health/api\n200 OK — process alive + uptime"]
@@ -59,7 +60,8 @@ flowchart TD
     LB --> APILiveness
     LB --> IntelLiveness
     IntelLiveness --> IntelReadiness
-```
+`} />
+
 
 **Startup implication**: If the Intelligence service fails its readiness probe (embedding model not loaded), the API's `/health/intelligence` will return an error. Load balancers can use this to delay routing chat requests until the service is fully ready.
 
@@ -128,7 +130,8 @@ Python migrations in `server/intelligence/migrations/` are plain SQL files run m
 
 ## Failure Isolation
 
-```mermaid
+
+<Mermaid chart={`
 flowchart TD
     subgraph Failures["Failure Scenarios"];
         IntelDown["Intelligence service down"]
@@ -150,6 +153,7 @@ flowchart TD
     DBDown --> AllFail
     LLMDown --> ChatDegraded
     EmbModelFail --> IngestFail
-```
+`} />
+
 
 The most critical single point of failure is the **shared PostgreSQL database**. A database outage affects all three processes simultaneously. Redis-based session caching would allow the Rust API to serve cached sessions during short DB outages.

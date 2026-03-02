@@ -4,7 +4,8 @@
 
 Every HTTP request passes through the following middleware stack in order:
 
-```mermaid
+
+<Mermaid chart={`
 flowchart TD
     Request["Incoming HTTP Request"]
     TraceLayer["1. TraceLayer\n(tower-http)\nStructured request/response logging"]
@@ -17,7 +18,8 @@ flowchart TD
     Response["HTTP Response"]
 
     Request --> TraceLayer --> CORSLayer --> Router --> RateLimit --> AuthMiddleware --> RequireAdmin --> Handler --> Response
-```
+`} />
+
 
 **Layers 1–2** apply globally to every request.  
 **Layer 4** applies per route group (separate `tower_governor` instances for `auth`, `user/chat/admin`).  

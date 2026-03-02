@@ -29,7 +29,8 @@ pub struct AppState {
 
 ## Module Structure
 
-```mermaid
+
+<Mermaid chart={`
 graph TD
     Main["main.rs\ntokio::main"]
     Gateway["gateway/\nAppState, router()"]
@@ -57,7 +58,8 @@ graph TD
     Auth --> GRPC
     Chat --> GRPC
     Admin --> GRPC
-```
+`} />
+
 
 ## Cargo Dependencies
 

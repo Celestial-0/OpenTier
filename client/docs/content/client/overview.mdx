@@ -16,7 +16,8 @@
 
 ## App Router — Route Tree
 
-```mermaid
+
+<Mermaid chart={`
 flowchart TD
     Root[app/layout.tsx - Root Layout]
     Landing["app/page.tsx - Landing Page"]
@@ -36,7 +37,8 @@ flowchart TD
     Root --> AuthReset
     ChatLayout --> ChatIndex
     ChatLayout --> ChatId
-```
+`} />
+
 
 ## Provider Wrapping Order
 

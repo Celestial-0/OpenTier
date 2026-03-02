@@ -4,7 +4,8 @@ This page traces a single streaming chat message from the browser click to the l
 
 ## Full Sequence Diagram
 
-```mermaid
+
+<Mermaid chart={`
 sequenceDiagram
 participant Browser
 participant Proxy as Next.js Proxy
@@ -66,7 +67,8 @@ Rust-->>Proxy: SSE event — sources + metrics + is_final
 Proxy-->>Browser: SSE event — sources + metrics + is_final
 Browser->>Browser: render sources panel, finalise message
 Rust-->>Browser: SSE stream closed
-```
+`} />
+
 
 ## DB Query Count Per Request
 
@@ -103,7 +105,8 @@ This is the steady-state count. First message in a new conversation adds one INS
 
 ## Failure Modes
 
-```mermaid
+
+<Mermaid chart={`
 flowchart TD
     Request["Incoming streaming chat request"]
 
@@ -127,7 +130,8 @@ flowchart TD
     Request --> GrpcFail --> SSE503
     Request --> LLMFail --> SSE504
     Request --> MidStream --> SSEError
-```
+`} />
+
 
 **SSE error handling in browser**: The chat store listens for SSE `error` events via `EventSource.onerror`. Mid-stream errors append an error token to the assistant message and set `state.error` in the Zustand chat store.
 
