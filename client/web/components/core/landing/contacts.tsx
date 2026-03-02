@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { motion } from "motion/react";
 import {
     Terminal,
@@ -11,8 +10,7 @@ import {
     Check,
 } from "lucide-react";
 import { useState } from "react";
-import { cn } from "@/lib/utils";
-import { RainbowButton } from "@/components/ui/rainbow-button";
+import { useForm } from "@tanstack/react-form";
 import { BorderBeam } from "@/components/ui/border-beam";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,135 +27,95 @@ const MOTION_VARIANTS = {
     },
 } as const;
 
-const CONTACT_CHANNELS = [
-    {
-        icon: Github,
-        label: "GitHub Issues",
-        description: "Bug reports and feature requests",
-        href: "https://github.com/Celestial-0/OpenTier/issues",
-        badge: "Open Source",
-        badgeColor: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
-    },
-    {
-        icon: MessageCircle,
-        label: "Discussions",
-        description: "Ask questions, share integrations",
-        href: "https://github.com/Celestial-0/OpenTier/discussions",
-        badge: "Community",
-        badgeColor: "bg-blue-500/10 text-blue-500 border-blue-500/20",
-    },
-    {
-        icon: Mail,
-        label: "Email",
-        description: "Enterprise inquiries & partnerships",
-        href: "mailto:contact@yashkumarsingh.tech",
-        badge: "Direct",
-        badgeColor: "bg-primary/10 text-primary border-primary/20",
-    },
-] as const;
-
 export const Contacts = () => {
     return (
-        <section className="relative py-24 overflow-hidden bg-background">
-            {/* Top divider */}
-            <div className="absolute top-0 left-0 right-0 h-px bg-linear-to-r from-transparent via-border to-transparent" />
+        <section id="contact" className="relative py-24 overflow-hidden bg-background">
+            {/* Top fade to merge with FAQ bottom */}
+            <div className="pointer-events-none absolute top-0 left-0 right-0 h-24 bg-linear-to-b from-background to-transparent z-10" />
 
             <div className="container mx-auto px-4">
-                {/* Header */}
-                <motion.div
-                    variants={MOTION_VARIANTS.container}
-                    initial="hidden"
-                    whileInView="show"
-                    viewport={{ once: true, margin: "-60px" }}
-                    className="text-center max-w-3xl mx-auto mb-16"
-                >
-                    <motion.div variants={MOTION_VARIANTS.item}>
-                        <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border bg-muted/40 text-xs text-muted-foreground mb-6">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            Ready to integrate
-                        </span>
-                    </motion.div>
-                    <motion.h2
-                        variants={MOTION_VARIANTS.item}
-                        className="text-4xl md:text-5xl font-bold tracking-tight text-foreground mb-4"
-                    >
-                        Start building in minutes
-                    </motion.h2>
-                    <motion.p
-                        variants={MOTION_VARIANTS.item}
-                        className="text-lg text-muted-foreground leading-relaxed"
-                    >
-                        OpenTier is open source and self-hostable. Choose your integration path
-                        or deploy the full stack on your infrastructure.
-                    </motion.p>
-                </motion.div>
+                {/* Lamp + Header */}
+                <div className="relative flex flex-col items-center mb-16">
+                    {/* Lamp Effect */}
+                    <div className="relative flex w-full h-52 items-center justify-center isolate z-0 scale-y-125">
+                        <motion.div
+                            initial={{ opacity: 0, width: "0rem" }}
+                            whileInView={{ opacity: 1, width: "30rem" }}
+                            viewport={{ once: true, margin: "-100px" }}
+                            transition={{ delay: 0.3, duration: 0.8, ease: "easeInOut" }}
+                            style={{ backgroundImage: `conic-gradient(var(--conic-position), var(--tw-gradient-stops))` }}
+                            className="absolute inset-auto right-1/2 h-56 overflow-visible w-120 bg-gradient-conic from-[#CE422B] via-transparent to-transparent text-white [--conic-position:from_70deg_at_center_top]"
+                        >
+                            <div className="absolute w-full left-0 bg-background h-40 bottom-0 z-20 mask-[linear-gradient(to_top,white,transparent)]" />
+                            <div className="absolute w-40 h-full left-0 bg-background bottom-0 z-20 mask-[linear-gradient(to_right,white,transparent)]" />
+                        </motion.div>
+                        <motion.div
+                            initial={{ opacity: 0, width: "0rem" }}
+                            whileInView={{ opacity: 1, width: "30rem" }}
+                            viewport={{ once: true, margin: "-100px" }}
+                            transition={{ delay: 0.3, duration: 0.8, ease: "easeInOut" }}
+                            style={{ backgroundImage: `conic-gradient(var(--conic-position), var(--tw-gradient-stops))` }}
+                            className="absolute inset-auto left-1/2 h-56 w-120 bg-gradient-conic from-transparent via-transparent to-[#CE422B] text-white [--conic-position:from_290deg_at_center_top]"
+                        >
+                            <div className="absolute w-40 h-full right-0 bg-background bottom-0 z-20 mask-[linear-gradient(to_left,white,transparent)]" />
+                            <div className="absolute w-full right-0 bg-background h-40 bottom-0 z-20 mask-[linear-gradient(to_top,white,transparent)]" />
+                        </motion.div>
+                        <div className="absolute top-1/2 h-48 w-full translate-y-12 scale-x-150 bg-background blur-2xl" />
+                        <div className="absolute top-1/2 z-50 h-48 w-full bg-transparent opacity-10 backdrop-blur-md" />
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            whileInView={{ opacity: 0.5 }}
+                            viewport={{ once: true, margin: "-100px" }}
+                            transition={{ delay: 0.3, duration: 0.8, ease: "easeInOut" }}
+                            className="absolute inset-auto z-50 h-36 w-md -translate-y-1/2 rounded-full bg-[#CE422B] blur-3xl"
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, width: "0rem" }}
+                            whileInView={{ opacity: 1, width: "16rem" }}
+                            viewport={{ once: true, margin: "-100px" }}
+                            transition={{ delay: 0.3, duration: 0.8, ease: "easeInOut" }}
+                            className="absolute inset-auto z-30 h-36 w-64 -translate-y-24 rounded-full bg-[#CE422B] blur-2xl"
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, width: "0rem" }}
+                            whileInView={{ opacity: 1, width: "30rem" }}
+                            viewport={{ once: true, margin: "-100px" }}
+                            transition={{ delay: 0.3, duration: 0.8, ease: "easeInOut" }}
+                            className="absolute inset-auto z-50 h-0.5 w-120 -translate-y-28 bg-[#CE422B]"
+                        />
+                        <div className="absolute inset-auto z-40 h-44 w-full -translate-y-50 bg-background" />
+                    </div>
 
-                {/* CTA + Contact Row */}
-                <motion.div
-                    variants={MOTION_VARIANTS.container}
-                    initial="hidden"
-                    whileInView="show"
-                    viewport={{ once: true, margin: "-60px" }}
-                    className="grid grid-cols-1 lg:grid-cols-5 gap-4"
-                >
-                    {/* Primary CTA */}
+                    {/* Header */}
                     <motion.div
-                        variants={MOTION_VARIANTS.item}
-                        className="lg:col-span-2 relative rounded-xl border border-border/60 bg-card/40 backdrop-blur-sm p-8 overflow-hidden flex flex-col justify-between"
+                        variants={MOTION_VARIANTS.container}
+                        initial="hidden"
+                        whileInView="show"
+                        viewport={{ once: true, margin: "-60px" }}
+                        className="relative z-50 -mt-20 text-center max-w-3xl mx-auto"
                     >
-                        <BorderBeam size={300} duration={8} borderWidth={1.5} />
-                        <div>
-                            <h3 className="text-xl font-bold text-foreground mb-2">Deploy OpenTier today</h3>
-                            <p className="text-sm text-muted-foreground leading-relaxed mb-6">
-                                Self-host the complete stack — Rust gateway, Python intelligence engine, and PostgreSQL —
-                                or contribute to the growing ecosystem.
-                            </p>
-                        </div>
-                        <div className="flex flex-col sm:flex-row gap-3">
-                            <Link href="https://github.com/Celestial-0/OpenTier" target="_blank" rel="noopener noreferrer">
-                                <RainbowButton className="w-full text-sm gap-2">
-                                    <Github className="h-4 w-4" />
-                                    View on GitHub
-                                </RainbowButton>
-                            </Link>
-                            <Link href="/chat">
-                                <button className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg border border-border bg-background/60 hover:bg-muted/60 transition-colors text-sm font-medium text-foreground group/btn w-full sm:w-auto">
-                                    Try Demo
-                                    <ArrowRight className="h-3.5 w-3.5 group-hover/btn:translate-x-0.5 transition-transform" />
-                                </button>
-                            </Link>
-                        </div>
+                        <motion.div variants={MOTION_VARIANTS.item}>
+                            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border bg-muted/40 text-xs text-muted-foreground mb-6">
+                                <span className="h-1.5 w-1.5 rounded-full bg-[#3776AB] animate-pulse" />
+                                Get in touch
+                            </span>
+                        </motion.div>
+                        <motion.h2
+                            variants={MOTION_VARIANTS.item}
+                            className="text-4xl md:text-5xl font-bold tracking-tight text-foreground mb-4"
+                        >
+                            We&apos;d love to hear from you
+                        </motion.h2>
+                        <motion.p
+                            variants={MOTION_VARIANTS.item}
+                            className="text-lg text-muted-foreground leading-relaxed"
+                        >
+                            Have a question, feedback, or partnership inquiry?
+                            <br />
+                            Drop us a message and our team will get back to you.
+                        </motion.p>
                     </motion.div>
-
-                    {/* Contact Channels */}
-                    <motion.div
-                        variants={MOTION_VARIANTS.item}
-                        className="lg:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-3"
-                    >
-                        {CONTACT_CHANNELS.map((channel) => (
-                            <Link
-                                key={channel.label}
-                                href={channel.href}
-                                target={channel.href.startsWith("http") ? "_blank" : undefined}
-                                rel={channel.href.startsWith("http") ? "noopener noreferrer" : undefined}
-                                className="group relative rounded-xl border border-border/60 bg-card/40 backdrop-blur-sm p-5 hover:border-border hover:bg-card/60 transition-all overflow-hidden flex flex-col justify-between"
-                            >
-                                <div className="absolute inset-0 bg-linear-to-br from-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-                                <div className="relative z-10">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <channel.icon className="h-5 w-5 text-muted-foreground group-hover:text-foreground transition-colors" />
-                                        <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded-full border", channel.badgeColor)}>
-                                            {channel.badge}
-                                        </span>
-                                    </div>
-                                    <p className="font-semibold text-sm text-foreground mb-1">{channel.label}</p>
-                                    <p className="text-xs text-muted-foreground leading-relaxed">{channel.description}</p>
-                                </div>
-                                <ArrowRight className="relative z-10 mt-4 h-3.5 w-3.5 text-muted-foreground/50 group-hover:text-muted-foreground group-hover:translate-x-0.5 transition-all self-end" />
-                            </Link>
-                        ))}
-                    </motion.div>
-                </motion.div>
+                </div>
 
                 {/* Contact Form */}
                 <motion.div
@@ -217,19 +175,40 @@ export const Contacts = () => {
 };
 
 function ContactForm() {
-    const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle");
-    const [form, setForm] = useState({ name: "", email: "", subject: "", message: "" });
+    const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+    const [errorMsg, setErrorMsg] = useState("");
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setStatus("sending");
-        // Simulate send — wire up your API here
-        await new Promise((r) => setTimeout(r, 1200));
-        setStatus("sent");
-    };
+    const form = useForm({
+        defaultValues: {
+            name: "",
+            email: "",
+            subject: "",
+            message: "",
+        },
+        onSubmit: async ({ value }) => {
+            setStatus("sending");
+            setErrorMsg("");
 
-    const set = (field: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-        setForm((prev) => ({ ...prev, [field]: e.target.value }));
+            try {
+                const res = await fetch("/api/contact", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(value),
+                });
+
+                const data = await res.json().catch(() => ({}));
+
+                if (!res.ok) {
+                    throw new Error(data.message || "Failed to send message.");
+                }
+
+                setStatus("sent");
+            } catch (err) {
+                setErrorMsg(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+                setStatus("error");
+            }
+        },
+    });
 
     if (status === "sent") {
         return (
@@ -240,7 +219,7 @@ function ContactForm() {
                 <h4 className="text-lg font-semibold text-foreground">Message sent!</h4>
                 <p className="text-sm text-muted-foreground max-w-xs">Thanks for reaching out. We&apos;ll get back to you within 24 hours.</p>
                 <button
-                    onClick={() => { setStatus("idle"); setForm({ name: "", email: "", subject: "", message: "" }); }}
+                    onClick={() => { setStatus("idle"); setErrorMsg(""); form.reset(); }}
                     className="mt-2 text-xs text-muted-foreground underline underline-offset-4 hover:text-foreground transition-colors"
                 >
                     Send another
@@ -250,55 +229,82 @@ function ContactForm() {
     }
 
     return (
-        <form onSubmit={handleSubmit} className="p-8 lg:p-10 space-y-5">
+        <form
+            onSubmit={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                void form.handleSubmit();
+            }}
+            className="p-8 lg:p-10 space-y-5"
+        >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                    <Label htmlFor="cf-name" className="text-xs text-muted-foreground">Name</Label>
-                    <Input
-                        id="cf-name"
-                        placeholder="Yash Kumar"
-                        value={form.name}
-                        onChange={set("name")}
-                        required
-                        className="bg-background/60 border-border/60 focus:border-border text-sm"
-                    />
-                </div>
-                <div className="space-y-1.5">
-                    <Label htmlFor="cf-email" className="text-xs text-muted-foreground">Email</Label>
-                    <Input
-                        id="cf-email"
-                        type="email"
-                        placeholder="you@company.com"
-                        value={form.email}
-                        onChange={set("email")}
-                        required
-                        className="bg-background/60 border-border/60 focus:border-border text-sm"
-                    />
-                </div>
-            </div>
-            <div className="space-y-1.5">
-                <Label htmlFor="cf-subject" className="text-xs text-muted-foreground">Subject</Label>
-                <Input
-                    id="cf-subject"
-                    placeholder="Enterprise deployment inquiry"
-                    value={form.subject}
-                    onChange={set("subject")}
-                    required
-                    className="bg-background/60 border-border/60 focus:border-border text-sm"
+                <form.Field
+                    name="name"
+                    children={(field) => (
+                        <div className="space-y-1.5">
+                            <Label htmlFor="cf-name" className="text-xs text-muted-foreground">Name</Label>
+                            <Input
+                                id="cf-name"
+                                placeholder="Yash Kumar Singh"
+                                value={field.state.value}
+                                onChange={(e) => field.handleChange(e.target.value)}
+                                required
+                                className="bg-background/60 border-border/60 focus:border-border text-sm"
+                            />
+                        </div>
+                    )}
+                />
+                <form.Field
+                    name="email"
+                    children={(field) => (
+                        <div className="space-y-1.5">
+                            <Label htmlFor="cf-email" className="text-xs text-muted-foreground">Email</Label>
+                            <Input
+                                id="cf-email"
+                                type="email"
+                                placeholder="yashkumarsingh@ieee.org"
+                                value={field.state.value}
+                                onChange={(e) => field.handleChange(e.target.value)}
+                                required
+                                className="bg-background/60 border-border/60 focus:border-border text-sm"
+                            />
+                        </div>
+                    )}
                 />
             </div>
-            <div className="space-y-1.5">
-                <Label htmlFor="cf-message" className="text-xs text-muted-foreground">Message</Label>
-                <Textarea
-                    id="cf-message"
-                    placeholder="Tell us about your use case, team size, or technical question..."
-                    value={form.message}
-                    onChange={set("message")}
-                    required
-                    rows={5}
-                    className="bg-background/60 border-border/60 focus:border-border text-sm resize-none"
-                />
-            </div>
+            <form.Field
+                name="subject"
+                children={(field) => (
+                    <div className="space-y-1.5">
+                        <Label htmlFor="cf-subject" className="text-xs text-muted-foreground">Subject</Label>
+                        <Input
+                            id="cf-subject"
+                            placeholder="Enterprise deployment inquiry"
+                            value={field.state.value}
+                            onChange={(e) => field.handleChange(e.target.value)}
+                            required
+                            className="bg-background/60 border-border/60 focus:border-border text-sm"
+                        />
+                    </div>
+                )}
+            />
+            <form.Field
+                name="message"
+                children={(field) => (
+                    <div className="space-y-1.5">
+                        <Label htmlFor="cf-message" className="text-xs text-muted-foreground">Message</Label>
+                        <Textarea
+                            id="cf-message"
+                            placeholder="Tell us about your use case, team size, or technical question..."
+                            value={field.state.value}
+                            onChange={(e) => field.handleChange(e.target.value)}
+                            required
+                            rows={5}
+                            className="bg-background/60 border-border/60 focus:border-border text-sm resize-none"
+                        />
+                    </div>
+                )}
+            />
             <button
                 type="submit"
                 disabled={status === "sending"}
@@ -319,6 +325,9 @@ function ContactForm() {
                     </>
                 )}
             </button>
+            {status === "error" && errorMsg && (
+                <p className="text-sm text-red-500 text-center">{errorMsg}</p>
+            )}
         </form>
     );
 }

@@ -13,25 +13,28 @@ import {
   MenuToggleIcon,
   MessageCircleMoreIcon,
   UsersIcon,
+  FileTextIcon,
 } from "@/components/core/common/icons/animated";
 import { OpentierLogo } from "@/components/core/common/logos";
 import { AuthModal } from "@/components/core/landing/auth";
 import Link from "next/link";
 import { useRef, useState } from "react";
-import { knowledgeBaseItems } from "./navbar/constants";
 import { MobileMenu } from "./navbar/mobile-menu";
-import { ListItem } from "./navbar/nav-list-item";
 import { SmoothProfileDropdown } from "./navbar/profile-dropdown";
+import { useUi } from "@/context/ui-context";
 import { useAuth } from "@/context/auth-context";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 export const Navbar = () => {
-  const { user, isAuthenticated, signIn, signUp, resendVerification, verifyEmail, forgotPassword } = useAuth();
+  const router = useRouter();
+  const { user, isAuthenticated } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Refs for animated icons in navigation
   const chatIconRef = useRef<any>(null);
   const dashboardIconRef = useRef<any>(null);
+  const docsIconRef = useRef<any>(null);
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md supports-[backdrop-filter]:bg-background/0 ">
@@ -40,8 +43,8 @@ export const Navbar = () => {
           {/* Logo */}
           <button
             onClick={() => {
-              // TODO: Connect to navigation store/context
-              console.log('Navigate to Home');
+              router.push("/");
+              window.scrollTo({ top: 0, behavior: "smooth" });
             }}
             className="group flex items-center gap-3 transition-all duration-300 hover:scale-105"
           >
@@ -81,28 +84,19 @@ export const Navbar = () => {
                   </Link>
                 </NavigationMenuItem>
 
-                {/* Knowledge Base - Dropdown */}
+                {/* Docs - Direct Link */}
                 <NavigationMenuItem>
-                  <NavigationMenuTrigger className="group/item transition-all duration-200 hover:scale-105 bg-background/0">
-                    Knowledge Base
-                  </NavigationMenuTrigger>
-                  <NavigationMenuContent className="bg-background/0">
-                    <ul className="grid w-[400px] gap-3 p-4 md:w-[500px] md:grid-cols-2 lg:w-[600px] bg-background/0">
-                      {knowledgeBaseItems.map((item) => (
-                        <ListItem
-                          key={item.title}
-                          title={item.title}
-                          icon={item.icon}
-                          onClick={() => {
-                            // TODO: Connect to navigation store/context
-                            console.log(`Navigate to ${item.title}`);
-                          }}
-                        >
-                          {item.description}
-                        </ListItem>
-                      ))}
-                    </ul>
-                  </NavigationMenuContent>
+                  <Link
+                    href="https://celestial-0.github.io/OpenTier/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group inline-flex h-9 w-max items-center justify-center rounded-md px-4 py-2 text-sm font-medium transition-all duration-200 hover:scale-105 hover:bg-muted focus:bg-muted focus:outline-none disabled:pointer-events-none disabled:opacity-50"
+                    onMouseEnter={() => docsIconRef.current?.startAnimation()}
+                    onMouseLeave={() => docsIconRef.current?.stopAnimation()}
+                  >
+                    <FileTextIcon ref={docsIconRef} size={20} className="mr-2" />
+                    Docs
+                  </Link>
                 </NavigationMenuItem>
               </NavigationMenuList>
             </NavigationMenu>

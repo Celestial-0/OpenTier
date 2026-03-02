@@ -52,6 +52,7 @@ pub struct EmailConfig {
     pub from_email: String,
     pub frontend_url: String,
     pub api_url: String,
+    pub contact_email: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -153,6 +154,7 @@ impl EmailConfig {
             frontend_url: env::var("FRONTEND_URL")
                 .unwrap_or_else(|_| "http://localhost:3000".to_string()),
             api_url: env::var("API_URL").unwrap_or_else(|_| "http://localhost:4000".to_string()),
+            contact_email: env::var("CONTACT_EMAIL").ok(),
         })
     }
 }

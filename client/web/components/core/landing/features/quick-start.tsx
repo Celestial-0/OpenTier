@@ -65,8 +65,8 @@ export const QuickStart = () => {
                 <h3 className="text-3xl md:text-4xl font-bold text-foreground mb-3">
                     Up and running in 3 steps
                 </h3>
-                <p className="text-muted-foreground max-w-xl mx-auto text-sm">
-                    The full stack — Rust gateway, Python intelligence engine, and Postgres — runs locally via Docker Compose.
+                <p className="text-muted-foreground max-w-3xl mx-auto text-sm">
+                    Rust gateway, Python intelligence engine, and Postgres —&gt; runs locally via Docker Compose.
                 </p>
             </div>
 
@@ -96,7 +96,7 @@ export const QuickStart = () => {
                             </div>
                             <p className="font-semibold text-foreground mb-1">{s.label}</p>
                             <p className="text-xs text-muted-foreground leading-relaxed mb-4">{s.description}</p>
-                            <pre className="rounded-lg bg-background/70 border border-border/50 px-4 py-3 text-[11px] font-mono text-muted-foreground leading-relaxed overflow-x-auto whitespace-pre">
+                            <pre className="rounded-lg bg-background/70 border border-border/50 px-4 py-3 text-[11px] font-mono text-muted-foreground leading-relaxed overflow-x-auto whitespace-pre [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                                 {s.code}
                             </pre>
                         </div>
@@ -115,7 +115,14 @@ export const QuickStart = () => {
                     variants={MOTION_VARIANTS.item}
                     className="relative rounded-xl border border-border/60 bg-card/40 backdrop-blur-sm p-6 overflow-hidden flex flex-col sm:flex-row items-center justify-between gap-4"
                 >
-                    <BorderBeam size={300} duration={8} borderWidth={1.5} />
+                    <BorderBeam
+                        size={320}
+                        duration={8}
+                        delay={2}
+                        initialOffset={28}
+                        borderWidth={1.5}
+                        className="aspect-8/1 from-transparent via-primary to-transparent"
+                    />
                     <div className="relative z-10 text-center sm:text-left">
                         <p className="font-semibold text-foreground">Ready to deploy?</p>
                         <p className="text-sm text-muted-foreground">Read the full setup guide or browse the source on GitHub.</p>

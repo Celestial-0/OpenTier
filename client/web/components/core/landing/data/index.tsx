@@ -5,7 +5,7 @@ import {
     SiNextdotjs,
 } from "react-icons/si";
 import { GrpcLogo, TokioLogo, SqlAlchemyLogo } from "@/components/core/common/logos";
-import { Database, FileSearch, Gauge, Layers, MessageSquare, Shield, Server as ServerIcon, GitBranch as GitBranchIcon } from "lucide-react";
+import { Database, FileSearch, Gauge, Layers, MessageSquare, Shield, Server as ServerIcon, GitBranch as GitBranchIcon, Network } from "lucide-react";
 import { TwitterIcon, LinkedinIcon, GithubIcon, InstagramIcon, IdCardIcon } from "@/components/core/common/icons/animated";
 import {
     IngestionVisual,
@@ -103,20 +103,19 @@ export const ARCHITECTURE_STEPS = [
     {
         title: "Control Layer",
         description: "Rust handles authentication, rate limiting, streaming, and all public-facing APIs with blazing-fast performance and memory safety.",
-        icon: <ServerIcon className="w-5 h-5 text-primary" />
+        icon: <ServerIcon className="w-5 h-5 text-orange-500" />
     },
     {
         title: "gRPC Bridge",
         description: "Strongly-typed contracts ensure clean separation and enable independent evolution of both layers without breaking changes.",
-        icon: <GitBranchIcon className="w-5 h-5 text-primary" />
+        icon: <Network className="w-5 h-5 text-purple-500" />
     },
     {
         title: "Cognition Layer",
         description: "Python powers all intelligence: RAG, embeddings, chat orchestration, and ML inference, isolated from public traffic.",
-        icon: <Layers className="w-5 h-5 text-primary" /> // Using Layers as generic brain/logic icon wasn't imported
+        icon: <Layers className="w-5 h-5 text-blue-500" /> // Using Layers as generic brain/logic icon wasn't imported
     }
 ];
-
 // --- Footer Data ---
 
 export const BRAND_CONFIG = {

@@ -6,7 +6,9 @@ import { FAQ_CONTENT } from "./data";
 
 export const FAQ = () => {
     return (
-        <section className="relative w-full bg-background py-20 pb-0">
+        <section className="relative w-full bg-background pt-20 pb-0">
+            {/* Bottom fade to blend into Contacts lamp */}
+            <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-b from-transparent via-background/60 to-background" />
             <div className="container mx-auto px-4">
                 {/* Section Header */}
                 <div className="mb-16 hidden text-center md:block">

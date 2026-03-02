@@ -1,6 +1,7 @@
 pub mod admin;
 pub mod auth;
 pub mod chat;
+pub mod contact;
 pub mod health;
 pub mod user;
 
@@ -46,6 +47,9 @@ pub fn router(db: PgPool, config: Config, intelligence_client: IntelligenceClien
         .merge(Router::new().route("/", axum::routing::get(home)))
         .nest("/health", health::routes())
         .nest("/auth", auth::routes())
+        .nest("/contact", contact::routes()
+            .layer(crate::middleware::rate_limit::strict_rate_limiter())
+        )
         .nest(
             "/user",
             user::routes()

@@ -93,6 +93,16 @@ impl EmailService {
             .await
     }
 
+    /// Send contact form email to site admin
+    pub async fn send_contact_email(
+        &self,
+        to_email: &str,
+        subject: &str,
+        html_body: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        self.send_email(to_email, subject, html_body).await
+    }
+
     /// Internal method to send email via SMTP
     async fn send_email(
         &self,
