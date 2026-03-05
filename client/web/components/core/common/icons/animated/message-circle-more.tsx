@@ -98,18 +98,21 @@ const MessageCircleMoreIcon = forwardRef<
       >
         <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />
         <motion.path
+          initial="normal"
           animate={controls}
           custom={0}
           d="M8 12h.01"
           variants={DOT_VARIANTS}
         />
         <motion.path
+          initial="normal"
           animate={controls}
           custom={1}
           d="M12 12h.01"
           variants={DOT_VARIANTS}
         />
         <motion.path
+          initial="normal"
           animate={controls}
           custom={2}
           d="M16 12h.01"

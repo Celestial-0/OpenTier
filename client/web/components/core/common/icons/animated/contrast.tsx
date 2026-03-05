@@ -3,7 +3,7 @@
 import type { Variants } from "motion/react";
 import { motion, useAnimation } from "motion/react";
 import type { HTMLAttributes } from "react";
-import { forwardRef, useCallback, useImperativeHandle, useRef } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -14,6 +14,7 @@ export interface ContrastIconHandle {
 
 interface ContrastIconProps extends HTMLAttributes<HTMLDivElement> {
   size?: number;
+  isDark?: boolean;
 }
 
 const PATH_VARIANT: Variants = {
@@ -30,7 +31,7 @@ const PATH_VARIANT: Variants = {
 };
 
 const ContrastIcon = forwardRef<ContrastIconHandle, ContrastIconProps>(
-  ({ onMouseEnter, onMouseLeave, className, size = 28, ...props }, ref) => {
+  ({ onMouseEnter, onMouseLeave, className, size = 28, isDark, ...props }, ref) => {
     const controls = useAnimation();
     const isControlledRef = useRef(false);
 
@@ -42,26 +43,37 @@ const ContrastIcon = forwardRef<ContrastIconHandle, ContrastIconProps>(
       };
     });
 
+    useEffect(() => {
+      // If controlled externally by the isDark prop
+      if (typeof isDark !== 'undefined') {
+        if (isDark) {
+          controls.start("animate");
+        } else {
+          controls.start("normal");
+        }
+      }
+    }, [isDark, controls]);
+
     const handleMouseEnter = useCallback(
       (e: React.MouseEvent<HTMLDivElement>) => {
         if (isControlledRef.current) {
           onMouseEnter?.(e);
-        } else {
+        } else if (typeof isDark === 'undefined') {
           controls.start("animate");
         }
       },
-      [controls, onMouseEnter]
+      [controls, onMouseEnter, isDark]
     );
 
     const handleMouseLeave = useCallback(
       (e: React.MouseEvent<HTMLDivElement>) => {
         if (isControlledRef.current) {
           onMouseLeave?.(e);
-        } else {
+        } else if (typeof isDark === 'undefined') {
           controls.start("normal");
         }
       },
-      [controls, onMouseLeave]
+      [controls, onMouseLeave, isDark]
     );
 
     return (

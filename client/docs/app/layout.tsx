@@ -45,7 +45,7 @@ const footer = (
       <div className="flex flex-row items-center gap-5 text-gray-600 transition-colors dark:text-gray-400">
         {/* Portfolio */}
         <a
-          href="https://yashkumarsingh.tech"
+          href="https://yashkumarsingh.me"
           target="_blank"
           rel="noopener noreferrer"
           title="Portfolio"

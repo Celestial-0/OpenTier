@@ -127,7 +127,13 @@ There are exactly **two roles**: `user` and `admin`. There is no privilege escal
 **Description**: `user_memories.memory` is an unbounded TEXT column. Without truncation, a malicious user generating thousands of conversations could cause the memory column to grow to hundreds of KB, increasing LLM prompt costs and context window usage.  
 **Mitigation**: Cap memory length in `MemoryStorage.update_user_memory()`.
 
-### 7. Free Tier Client-Side Only
+### 7. Contact Form Spam
+
+**Risk**: Low-Medium  
+**Description**: `POST /contact` is a public, unauthenticated endpoint that triggers email delivery via SMTP. While the `strict_rate_limiter()` (~3 req/min, burst 3 per IP) limits individual abuse, a distributed attack from many IPs could generate a high volume of emails to the admin inbox. No CAPTCHA, email format validation, or honeypot field is implemented.  
+**Mitigation**: Add a CAPTCHA challenge (e.g., hCaptcha, Turnstile), validate email format server-side, or implement a honeypot field.
+
+### 8. Free Tier Client-Side Only
 
 **Risk**: Low  
 **Description**: `FREE_MESSAGE_LIMIT = 5` is enforced only in the browser via `localStorage`. A user can bypass it by clearing `localStorage` or calling the API directly (no session required for... wait, all chat endpoints require auth). Since `/chat` routes require authentication, unauthenticated users can only bypass this limit if they create accounts.  

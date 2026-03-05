@@ -1,5 +1,6 @@
 export default {
   index: 'Introduction',
+  deployment: 'Deployment',
   architecture: 'Monorepo Architecture',
   client: 'Client Layer',
   api: 'API Service (Rust)',

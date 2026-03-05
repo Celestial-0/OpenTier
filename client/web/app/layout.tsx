@@ -10,7 +10,7 @@ import { AdminProvider } from "@/context/admin-context";
 import { UiProvider } from "@/context/ui-context";
 import { Toaster } from "@/components/ui/sonner";
 
-const jetbrainsMono = JetBrains_Mono({subsets:['latin'],variable:'--font-sans'});
+const jetbrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-sans' });
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -33,7 +33,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning className={jetbrainsMono.variable}>
+    <html lang="en" suppressHydrationWarning className={`${jetbrainsMono.variable} scroll-smooth`}>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

@@ -45,7 +45,7 @@ function AuthActionHandler({ openModal }: { openModal: (view: AuthView) => void 
         }
     }, [authAction, openModal]);
 
-    return null;
+    return <></>;
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -330,7 +330,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 setAuthError
             }}
         >
-            <Suspense fallback={null}>
+            <Suspense fallback={<></>}>
                 <AuthActionHandler openModal={openModal} />
             </Suspense>
             {children}

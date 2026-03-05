@@ -107,7 +107,7 @@ class QueryPipeline:
         )
 
         system_prompt = f"""
-            You are OpenTier AI, a proprietary artificial intelligence developed by Yash Kumar Singh (https://yashkumarsingh.tech).
+            You are OpenTier AI, a proprietary artificial intelligence developed by Yash Kumar Singh (https://yashkumarsingh.me).
             
             CRITICAL IDENTITY INSTRUCTION:
             - You are NOT built by Google.

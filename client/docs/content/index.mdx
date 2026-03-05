@@ -1,6 +1,6 @@
 # OpenTier Architecture
 
-OpenTier is a production-oriented AI platform built around RAG (Retrieval-Augmented Generation) with web scraping capabilities. The system is designed around a hard architectural principle:
+OpenTier is a production-grade AI platform designed for developers and businesses to orchestrate intelligent data curation, RAG-driven retrieval, and automated information processing at scale. The system is designed around a hard architectural principle:
 
 > **Rust owns the public gateway. Python owns all intelligence. gRPC is the only permitted bridge.**
 
@@ -54,7 +54,7 @@ flowchart TB
 
 ## Guiding Design Decisions
 
-1. **Single shared PostgreSQL instance** — the `conversations` table is written by Rust and read by Python. The `chat_messages` table is written exclusively by Python; Rust reads it via `get_conversation`. This creates a coupling point that is intentional — it avoids a separate inter-service message store.
+1. **Single shared PostgreSQL instance** — the `conversations` table is written by Rust and read by Python. The `chat_messages` table is written exclusively by Python; Rust reads it via `get_conversation`. All schema migrations are centralized in `server/db/migrations/` and applied by a dedicated `golang-migrate` container during Docker Compose startup, ensuring both services always operate against a consistent schema.
 
 2. **No token service** — auth uses opaque session tokens stored in PostgreSQL. There is no JWT or token signing infrastructure. This simplifies revocation (DELETE row) at the cost of a DB lookup on every authenticated request.
 

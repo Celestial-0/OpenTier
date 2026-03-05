@@ -119,7 +119,7 @@ function ResetPasswordContent() {
                                             onChange={(e) => field.handleChange(e.target.value)}
                                         />
                                         {field.state.meta.errors.length > 0 && (
-                                            <p className="text-xs text-destructive">{String(field.state.meta.errors[0])}</p>
+                                            <p className="text-xs text-destructive">{(field.state.meta.errors[0] as any)?.message || (typeof field.state.meta.errors[0] === 'string' ? field.state.meta.errors[0] : "Invalid input")}</p>
                                         )}
                                     </div>
                                 )}
@@ -140,7 +140,7 @@ function ResetPasswordContent() {
                                             onChange={(e) => field.handleChange(e.target.value)}
                                         />
                                         {field.state.meta.errors.length > 0 && (
-                                            <p className="text-xs text-destructive">{String(field.state.meta.errors[0])}</p>
+                                            <p className="text-xs text-destructive">{(field.state.meta.errors[0] as any)?.message || (typeof field.state.meta.errors[0] === 'string' ? field.state.meta.errors[0] : "Invalid input")}</p>
                                         )}
                                     </div>
                                 )}

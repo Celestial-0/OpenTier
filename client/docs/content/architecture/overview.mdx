@@ -7,26 +7,28 @@ OpenTier/
 ├── client/
 │   ├── package.json          # Turborepo workspace root
 │   ├── turbo.json            # Pipeline definitions
-│   └── web/                  # Next.js 16 application
-│   |   ├── app/              # App Router pages
-│   |   ├── components/       # UI, AI elements, core modules
-│   |   ├── context/          # React context providers
-│   |   ├── store/            # Zustand state stores
-│   |   ├── lib/              # API client, type schemas
-│   |   ├── hooks/            # Custom React hooks
-│   |   └── types/            # Shared TypeScript types
-|   └──docs/                 # Documentation content (MDX)
-|
+│   ├── web/                  # Next.js 16 application
+│   │   ├── app/              # App Router pages
+│   │   ├── components/       # UI, AI elements, core modules
+│   │   ├── context/          # React context providers
+│   │   ├── store/            # Zustand state stores
+│   │   ├── lib/              # API client, type schemas
+│   │   ├── hooks/            # Custom React hooks
+│   │   └── types/            # Shared TypeScript types
+│   └── docs/                 # Documentation content (MDX)
+│
 └── server/
+    ├── docker-compose.yml    # Orchestrates db → migrations → services
+    ├── .env                  # Database credentials (POSTGRES_USER, etc.)
     ├── api/                  # Rust/Axum API gateway (Cargo workspace)
     │   ├── src/              # Service source modules
-    │   ├── migrations/       # sqlx migrations (identity + chat)
     │   └── .sqlx/            # Offline query cache (CI safety)
+    ├── db/                   # Unified database management
+    │   └── migrations/       # All SQL migrations (up/down)
     ├── intelligence/         # Python gRPC intelligence engine
     │   ├── core/             # Config, DB session, lifecycle
     │   ├── engine/           # Business logic (chat, ingestion, retrieval)
-    │   ├── interfaces/       # gRPC servicers
-    │   └── migrations/       # pgvector / document schema migrations
+    │   └── interfaces/       # gRPC servicers
     └── proto/
         └── intelligence.proto # Shared Protobuf contract
 ```
@@ -88,7 +90,8 @@ RustAPI -->|"lettre  SMTP"| SMTP
 ## Deployment Implications
 
 - **Three independent processes**: client (Node/Bun), API (Rust binary), Intelligence (Python). Each can be scaled, restarted, and deployed independently.
-- **Single database**: both Rust and Python connect to the same PostgreSQL instance. Schema ownership is split: Rust manages `sqlx migrate` (identity + sessions + conversations + messages); Python manages its own migration scripts (pgvector + documents + chat_messages + user_memories).
-- **Port assignments**: API default `8080`, Intelligence gRPC default `50051` (configurable via `INTELLIGENCE_SERVICE_URL`).
+- **Single database**: both Rust and Python connect to the same PostgreSQL instance. All migrations are centralized in `server/db/migrations/` and managed by [`golang-migrate`](https://github.com/golang-migrate/migrate).
+- **Orchestrated startup**: Docker Compose enforces the startup order: `db` (healthcheck) → `migrations` (run all pending SQL files) → `intelligence` → `api`. The migrations container runs once, applies any pending changes, and exits.
+- **Port assignments**: API default `4000`, Intelligence gRPC default `50051` (configurable via `INTELLIGENCE_SERVICE_URL`).
 - **gRPC lazy connect**: if the Intelligence service is down, the Rust API boots successfully (with degraded chat functionality). Auth, user, and admin endpoints remain fully operational.
 - **`.sqlx/` offline cache**: Rust sqlx queries are verified at compile time against the query cache checked into source control. CI does not need a live database to compile.

@@ -25,6 +25,7 @@
     "@ai-elements": "https://ai-sdk.dev/elements/api/registry/{name}.json",
     "@animate-ui": "https://animate-ui.com/r/{name}.json",
     "@lucide-animated": "https://lucide-animated.com/r/{name}.json",
-    "@aceternity": "https://ui.aceternity.com/registry/{name}.json"
+    "@aceternity": "https://ui.aceternity.com/registry/{name}.json",
+    "@magicui": "https://magicui.design/r/{name}"
   }
 }

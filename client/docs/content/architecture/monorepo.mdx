@@ -67,6 +67,31 @@ server/intelligence/
 - `mypy` — static type checking
 - `pytest` + `pytest-asyncio` — async test runner
 
+## Database Migrations — golang-migrate
+
+All database schema migrations are centralized in `server/db/migrations/`. Both the Rust API and Python Intelligence service share the same PostgreSQL instance, so keeping migrations in a single location ensures consistent schema state.
+
+```
+server/db/
+└── migrations/
+    ├── 20260111000001_create_users_table.up.sql
+    ├── 20260111000001_create_users_table.down.sql
+    ├── ...
+    └── 20260115000009_create_user_memories.up.sql
+```
+
+**Migration tool**: [`golang-migrate`](https://github.com/golang-migrate/migrate) — a lightweight, standalone CLI that reads standard `{timestamp}_{name}.up.sql` / `.down.sql` files.
+
+**Docker Compose integration**: a dedicated `migrations` service in `server/docker-compose.yml` runs `migrate up` after the database passes its healthcheck and before any application service starts. The startup order is enforced via `depends_on` conditions:
+
+```
+db (service_healthy) → migrations (service_completed_successfully) → intelligence → api
+```
+
+**Local development**:
+- `cd server && docker compose up` — full stack with automatic migrations
+- Add a new migration: create `{timestamp}_{name}.up.sql` and `{timestamp}_{name}.down.sql` in `server/db/migrations/`
+
 ## Proto — Shared Contract
 
 ```

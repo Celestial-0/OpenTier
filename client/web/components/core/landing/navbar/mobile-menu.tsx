@@ -185,6 +185,6 @@ export const MobileMenu = ({ isOpen, setIsOpen, user }: MobileMenuProps) => {
                     </div>
                 )}
             </div>
-        </div>
+        </div >
     );
 };

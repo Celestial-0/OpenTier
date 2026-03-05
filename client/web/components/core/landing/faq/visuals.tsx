@@ -72,7 +72,7 @@ export const PrivacyVisual = () => {
                 <div className="flex gap-4">
                     <Badge variant="outline" className="gap-2 bg-background/50 backdrop-blur-sm">
                         <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                        Postgres 15
+                        PostgreSQL 16
                     </Badge>
                     <Badge variant="outline" className="gap-2 bg-background/50 backdrop-blur-sm">
                         <Shield className="w-3 h-3 text-primary" />

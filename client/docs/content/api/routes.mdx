@@ -30,6 +30,16 @@ All routes are prefixed by the API's base path. The Next.js proxy strips the `/a
 - **Standard**: 6 req/s, burst 10 (per IP)
 - **Sensitive**: ~0.05 req/s (20s interval), burst 3 (per IP)
 
+## `/contact` — Rate-limited (strict), no authentication
+
+| Method | Path | Handler | Description |
+|--------|------|---------|-------------|
+| POST | `/contact` | `handle_contact` | Sends contact form submission via email to site admin |
+
+**Request body**: `{ name, email, subject, message }` — all fields required, validated as non-empty.
+
+**Rate limit**: Strict (~3 req/min, burst 3, per IP). Uses `strict_rate_limiter()`.
+
 ## `/user` — Session authentication required
 
 | Method | Path | Handler | Description |

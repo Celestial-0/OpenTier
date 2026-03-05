@@ -10,9 +10,9 @@ const STEPS = [
         step: "01",
         icon: Terminal,
         label: "Clone & Configure",
-        description: "Grab the repo and fill in your environment variables — DB credentials, LLM API keys, and JWT secret.",
+        description: "Grab the repo and configure your environment — DB credentials, LLM API keys, and OAuth secrets.",
         code: `git clone https://github.com/Celestial-0/OpenTier
-cd OpenTier
+cd OpenTier/server
 cp .env.example .env`,
         iconColor: "text-orange-500",
         borderColor: "border-orange-500/30",
@@ -22,12 +22,13 @@ cp .env.example .env`,
         step: "02",
         icon: Server,
         label: "Run the Stack",
-        description: "One command spins up the Rust gateway, Python intelligence engine, and PostgreSQL with pgvector.",
-        code: `docker compose up -d
+        description: "One command spins up PostgreSQL, runs migrations, then starts the Rust gateway and Python intelligence engine.",
+        code: `docker compose up
 
-# Rust API gateway    → :8080
+# PostgreSQL + pgvec  → :5432
+# Migrations          → auto
 # Python intelligence → :50051
-# PostgreSQL + pgvec  → :5432`,
+# Rust API gateway    → :4000`,
         iconColor: "text-emerald-500",
         borderColor: "border-emerald-500/30",
         glowColor: "from-emerald-500/10",
@@ -37,7 +38,7 @@ cp .env.example .env`,
         icon: Package,
         label: "Query the API",
         description: "Hit the local Rust gateway directly from any HTTP client once the stack is live.",
-        code: `curl http://localhost:8080/v1/chat \\
+        code: `curl http://localhost:4000/v1/chat \\
   -H "Authorization: Bearer <token>" \\
   -d '{"message": "Summarize the docs"}'`,
         iconColor: "text-blue-500",
@@ -125,23 +126,25 @@ export const QuickStart = () => {
                     />
                     <div className="relative z-10 text-center sm:text-left">
                         <p className="font-semibold text-foreground">Ready to deploy?</p>
-                        <p className="text-sm text-muted-foreground">Read the full setup guide or browse the source on GitHub.</p>
+                        <p className="text-sm text-muted-foreground">Read the full self-hosting guide or browse the source on GitHub.</p>
                     </div>
                     <div className="relative z-10 flex items-center gap-3 shrink-0">
                         <Link
-                            href="https://github.com/Celestial-0/OpenTier"
+                            href="https://celestial-0.github.io/OpenTier/deployment/docker"
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
                         >
-                            View on GitHub
+                            Full Setup Guide
                             <ArrowRight className="h-3.5 w-3.5" />
                         </Link>
                         <Link
-                            href="/chat"
+                            href="https://github.com/Celestial-0/OpenTier"
+                            target="_blank"
+                            rel="noopener noreferrer"
                             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-border bg-background/60 hover:bg-muted/60 transition-colors text-sm font-medium text-foreground"
                         >
-                            Try Demo
+                            View on GitHub
                         </Link>
                     </div>
                 </motion.div>

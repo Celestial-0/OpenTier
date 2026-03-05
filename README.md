@@ -1,174 +1,71 @@
-# OpenTier
+# <img src="assets/logo.svg" alt="OpenTier Logo" width="45" align="top" /> OpenTier
 
-**OpenTier is a shared knowledge space that curates and organizes high-quality developer resources.**
+**The high-performance foundation for scalable AI knowledge infrastructure.**
 
-We're building a better way to discover developer tools, credits, and knowledge:
-- **Clarity over noise** — Structured, searchable, community-driven instead of random link dumps
-- **Trustworthy discovery** — Make good tools, credits, and knowledge easy to find and verify
-- **Lower learning costs** — Help developers spend less time searching, more time building
+OpenTier is a production-grade AI platform designed for developers and businesses to orchestrate intelligent data curation, RAG-driven retrieval, and automated information processing at scale. Built with a focus on architectural clarity, performance, and security.
 
-OpenTier combines human curation with intelligent organization to create a reliable, searchable knowledge commons for the developer community.
+<a href="https://github.com/Celestial-0/OpenTier/blob/main/assets/OpenTier%20Demo%20Compressed.mp4?raw=true">
+  <img src="https://github.com/Celestial-0/OpenTier/blob/main/assets/opentier-demo.gif" width="100%">
+</a>
 
----
+> **Rust owns the public gateway. Python owns all intelligence. gRPC is the only permitted bridge.**
 
-## 🏛️ Architecture Philosophy
+## Tech Stack
 
-To achieve this at scale with high quality, OpenTier separates *control* from *cognition*:
-- **Control** (Rust) handles public API, authentication, rate limiting, streaming
-- **Cognition** (Python) handles indexing, search, curation logic, RAG, LLM inference  
-- **gRPC** is the only bridge between layers
+| Layer | Technology |
+|-------|-----------|
+| Frontend | Next.js 16, React 19, Zustand |
+| API Gateway | Rust / Axum, Tokio, SQLx |
+| Intelligence | Python 3.14, gRPC, SQLAlchemy 2.0 |
+| Database | PostgreSQL 16 + pgvector |
+| IPC | gRPC over HTTP/2, Protobuf v3 |
 
-This intentional separation prevents accidental coupling, protects the intelligence layer, and enables independent evolution.
-
----
-
-## 🏗️ Architecture
-
-```
-Client (Web / Mobile / SDK) 
-        ↓
-    Rust Gateway (Axum)
-    - Auth & Identity
-    - Rate Limiting
-    - Chat Streaming
-        ↓ (gRPC)
-    Python Engine
-    - Chat Orchestration
-    - Ingestion Pipelines
-    - RAG & Embeddings
-        ↓
-    PostgreSQL + pgvector
-    - Metadata & State
-    - Embeddings
-```
-
----
-
-## 🚀 Features
-
-- **Authentication**: Email/password, OAuth (GitHub, Google), session management
-- **Chat**: Real-time streaming, RAG support, conversation history
-- **Admin**: User management, resource ingestion, system statistics
-- **Security**: Tiered rate limiting, CORS, request logging, backpressure handling
-
----
-
-## 📦 Technology Stack
-
-| Component | Technology |
-|-----------|-----------|
-| API Gateway | Rust (Axum) |
-| Intelligence | Python 3.11+ |
-| Database | PostgreSQL 15+ |
-| Vectors | pgvector |
-| RPC | gRPC (tonic) |
-| Streaming | Server-Sent Events |
-
----
-
-## 📂 Project Structure
-
-```
-server/
-├── api/                    # Rust API Gateway
-│   ├── src/
-│   │   ├── auth/          # Authentication
-│   │   ├── chat/          # Chat endpoints
-│   │   ├── admin/         # Admin endpoints
-│   │   ├── middleware/    # Auth, rate limit, tracing
-│   │   ├── grpc/          # gRPC client bridge
-│   │   └── observability/ # Logging & metrics
-│   └── migrations/        # Database migrations
-│
-├── intelligence/          # Python Intelligence Engine
-│   ├── engine/
-│   │   ├── chat/          # Conversation orchestration
-│   │   ├── ingestion/     # Data pipeline
-│   │   ├── embedding/     # Vector generation
-│   │   ├── query/         # RAG retrieval
-│   │   └── cleaning/      # Data normalization
-│   └── interfaces/        # gRPC service stubs
-│
-├── proto/                 # Protobuf Contracts
-└── infra/                 # Docker, Compose, K8s
-```
-
----
-
-## 🔗 Documentation
-
-- **[Architecture](server/README.md)** — Detailed design principles
-- **[API Reference](server/api/README.md)** — Complete endpoint documentation
-- **[Intelligence Engine](server/intelligence/README.md)** — Chat and RAG pipeline
-
----
-
-## ⚡ Quick Start
-
-### Prerequisites
-- Rust 1.70+, Python 3.11+, PostgreSQL 15+
-
-### Setup
+## Quick Start
 
 ```bash
-# Clone and setup Rust gateway
-cd server/api
-cargo build --release
-cargo run --release
+# 1. Configure environment
+cp server/api/.env.example server/api/.env
+cp server/intelligence/.env.example server/intelligence/.env
+cat > server/.env << 'EOF'
+POSTGRES_USER=opentier
+POSTGRES_PASSWORD=your-secure-password
+POSTGRES_DB=opentier
+EOF
 
-# Setup Python engine (in another terminal)
-cd server/intelligence
-uv sync
-uv run main.py
+# 2. Start the server stack
+cd server && docker compose up
 
-# Initialize database
-sqlx migrate run
-
-# Verify health
-curl http://localhost:3000/health/api
-curl http://localhost:3000/health/intelligence
+# 3. Start the client (in another terminal)
+cd client && bun install && bun run dev
 ```
 
-### Docker
-```bash
-cd server/infra
-docker-compose up -d
+API available at `http://localhost:4000` · Client with turborepo having web app at `http://localhost:3001` and docs at `http://localhost:3002`
+
+## Repository Structure
+
+```
+OpenTier/
+├── client/
+│   ├── web/            # Next.js 16 application
+│   └── docs/           # Documentation site (MDX)
+└── server/
+    ├── api/            # Rust/Axum API gateway
+    ├── intelligence/   # Python gRPC intelligence engine
+    ├── db/migrations/  # Unified SQL migrations (golang-migrate)
+    └── proto/          # Shared Protobuf contract
 ```
 
----
+## Documentation
 
-## 📊 Status
+Full architecture documentation, API reference, and deployment guides:
 
-**Version**: v0.1.0 (MVP)  
-**Stability**: Pre-release
+**[Documentation](https://celestial-0.github.io/OpenTier/)**
 
-### ✅ Implemented
-- Authentication (email/password, OAuth)
-- Chat with RAG support
-- Streaming responses (SSE)
-- Admin management
-- Rate limiting & observability
-
-### 🔄 In Progress
-- Clint Inerfaces (Web, Mobile)
-- WebSocket support
-- Multi-file upload
-
-
-### 📋 Planned
-- Vector DB abstraction (Qdrant, Milvus)
-- Advanced features
-
----
-
-## 📄 License
+## License
 
 MIT License
 
----
+## Links
 
-## 📞 Support
-
-- **Issues**: [GitHub Issues](https://github.com/Celestial-0/OpenTier/issues)
-- **Docs**: [Architecture](server/README.md)
-
+- [Documentation](https://celestial-0.github.io/OpenTier/)
+- [Issues](https://github.com/Celestial-0/OpenTier/issues)

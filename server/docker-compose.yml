@@ -1,0 +1,92 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: opentier-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    expose:
+      - "5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - opentier
+
+  migrations:
+    image: migrate/migrate:latest
+    container_name: opentier-migrations
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./db/migrations:/migrations
+    command:
+      [
+        "-path", "/migrations",
+        "-database", "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable",
+        "up"
+      ]
+    restart: "no"
+    networks:
+      - opentier
+
+  intelligence:
+    image: intelligence:latest
+    build:
+      context: ./intelligence
+      dockerfile: Dockerfile
+    container_name: opentier-intelligence
+    depends_on:
+      db:
+        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
+    env_file:
+      - ./intelligence/.env
+    environment:
+      DB_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    expose:
+      - "50051"
+    restart: on-failure
+    networks:
+      - opentier
+
+  api:
+    image: api:latest
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+      additional_contexts:
+        - proto=./proto
+    container_name: opentier-api
+    depends_on:
+      db:
+        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
+      intelligence:
+        condition: service_started
+    env_file:
+      - ./api/.env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      INTELLIGENCE_SERVICE_URL: http://intelligence:50051
+      SERVER_HOST: 0.0.0.0
+    ports:
+      - "4000:4000"
+    restart: on-failure
+    networks:
+      - opentier
+
+volumes:
+  postgres_data:
+
+networks:
+  opentier:
+    driver: bridge

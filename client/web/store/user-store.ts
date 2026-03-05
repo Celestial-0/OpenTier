@@ -8,7 +8,7 @@ import {
     UserResponseSchema
 } from '@/lib/api-types';
 import { UserPreferences, DashboardSession } from '@/types/dashboard';
-import { getAuthHeaders } from '@/lib/auth-utils';
+import { getAuthHeaders, getAuthToken } from '@/lib/auth-utils';
 
 /**
  * User Store
@@ -83,6 +83,13 @@ export const useUserStore = create<UserState>()(
 
                 fetchUser: async () => {
                     if (get().isLoading) return;
+
+                    // Skip the API call if there's no token (prevents 401 error on load for unauthenticated users)
+                    if (!getAuthToken()) {
+                        set({ user: null, isLoading: false, error: null });
+                        return;
+                    }
+
                     set({ isLoading: true, error: null });
                     try {
                         const headers = getAuthHeaders();

@@ -1,6 +1,6 @@
-import { ContentWrapper } from "@/components/core/content-wrapper";
-import { ThemeTogglerButton } from "@/components/core/theme-toggler";
-import Link from "next/link";
+// import { ContentWrapper } from "@/components/core/content-wrapper";
+// import { ThemeTogglerButton } from "@/components/core/theme-toggler";
+// import Link from "next/link";
 
 
 import { Navbar } from "@/components/core/landing/navbar";

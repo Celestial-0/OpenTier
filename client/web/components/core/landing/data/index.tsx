@@ -129,7 +129,7 @@ export const DEVELOPER_PROFILE = {
     role: "Full Stack Developer · AI & Systems",
     bio: "I design and engineer production-grade AI platforms, real-time systems, and modern developer experiences.",
     buildingSince: "Dec 2023",
-    portfolioUrl: "https://yashkumarsingh.tech",
+    portfolioUrl: "https://yashkumarsingh.me",
     githubUrl: "https://github.com/Celestial-0",
     avatarUrl: "https://github.com/Celestial-0.png",
     avatarFallback: "YS",
@@ -162,26 +162,26 @@ export const FOOTER_TEXT = {
 
 export const MAIN_LINKS = [
 
-    { name: "Blog", href: "#blog" },
-    { name: "About", href: "#about" },
+    { name: "Blog", href: "https://celestial-0.github.io/OpenTier/blog" },
+    { name: "About", href: "/about" },
 
-    { name: "Terms", href: "#terms" },
-    { name: "Privacy", href: "#privacy" },
+    { name: "Terms", href: "/legal/#terms" },
+    { name: "Privacy", href: "/legal/#privacy" },
 
-    { name: "Roadmap", href: "#roadmap" },
+    { name: "Roadmap", href: "https://celestial-0.github.io/OpenTier/roadmap" },
     { name: "Contact", href: "#contact" },
 
     { name: "Features", href: "#features" },
-    { name: "Documentation", href: "#docs" }
+    { name: "Documentation", href: "https://celestial-0.github.io/OpenTier" }
 
 ] as const;
 
 export const SOCIAL_LINKS = [
-    { label: "Portfolio", href: "https://yashkumarsingh.tech", icon: IdCardIcon, hover: "hover:text-[#FF5555]" },
-    { label: "GitHub", href: "https://github.com", icon: GithubIcon, hover: "hover:text-[#2ea44f]" },
-    { label: "LinkedIn", href: "https://linkedin.com", icon: LinkedinIcon, hover: "hover:text-[#0A66C2]" },
-    { label: "Instagram", href: "https://instagram.com", icon: InstagramIcon, hover: "hover:text-[#E4405F]" },
-    { label: "Twitter", href: "https://twitter.com", icon: TwitterIcon, hover: "hover:text-[#1DA1F2]" },
+    { label: "Portfolio", href: "https://yashkumarsingh.me", icon: IdCardIcon, hover: "hover:text-[#FF5555]" },
+    { label: "GitHub", href: "https://github.com/Celestial-0/OpenTier", icon: GithubIcon, hover: "hover:text-[#2ea44f]" },
+    { label: "LinkedIn", href: "https://www.linkedin.com/in/celestial0/", icon: LinkedinIcon, hover: "hover:text-[#0A66C2]" },
+    { label: "Instagram", href: "https://www.instagram.com/yash.kumar.singh.30/", icon: InstagramIcon, hover: "hover:text-[#E4405F]" },
+    { label: "Twitter", href: "https://x.com/Celestial_Yash", icon: TwitterIcon, hover: "hover:text-[#1DA1F2]" },
 ] as const;
 
 export const SYSTEM_STATUS = [

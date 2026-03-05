@@ -1,4 +1,3 @@
-import * as React from "react"
 import { motion } from "framer-motion"
 import { useForm } from "@tanstack/react-form"
 import { z } from "zod"
@@ -146,7 +145,7 @@ export function SignInView({
                                 />
                             </motion.div>
                             {field.state.meta.errors.length > 0 && (
-                                <p className="text-xs text-destructive">{String(field.state.meta.errors[0])}</p>
+                                <p className="text-xs text-destructive">{(field.state.meta.errors[0] as any)?.message || (typeof field.state.meta.errors[0] === 'string' ? field.state.meta.errors[0] : "Invalid input")}</p>
                             )}
                         </div>
                     )}

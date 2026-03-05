@@ -7,7 +7,7 @@ import { BackgroundRippleEffect } from "@/components/ui/background-ripple-effect
 
 export const Feature = () => {
     return (
-        <section className="relative pt-32 pb-20 overflow-hidden">
+        <section className="relative pt-32 pb-20 overflow-hidden" id="features">
             {/* Top gradient overlay for smooth transition from hero */}
             <div className="absolute top-0 left-0 right-0 h-32 bg-linear-to-b from-background to-transparent z-5 pointer-events-none" />
 

@@ -1,0 +1,109 @@
+# Contact Endpoint
+
+## Overview
+
+The `/contact` endpoint accepts contact form submissions from the website and forwards them as formatted HTML emails to the site administrator. It is a **public endpoint** — no authentication is required — but it is protected by the **strict rate limiter** to prevent abuse.
+
+## Route
+
+```
+POST /contact
+```
+
+**Middleware stack**: `strict_rate_limiter()` (~3 req/min, burst 3, per IP). No `auth_middleware`.
+
+## Request
+
+```json
+{
+  "name": "Jane Doe",
+  "email": "jane@example.com",
+  "subject": "Partnership inquiry",
+  "message": "Hello, I'd like to discuss..."
+}
+```
+
+All four fields are required. The handler validates that none are empty (after trimming whitespace). If any field is missing or blank, the endpoint returns `400 Bad Request`.
+
+### Type Definition
+
+```rust
+#[derive(Deserialize)]
+pub struct ContactRequest {
+    pub name: String,
+    pub email: String,
+    pub subject: String,
+    pub message: String,
+}
+```
+
+## Response
+
+### Success — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Message sent successfully."
+}
+```
+
+### Validation Error — `400 Bad Request`
+
+```json
+{
+  "success": false,
+  "message": "All fields are required."
+}
+```
+
+### SMTP Failure — `500 Internal Server Error`
+
+```json
+{
+  "success": false,
+  "message": "Failed to send message. Please try again later."
+}
+```
+
+## Email Delivery
+
+The handler constructs an HTML email from the form fields and sends it via the existing `EmailService`:
+
+1. **Recipient**: `CONTACT_EMAIL` environment variable. Falls back to `FROM_EMAIL` if `CONTACT_EMAIL` is not set.
+2. **Subject line**: `[OpenTier Contact] {user-provided subject}`
+3. **Body**: Formatted HTML table with name, email, subject, and a pre-wrapped message block.
+4. **XSS protection**: All user input is HTML-escaped (`&`, `<`, `>`, `"`) before insertion into the email body.
+
+### Email Flow
+
+<Mermaid chart={`
+sequenceDiagram
+    participant Browser
+    participant Rust as Rust: handle_contact()
+    participant Email as SMTP Server
+    participant Admin as Admin Inbox
+
+    Browser->>Rust: POST /contact { name, email, subject, message }
+    Rust->>Rust: Validate fields (non-empty)
+    Rust->>Rust: Resolve recipient (CONTACT_EMAIL or FROM_EMAIL)
+    Rust->>Rust: Build HTML body + html_escape()
+    Rust->>Email: send_contact_email(recipient, subject, html_body)
+    Email-->>Admin: Formatted email delivered
+    Rust-->>Browser: 200 { success: true }
+`} />
+
+## Configuration
+
+| Variable | Required | Default | Purpose |
+|----------|----------|---------|---------|
+| `CONTACT_EMAIL` | No | Falls back to `FROM_EMAIL` | Recipient address for contact form emails |
+
+This variable is loaded as `Option<String>` in `EmailConfig`. When absent, the handler uses `from_email` as the fallback recipient, ensuring email delivery works even without explicit configuration.
+
+## Security Considerations
+
+- **Rate limiting**: The `strict_rate_limiter()` (20s replenish interval, burst of 3) significantly limits spam. However, a distributed attack from many IPs can still send a high volume of emails.
+- **No CAPTCHA**: The endpoint does not implement any CAPTCHA verification. This is a potential spam vector for production deployments.
+- **HTML escaping**: User input is sanitized with a basic `html_escape()` function that covers `&`, `<`, `>`, and `"`. This prevents HTML injection in the email body.
+- **No authentication**: By design, the contact form is accessible to unauthenticated visitors. Email validation (format, disposability) is not performed server-side — only emptiness is checked.

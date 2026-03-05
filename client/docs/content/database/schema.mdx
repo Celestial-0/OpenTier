@@ -2,15 +2,13 @@
 
 ## Schema Ownership
 
-OpenTier uses a **single PostgreSQL database** shared between both services. Schema management is split:
+OpenTier uses a **single PostgreSQL database** shared between both services. All schema migrations are centralized in a single location:
 
-| Owner | Migration Tool | Tables |
-|-------|---------------|--------|
-| Rust API | `sqlx-migrate` (in `server/api/migrations/`) | users, sessions, accounts, verification_tokens, password_reset_tokens, conversations, messages |
-| Python Intelligence | Manual/Alembic (in `server/intelligence/migrations/`) | documents, document_chunks, ingestion_jobs, chat_messages, user_memories |
-| Shared | — | `conversations` (written by Rust, read by both) |
+| Migration Tool | Location | Tables |
+|---------------|----------|--------|
+| [`golang-migrate`](https://github.com/golang-migrate/migrate) | `server/db/migrations/` | users, sessions, accounts, verification_tokens, password_reset_tokens, conversations, messages, documents, document_chunks, ingestion_jobs, chat_messages, user_memories |
 
-Migrations run in sequence. Python migrations depend on the `conversations` table existing (created by Rust migration `20260114000001`).
+Migrations are applied automatically by Docker Compose during startup via a dedicated `migrations` container that runs before all application services. The container uses `golang-migrate` with standard `{timestamp}_{name}.up.sql` / `.down.sql` files.
 
 ## Entity Relationship Diagram
 

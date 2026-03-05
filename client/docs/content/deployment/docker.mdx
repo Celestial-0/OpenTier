@@ -1,0 +1,275 @@
+# Docker Deployment
+
+OpenTier's entire server stack — database, schema migrations, intelligence engine, and API gateway — is orchestrated through a single `docker-compose.yml` in the `server/` directory.
+
+## Prerequisites
+
+Before deploying, ensure you have the following installed:
+
+| Tool | Minimum Version | Purpose |
+|------|----------------|---------|
+| [Docker](https://docs.docker.com/get-docker/) | 24.0+ | Container runtime |
+| [Docker Compose](https://docs.docker.com/compose/install/) | 2.20+ (V2) | Multi-container orchestration |
+| NVIDIA GPU drivers *(optional)* | 535+ | GPU acceleration for embeddings |
+
+## Quick Start
+
+### 1. Configure Environment Variables
+
+The server requires three `.env` files. Example templates are provided for each.
+
+**Database credentials** (`server/.env`):
+
+```bash
+# Create from scratch — these are used by Docker Compose
+cat > server/.env << 'EOF'
+POSTGRES_USER=opentier
+POSTGRES_PASSWORD=your-secure-password
+POSTGRES_DB=opentier
+EOF
+```
+
+**API service** (`server/api/.env`):
+
+```bash
+# Copy and edit the example
+cp server/api/.env.example server/api/.env
+```
+
+Key variables to configure in `server/api/.env`:
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `GOOGLE_CLIENT_ID` | For OAuth | Google OAuth app client ID |
+| `GOOGLE_CLIENT_SECRET` | For OAuth | Google OAuth app secret |
+| `GITHUB_CLIENT_ID` | For OAuth | GitHub OAuth app client ID |
+| `GITHUB_CLIENT_SECRET` | For OAuth | GitHub OAuth app secret |
+| `SMTP_HOST` | For email | SMTP server (e.g. `smtp.gmail.com`) |
+| `SMTP_USERNAME` | For email | SMTP login |
+| `SMTP_PASSWORD` | For email | SMTP password or app password |
+| `CONTACT_EMAIL` | No | Recipient for contact form emails (defaults to `FROM_EMAIL`) |
+| `FRONTEND_URL` | Yes | Frontend URL for email links (e.g. `http://localhost:3000`) |
+
+> **Note:** `DATABASE_URL`, `SERVER_HOST`, and `INTELLIGENCE_SERVICE_URL` are automatically injected by Docker Compose. You do not need to set them manually.
+
+**Intelligence service** (`server/intelligence/.env`):
+
+```bash
+# Copy and edit the example
+cp server/intelligence/.env.example server/intelligence/.env
+```
+
+Key variables to configure in `server/intelligence/.env`:
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `LLM_PROVIDER` | Yes | `openai` or `openai`-compatible (for Ollama) |
+| `LLM_API_KEY` | Yes | API key for the LLM provider |
+| `LLM_MODEL` | Yes | Model name (e.g. `gpt-4o`, `llama3`) |
+| `LLM_BASE_URL` | Yes | API endpoint (e.g. `https://api.openai.com/v1`) |
+
+> **Tip:** For a free, local setup using [Ollama](https://ollama.ai/), set `LLM_BASE_URL=http://host.docker.internal:11434/v1`, `LLM_API_KEY=ollama`, and `LLM_MODEL=llama3`.
+
+### 2. Deploy
+
+From the project root:
+
+```bash
+cd server
+docker compose up
+```
+
+That's it. On first run, Docker will:
+
+1. Pull all required images
+2. Build the `intelligence` and `api` containers
+3. Start PostgreSQL and wait for it to be ready
+4. Run all database migrations
+5. Start the intelligence engine
+6. Start the API gateway
+
+The API will be available at **`http://localhost:4000`**.
+
+### 3. Verify
+
+Once you see the following in your terminal, the stack is fully operational:
+
+```
+opentier-db           | database system is ready to accept connections
+opentier-migrations   | 20260111000001/u create_users_table (10ms)
+opentier-migrations   | ...
+opentier-migrations   | 20260115000009/u create_user_memories (5ms)
+opentier-intelligence | gRPC server started on port 50051
+opentier-api          | 🚀 API Gateway listening on http://0.0.0.0:4000
+```
+
+You can also check service health:
+
+```bash
+# All containers running
+docker compose ps
+
+# API health check
+curl http://localhost:4000/health
+```
+
+## Architecture
+
+### Startup Sequence
+
+Docker Compose enforces a strict startup order using `depends_on` conditions:
+
+<Mermaid chart={`
+flowchart LR
+    DB["db\n(pgvector/pg16)"]
+    MIG["migrations\n(golang-migrate)"]
+    INT["intelligence\n(Python + PyTorch)"]
+    API["api\n(Rust + Axum)"]
+
+    DB -->|"service_healthy\n(pg_isready)"| MIG
+    MIG -->|"service_completed\n_successfully"| INT
+    MIG -->|"service_completed\n_successfully"| API
+    INT -->|"service_started"| API
+`} />
+
+
+| Step | Container | Image | What Happens |
+|------|-----------|-------|-------------|
+| 1 | `opentier-db` | `pgvector/pgvector:pg16` | PostgreSQL starts. On first run, creates the database and user. Healthcheck runs `pg_isready` every 5s. |
+| 2 | `opentier-migrations` | `migrate/migrate:latest` | Runs all pending `.sql` files from `server/db/migrations/`. Exits with code 0 when done. Idempotent — skips already-applied migrations. |
+| 3 | `opentier-intelligence` | Built from `server/intelligence/Dockerfile` | Python gRPC service with PyTorch. Loads embedding model, connects to PostgreSQL, starts listening on port 50051. |
+| 4 | `opentier-api` | Built from `server/api/Dockerfile` | Rust API gateway. Connects to PostgreSQL and the intelligence gRPC service. Exposes HTTP API on port 4000. |
+
+### Network & Ports
+
+All services communicate over a private Docker bridge network (`opentier`). Only the API gateway exposes a port to the host:
+
+| Container | Internal Port | Host Port | Protocol |
+|-----------|--------------|-----------|----------|
+| `opentier-db` | 5432 | — (internal only) | PostgreSQL TCP |
+| `opentier-intelligence` | 50051 | — (internal only) | gRPC HTTP/2 |
+| `opentier-api` | 4000 | **4000** | HTTP REST + SSE |
+
+### Data Persistence
+
+PostgreSQL data is stored in a named Docker volume (`postgres_data`). This volume persists across `docker compose down` and `docker compose up` cycles.
+
+```bash
+# Stop services but KEEP data
+docker compose down
+
+# Stop services and DELETE all data (fresh start)
+docker compose down -v
+```
+
+## Common Operations
+
+### Rebuild After Code Changes
+
+```bash
+# Rebuild and restart all services
+docker compose up --build
+
+# Rebuild only a specific service
+docker compose up --build api
+docker compose up --build intelligence
+```
+
+### View Logs
+
+```bash
+# All services
+docker compose logs -f
+
+# Single service
+docker compose logs -f api
+docker compose logs -f intelligence
+docker compose logs -f db
+```
+
+### Add a New Migration
+
+Create the migration SQL files in `server/db/migrations/` following the naming convention:
+
+```
+{YYYYMMDD}{HHMMSS}_{description}.up.sql
+{YYYYMMDD}{HHMMSS}_{description}.down.sql
+```
+
+Example:
+
+```bash
+# Create migration files
+touch server/db/migrations/20260305120000_add_user_preferences.up.sql
+touch server/db/migrations/20260305120000_add_user_preferences.down.sql
+```
+
+The next `docker compose up` will automatically apply the new migration.
+
+### Roll Back a Migration
+
+```bash
+# Roll back the last migration
+docker compose run --rm migrations \
+  -path /migrations \
+  -database "postgres://user:pass@db:5432/opentier?sslmode=disable" \
+  down 1
+```
+
+### Reset the Database
+
+```bash
+# Nuclear option — drops volume, recreates everything from scratch
+docker compose down -v
+docker compose up
+```
+
+### Connect to the Database Directly
+
+```bash
+docker exec -it opentier-db psql -U opentier -d opentier
+```
+
+## Troubleshooting
+
+### `pull access denied` Error
+
+If you see `pull access denied for intelligence` or `pull access denied for api`, it means Docker is trying to pull a pre-built image instead of building locally. Fix by explicitly building:
+
+```bash
+docker compose up --build
+```
+
+### Migration Fails With "Already Exists"
+
+This happens when the database has schema from a previous migration tool (e.g. `sqlx`). Reset the database:
+
+```bash
+docker compose down -v
+docker compose up
+```
+
+### Intelligence Service Fails to Start
+
+Check if the `.env` file exists and has valid LLM credentials:
+
+```bash
+cat server/intelligence/.env | grep LLM_
+```
+
+The API will still boot even if intelligence is down — auth, user, and admin endpoints remain operational. Only chat functionality is degraded.
+
+### Port 4000 Already in Use
+
+```bash
+# Find what's using the port
+# Windows
+netstat -ano | findstr :4000
+
+# Linux / macOS
+lsof -i :4000
+
+# Or change the port mapping in docker-compose.yml
+ports:
+  - "8080:4000"  # Map to host port 8080 instead
+```
