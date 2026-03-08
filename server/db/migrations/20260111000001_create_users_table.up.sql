@@ -16,7 +16,11 @@ CREATE TABLE IF NOT EXISTS users (
     role user_role NOT NULL DEFAULT 'user',
     deleted_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    -- Usage limits
+    message_limit INTEGER NOT NULL DEFAULT 10,
+    is_disabled BOOLEAN NOT NULL DEFAULT FALSE,
+    messages_used INTEGER NOT NULL DEFAULT 0
 );
 -- Create indexes
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
@@ -34,3 +38,15 @@ $$ language 'plpgsql';
 DROP TRIGGER IF EXISTS update_users_updated_at ON users;
 CREATE TRIGGER update_users_updated_at BEFORE
 UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- Create index for is_disabled to quickly filter blocked users
+CREATE INDEX IF NOT EXISTS idx_users_is_disabled ON users(is_disabled);
+-- IP-based anonymous usage tracking table
+-- Tracks message counts for unauthenticated users by IP address
+CREATE TABLE IF NOT EXISTS ip_usage (
+    ip_address VARCHAR(64) PRIMARY KEY,
+    messages_used INTEGER NOT NULL DEFAULT 0,
+    first_seen TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    last_seen TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+-- Index for cleanup jobs (old IPs)
+CREATE INDEX IF NOT EXISTS idx_ip_usage_last_seen ON ip_usage(last_seen);

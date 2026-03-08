@@ -7,10 +7,10 @@ import { Sessions } from "./sessions";
 import { Profile } from "./profile";
 import { Settings } from "./settings";
 import { Admin } from "./admin";
-import { Notifications } from "./notifications";
-import { LayoutDashboard, MessageSquare, Shield, User, Settings as SettingsIcon, ShieldCheck, Bell } from "lucide-react";
+import { LayoutDashboard, MessageSquare, Shield, User, Settings as SettingsIcon, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/context/auth-context";
-import { useUi, DashboardView } from "@/context/ui-context";
+import { useUi } from "@/context/ui-context";
+import { DashboardView } from "@/types/dashboard";
 
 export const DashboardUI = () => {
     const { user } = useAuth();

@@ -1,6 +1,7 @@
 """Batch processing for efficient embedding generation."""
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from typing import List, Optional
 import numpy as np
 from dataclasses import dataclass
@@ -9,6 +10,11 @@ from engine.embedding.models import get_embedding_model
 from core.logging import get_logger
 
 logger = get_logger(__name__)
+
+# Dedicated single-thread executor for CPU-bound embedding work.
+# Using a separate executor prevents contention with the default asyncio thread pool
+# and avoids deadlocks on Windows when processing large batches.
+_EMBEDDING_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="embedding")
 
 
 @dataclass
@@ -37,23 +43,34 @@ class BatchEmbeddingProcessor:
     - Concurrent batch processing
     """
 
-    def __init__(self, batch_size: int = 32, max_concurrent: int = 4):
+    def __init__(self, batch_size: int = 32, max_concurrent: int = 1):
         """
         Initialize batch processor.
 
         Args:
             batch_size: Number of texts per batch
-            max_concurrent: Maximum concurrent batches
+            max_concurrent: Maximum concurrent batches (defaults to 1 for CPU, 4 for GPU)
         """
         self.batch_size = batch_size
-        self.max_concurrent = max_concurrent
         self.model = get_embedding_model()
+
+        # Set smart default for concurrency
+        if max_concurrent is not None:
+            self.max_concurrent = max_concurrent
+        else:
+            # CPU intensive tasks should run sequentially or with very low concurrency
+            # to avoid thread contention and thrashing.
+            self.max_concurrent = 4 if self.model.device == "cuda" else 1
+
+        logger.debug(
+            f"Initialized BatchEmbeddingProcessor: batch_size={batch_size}, max_concurrent={self.max_concurrent}"
+        )
 
     async def process_batch(
         self, texts: List[str], batch_idx: int
     ) -> tuple[int, np.ndarray]:
         """
-        Process a single batch.
+        Process a single batch using the dedicated embedding executor.
 
         Args:
             texts: Texts in this batch
@@ -63,7 +80,15 @@ class BatchEmbeddingProcessor:
             Tuple of (batch_idx, embeddings)
         """
         try:
-            embeddings = await self.model.encode_async(texts, self.batch_size)
+            loop = asyncio.get_event_loop()
+            # Use dedicated executor to avoid thread pool contention
+            embeddings = await loop.run_in_executor(
+                _EMBEDDING_EXECUTOR,
+                self.model.encode,
+                texts,
+                self.batch_size,
+                False,
+            )
             logger.debug(f"Batch {batch_idx}: processed {len(texts)} texts")
             return batch_idx, embeddings
         except Exception as e:
@@ -106,31 +131,22 @@ class BatchEmbeddingProcessor:
             f"(batch_size={self.batch_size}, max_concurrent={self.max_concurrent})"
         )
 
-        # Process batches with concurrency limit
+        # Process batches SEQUENTIALLY to prevent thread pool exhaustion on Windows.
+        # asyncio.gather with run_in_executor can saturate the thread pool and deadlock
+        # on Windows when running CPU-intensive tasks. Sequential processing is safer
+        # and only marginally slower for single-GPU/CPU workloads.
         all_embeddings = []
 
-        for i in range(0, len(batches), self.max_concurrent):
-            batch_group = batches[i : i + self.max_concurrent]
-
-            # Process concurrent batches
-            tasks = [
-                self.process_batch(batch, i + j) for j, batch in enumerate(batch_group)
-            ]
-
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-
-            # Check for errors
-            for result in results:
-                if isinstance(result, Exception):
-                    logger.error(f"Batch processing failed: {result}")
-                    raise result
-
-            # Collect embeddings in order
-            for batch_idx, embeddings in sorted(results, key=lambda x: x[0]):
+        for i, batch in enumerate(batches):
+            try:
+                _, embeddings = await self.process_batch(batch, i)
                 all_embeddings.append(embeddings)
+            except Exception as e:
+                logger.error(f"Batch {i} processing failed: {e}")
+                raise
 
             if show_progress:
-                processed = min((i + self.max_concurrent) * self.batch_size, len(texts))
+                processed = min((i + 1) * self.batch_size, len(texts))
                 logger.info(f"Progress: {processed}/{len(texts)} texts embedded")
 
         # Concatenate all embeddings
@@ -152,7 +168,7 @@ class BatchEmbeddingProcessor:
 
 
 async def batch_generate_embeddings(
-    texts: List[str], batch_size: int = 32, max_concurrent: int = 4
+    texts: List[str], batch_size: int = 32, max_concurrent: int | None = None
 ) -> np.ndarray:
     """
     Generate embeddings for texts in batches.

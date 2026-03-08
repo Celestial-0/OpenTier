@@ -1,7 +1,7 @@
 use crate::gateway::AppState;
 use axum::{
-    Router,
     routing::{get, patch, post},
+    Router,
 };
 
 use crate::admin::{management, resources};
@@ -16,6 +16,20 @@ pub fn router() -> Router<AppState> {
         )
         .route("/users/{id}/role", patch(management::update_user_role))
         .route("/stats", get(management::get_stats))
+        // Quota management routes
+        .route("/users/{id}/quota", get(management::get_user_quota))
+        .route(
+            "/users/{id}/quota/limit",
+            patch(management::set_user_message_limit),
+        )
+        .route(
+            "/users/{id}/quota/reset",
+            post(management::reset_user_usage),
+        )
+        .route(
+            "/users/{id}/disable",
+            patch(management::toggle_user_disabled),
+        )
         // Resource routes
         .nest("/resources", resource_routes())
 }

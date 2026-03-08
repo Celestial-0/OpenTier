@@ -12,10 +12,12 @@ use uuid::Uuid;
 use crate::auth::Role;
 
 pub mod auth;
+pub mod quota;
 pub mod rate_limit;
 
 // Re-export commonly used middleware
 pub use auth::{auth_middleware, require_admin};
+pub use quota::{chat_quota_middleware, increment_ip_usage, increment_user_usage, PeerIp};
 pub use rate_limit::{auth_rate_limiter, sensitive_auth_rate_limiter};
 
 /// Authenticated user extractor

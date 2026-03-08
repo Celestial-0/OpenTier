@@ -11,6 +11,7 @@ use uuid::Uuid;
 use super::error::{ChatError, ChatResult};
 use super::types::*;
 use crate::gateway::AppState;
+use crate::middleware::PeerIp;
 
 // ============================================================================
 // CONVERSATION MANAGEMENT
@@ -336,7 +337,8 @@ pub async fn generate_conversation_title(
 /// dual storage and data inconsistency. The API only validates and forwards.
 pub async fn send_message(
     State(state): State<AppState>,
-    Extension(user_id): Extension<Uuid>,
+    user_id_ext: Option<Extension<Uuid>>,
+    peer_ip_ext: Option<Extension<PeerIp>>,
     Path(conversation_id): Path<Uuid>,
     Json(req): Json<SendMessageRequest>,
 ) -> ChatResult<Json<MessageResponse>> {
@@ -350,19 +352,31 @@ pub async fn send_message(
         return Err(ChatError::MessageTooLong(req.message.len(), 10000));
     }
 
-    // Verify conversation exists and belongs to user before forwarding to Intelligence
-    let conversation_exists = sqlx::query!(
-        r#"SELECT id FROM conversations WHERE id = $1 AND user_id = $2"#,
-        conversation_id,
-        user_id.to_string()
-    )
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|e| ChatError::DatabaseError(e.to_string()))?
-    .is_some();
+    // Determine the user identifier to send to intelligence
+    let (user_id_str, user_uuid, is_anonymous) = if let Some(Extension(uid)) = user_id_ext {
+        (uid.to_string(), Some(uid), false)
+    } else if let Some(Extension(PeerIp(ref ip))) = peer_ip_ext {
+        (format!("ip:{}", ip), None, true)
+    } else {
+        return Err(ChatError::Unauthorized("No user context found".to_string()));
+    };
 
-    if !conversation_exists {
-        return Err(ChatError::ConversationNotFound(conversation_id.to_string()));
+    // Verify conversation exists and belongs to user (only for authenticated users)
+    // Anonymous users don't have records in the `conversations` table, so Intelligence handles it.
+    if !is_anonymous {
+        let conversation_exists = sqlx::query!(
+            r#"SELECT id FROM conversations WHERE id = $1 AND user_id = $2"#,
+            conversation_id,
+            user_id_str
+        )
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| ChatError::DatabaseError(e.to_string()))?
+        .is_some();
+
+        if !conversation_exists {
+            return Err(ChatError::ConversationNotFound(conversation_id.to_string()));
+        }
     }
 
     // Call Python intelligence service via gRPC
@@ -384,7 +398,7 @@ pub async fn send_message(
     }
 
     let grpc_req = crate::grpc::proto::opentier::intelligence::v1::ChatRequest {
-        user_id: user_id.to_string(),
+        user_id: user_id_str,
         conversation_id: conversation_id.to_string(),
         message: req.message.clone(),
         metadata,
@@ -438,6 +452,15 @@ pub async fn send_message(
     // NOTE: Message persistence is handled by the Intelligence service
     // We only return the response to the client without local storage
 
+    // ── Increment usage counter ──
+    if let Some(uid) = user_uuid {
+        crate::middleware::increment_user_usage(&state, uid).await;
+    } else if is_anonymous {
+        if let Some(Extension(PeerIp(ref ip))) = peer_ip_ext {
+            crate::middleware::increment_ip_usage(&state, ip).await;
+        }
+    }
+
     Ok(Json(MessageResponse {
         message_id,
         conversation_id,
@@ -463,7 +486,8 @@ pub async fn send_message(
 /// POST /chat/conversations/{id}/stream
 pub async fn stream_chat(
     State(state): State<AppState>,
-    Extension(user_id): Extension<Uuid>,
+    user_id_ext: Option<Extension<Uuid>>,
+    peer_ip_ext: Option<Extension<PeerIp>>,
     Path(conversation_id): Path<Uuid>,
     Json(req): Json<StreamChatRequest>,
 ) -> ChatResult<(
@@ -488,8 +512,34 @@ pub async fn stream_chat(
         metadata.insert("regenerate_user_msg_id".to_string(), regen_id);
     }
 
+    // Determine the user identifier to send to intelligence
+    let (user_id_str, user_uuid, is_anonymous) = if let Some(Extension(uid)) = user_id_ext {
+        (uid.to_string(), Some(uid), false)
+    } else if let Some(Extension(PeerIp(ref ip))) = peer_ip_ext {
+        (format!("ip:{}", ip), None, true)
+    } else {
+        return Err(ChatError::Unauthorized("No user context found".to_string()));
+    };
+
+    // Verify conversation exists and belongs to user (only for authenticated users)
+    if !is_anonymous {
+        let conversation_exists = sqlx::query!(
+            r#"SELECT id FROM conversations WHERE id = $1 AND user_id = $2"#,
+            conversation_id,
+            user_id_str
+        )
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|e| ChatError::DatabaseError(e.to_string()))?
+        .is_some();
+
+        if !conversation_exists {
+            return Err(ChatError::ConversationNotFound(conversation_id.to_string()));
+        }
+    }
+
     let request = crate::grpc::proto::opentier::intelligence::v1::ChatRequest {
-        user_id: user_id.to_string(),
+        user_id: user_id_str,
         conversation_id: conversation_id.to_string(),
         message: req.message,
         metadata,
@@ -507,6 +557,15 @@ pub async fn stream_chat(
         .await
         .map_err(|e| ChatError::GrpcError(e))?
         .into_inner();
+
+    // Increment usage counter when the stream starts
+    if let Some(uid) = user_uuid {
+        crate::middleware::increment_user_usage(&state, uid).await;
+    } else if is_anonymous {
+        if let Some(Extension(PeerIp(ref ip))) = peer_ip_ext {
+            crate::middleware::increment_ip_usage(&state, ip).await;
+        }
+    }
 
     let sse_stream = grpc_stream.map(|result| {
         match result {
@@ -566,4 +625,53 @@ pub async fn stream_chat(
         headers,
         Sse::new(sse_stream).keep_alive(KeepAlive::default()),
     ))
+}
+
+// ============================================================================
+// QUOTA MANAGEMENT
+// ============================================================================
+
+/// Get current quota usage
+/// GET /chat/quota
+pub async fn get_quota(
+    State(state): State<AppState>,
+    req: axum::extract::Request,
+) -> ChatResult<axum::Json<serde_json::Value>> {
+    let headers = req.headers();
+    let bearer_token = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "));
+
+    let mut used = 0;
+    let mut limit = crate::middleware::quota::IP_FREE_MESSAGES;
+
+    if let Some(token) = bearer_token {
+        if let Ok((user_id, _)) = crate::auth::session::get_user_from_session(&state.db, token).await {
+            if let Ok(row) = sqlx::query!("SELECT messages_used, message_limit FROM users WHERE id = $1", user_id).fetch_one(&state.db).await {
+                used = row.messages_used;
+                limit = row.message_limit;
+            }
+        }
+    } else {
+        let peer_ip = headers.get("cf-connecting-ip")
+            .or_else(|| headers.get("x-real-ip"))
+            .or_else(|| headers.get("x-forwarded-for"))
+            .and_then(|h| h.to_str().ok())
+            .map(|s| s.split(',').next().unwrap_or("").trim().to_string())
+            .unwrap_or_else(|| {
+                req.extensions().get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
+                    .map(|ci| ci.0.ip().to_string())
+                    .unwrap_or_else(|| "unknown".to_string())
+            });
+
+        if let Ok(Some(row)) = sqlx::query!("SELECT messages_used FROM ip_usage WHERE ip_address = $1", peer_ip).fetch_optional(&state.db).await {
+            used = row.messages_used;
+        }
+    }
+
+    Ok(axum::Json(serde_json::json!({
+        "messages_used": used,
+        "message_limit": limit
+    })))
 }

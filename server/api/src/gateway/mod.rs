@@ -53,20 +53,34 @@ pub fn router(db: PgPool, config: Config, intelligence_client: IntelligenceClien
         .nest(
             "/user",
             user::routes()
-                // Apply auth middleware to all user routes
                 .layer(middleware::from_fn_with_state(
                     app_state.clone(),
                     crate::middleware::auth_middleware,
                 )),
         )
+        // Chat routes — two tiers:
+        //   1. Conversation management: full auth required
         .nest(
             "/chat",
             chat::routes()
-                // Apply auth middleware to all chat routes
                 .layer(middleware::from_fn_with_state(
                     app_state.clone(),
                     crate::middleware::auth_middleware,
                 )),
+        )
+        //   2. Message/stream: quota-only (IP free tier or per-user limit)
+        .nest(
+            "/chat",
+            chat::message_routes()
+                .layer(middleware::from_fn_with_state(
+                    app_state.clone(),
+                    crate::middleware::chat_quota_middleware,
+                )),
+        )
+        //   3. Base chat API data (such as getting usage quotas anonymously/authenticated)
+        .nest(
+            "/chat",
+            chat::unauth_routes()
         )
         .nest(
             "/admin",

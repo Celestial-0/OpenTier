@@ -10,6 +10,9 @@ pub struct Config {
     pub security: SecurityConfig,
     pub cors: CorsConfig,
     pub rate_limit: RateLimitConfig,
+    /// When false, all message quota checks are bypassed.
+    /// Set USAGE_LIMITS_ENABLED=false for self-hosted / local deployments.
+    pub usage_limits_enabled: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -84,6 +87,9 @@ impl Config {
             security: SecurityConfig::from_env()?,
             cors: CorsConfig::from_env()?,
             rate_limit: RateLimitConfig::from_env()?,
+            usage_limits_enabled: env::var("USAGE_LIMITS_ENABLED")
+                .map(|v| v.to_lowercase() != "false")
+                .unwrap_or(true),
         })
     }
 }

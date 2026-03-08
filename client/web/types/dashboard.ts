@@ -25,6 +25,14 @@ export type DashboardHealth = HealthResponse;
 export type DashboardAddResourceRequest = AddResourceRequest;
 
 export type DashboardSession = Session;
+export type DashboardView =
+    | "overview"
+    | "conversations"
+    | "sessions"
+    | "notifications"
+    | "profile"
+    | "settings"
+    | "admin";
 
 export interface CreateResourceForm {
     resource_type: string;

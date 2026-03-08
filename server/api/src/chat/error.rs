@@ -12,6 +12,9 @@ pub enum ChatError {
     #[error("Conversation not found: {0}")]
     ConversationNotFound(String),
 
+    #[error("Unauthorized: {0}")]
+    Unauthorized(String),
+
     #[error("Invalid message: {0}")]
     InvalidMessage(String),
 
@@ -113,6 +116,9 @@ impl IntoResponse for ChatError {
                 "conversation_not_found",
                 self.to_string(),
             ),
+            ChatError::Unauthorized(_) => {
+                (StatusCode::UNAUTHORIZED, "unauthorized", self.to_string())
+            }
 
             ChatError::InvalidMessage(_) => {
                 (StatusCode::BAD_REQUEST, "invalid_message", self.to_string())

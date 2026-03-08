@@ -41,6 +41,7 @@ interface ChatState {
     abortController: AbortController | null;
 
     // Actions
+    fetchQuota: () => Promise<void>;
     fetchConversations: (reset?: boolean) => Promise<void>;
     selectConversation: (conversationId: string) => Promise<void>;
     createNewConversation: (title?: string) => Promise<string>; // Returns new ID
@@ -94,7 +95,25 @@ export const useChatStore = create<ChatState>()(
                     }));
                 },
 
+                fetchQuota: async () => {
+                    try {
+                        const headers = getAuthHeaders() || {};
+                        const res = await fetch('/api/chat/quota', {
+                            headers: { ...headers as Record<string, string> }
+                        });
+                        if (res.ok) {
+                            const data = await res.json();
+                            set({ freeMessageCount: data.messages_used });
+                        }
+                    } catch (err) {
+                        console.error('Failed to fetch quota', err);
+                    }
+                },
+
                 fetchConversations: async (reset = false) => {
+                    // Always try to sync quota on load
+                    void get().fetchQuota();
+
                     if (get().isLoadingConversations) return;
                     const token = getAuthToken();
                     if (!token) return;
@@ -177,7 +196,7 @@ export const useChatStore = create<ChatState>()(
 
                     // If unauth, create local conversation ID
                     if (!token) {
-                        const id = `local-${Date.now()}`;
+                        const id = crypto.randomUUID();
                         const summary: ConversationSummary = {
                             id,
                             title: 'New Chat',
@@ -348,7 +367,17 @@ export const useChatStore = create<ChatState>()(
                                 body: JSON.stringify(payload),
                             });
 
-                            if (!response.ok) throw new Error('Failed to start stream');
+                            if (!response.ok) {
+                                let errMsg = 'Failed to start stream';
+                                try {
+                                    const errObj = await response.json();
+                                    if (errObj.messages_used !== undefined) {
+                                        set({ freeMessageCount: errObj.messages_used });
+                                    }
+                                    errMsg = errObj.error || errMsg;
+                                } catch { }
+                                throw new Error(errMsg);
+                            }
                             if (!response.body) throw new Error('No response body');
 
                             const reader = response.body.getReader();
@@ -446,7 +475,17 @@ export const useChatStore = create<ChatState>()(
                                 signal: abortController.signal,
                             });
 
-                            if (!response.ok) throw new Error('Failed to send message');
+                            if (!response.ok) {
+                                let errMsg = 'Failed to send message';
+                                try {
+                                    const errObj = await response.json();
+                                    if (errObj.messages_used !== undefined) {
+                                        set({ freeMessageCount: errObj.messages_used });
+                                    }
+                                    errMsg = errObj.error || errMsg;
+                                } catch { }
+                                throw new Error(errMsg);
+                            }
 
                             const data = await response.json();
                             const parsed = MessageResponseSchema.parse(data);
@@ -614,7 +653,17 @@ export const useChatStore = create<ChatState>()(
                             }
                         );
 
-                        if (!response.ok) throw new Error('Failed to start stream');
+                        if (!response.ok) {
+                            let errMsg = 'Failed to start stream';
+                            try {
+                                const errObj = await response.json();
+                                if (errObj.messages_used !== undefined) {
+                                    set({ freeMessageCount: errObj.messages_used });
+                                }
+                                errMsg = errObj.error || errMsg;
+                            } catch { }
+                            throw new Error(errMsg);
+                        }
                         if (!response.body) throw new Error('No response body');
 
                         const reader = response.body.getReader();

@@ -31,6 +31,7 @@ import {
 } from "@/types/dashboard";
 import { useAdmin } from "@/context/admin-context";
 import { useAdminStore } from "@/store/admin-store";
+import { IngestionQueue } from "./ingestion-queue";
 
 // Mock data matching /admin/* API responses
 const formatDate = (timestamp: number) => {
@@ -56,13 +57,30 @@ const getStatusColor = (status: string) => {
 
 export const Admin = () => {
     // Admin context and store
-    const { isAdmin, fetchStats, fetchUsers, fetchResources, updateUserRole, deleteUser, addResource, deleteResource } = useAdmin();
-    const stats = useAdminStore((state) => state.stats);
-    const users = useAdminStore((state) => state.users);
-    const resources = useAdminStore((state) => state.resources);
-    const isLoadingStats = useAdminStore((state) => state.isLoadingStats);
-    const isLoadingUsers = useAdminStore((state) => state.isLoadingUsers);
-    const isLoadingResources = useAdminStore((state) => state.isLoadingResources);
+    // Admin store data & UI state
+    const {
+        stats,
+        users,
+        resources,
+        isLoadingStats,
+        isLoadingUsers,
+        isLoadingResources,
+        activeTab,
+        setActiveTab
+    } = useAdminStore();
+
+    const {
+        isAdmin,
+        fetchStats,
+        fetchUsers,
+        fetchResources,
+        updateUserRole,
+        updateUserLimit,
+        toggleUserDisabled,
+        deleteUser,
+        addResource,
+        deleteResource
+    } = useAdmin();
 
     // Health checks
     const RustApiHealth = useQuery<DashboardHealth>({
@@ -77,6 +95,7 @@ export const Admin = () => {
     // Local state
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedRole, setSelectedRole] = useState<Record<string, string>>({});
+    const [selectedLimit, setSelectedLimit] = useState<Record<string, string>>({});
 
     // Resource form state
     const [isAddResourceOpen, setIsAddResourceOpen] = useState(false);
@@ -118,9 +137,39 @@ export const Admin = () => {
         if (role) {
             try {
                 await updateUserRole(userId, role);
+                toast.success("User role updated");
             } catch (error) {
                 console.error('Failed to update role:', error);
+                toast.error("Failed to update user role");
             }
+        }
+    };
+
+    // Handle limit update
+    const handleLimitUpdate = async (userId: string) => {
+        const limitStr = selectedLimit[userId];
+        if (limitStr) {
+            const limit = parseInt(limitStr);
+            if (!isNaN(limit)) {
+                try {
+                    await updateUserLimit(userId, limit);
+                    toast.success("User limit updated");
+                } catch (error) {
+                    console.error('Failed to update limit:', error);
+                    toast.error("Failed to update limit");
+                }
+            }
+        }
+    };
+
+    // Handle toggle disable
+    const handleToggleDisable = async (userId: string, currentStatus: boolean | undefined) => {
+        try {
+            await toggleUserDisabled(userId, !currentStatus);
+            toast.success(`User ${!currentStatus ? 'disabled' : 'enabled'}`);
+        } catch (error) {
+            console.error('Failed to toggle status:', error);
+            toast.error("Failed to toggle status");
         }
     };
 
@@ -198,7 +247,7 @@ export const Admin = () => {
         <div className="space-y-6">
 
             {/* Admin Tabs */}
-            <Tabs defaultValue="stats" className="space-y-4">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
                 <TabsList className="grid w-full grid-cols-4">
                     <TabsTrigger value="stats">
                         <BarChart3 className="mr-2 h-4 w-4" />
@@ -230,7 +279,7 @@ export const Admin = () => {
                             </CardHeader>
                             <CardContent>
                                 <ResponsiveContainer width="100%" height={300}>
-                                    <AreaChart data={[]}>
+                                    <AreaChart data={stats?.user_growth || []}>
                                         <defs>
                                             <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
                                                 <stop offset="5%" stopColor="var(--chart-1)" stopOpacity={0.4} />
@@ -239,13 +288,14 @@ export const Admin = () => {
                                         </defs>
                                         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                                         <XAxis
-                                            dataKey="month"
+                                            dataKey="label"
                                             className="text-xs"
                                             tick={{ fill: 'var(--muted-foreground)' }}
                                         />
                                         <YAxis
                                             className="text-xs"
                                             tick={{ fill: 'var(--muted-foreground)' }}
+                                            allowDecimals={false}
                                         />
                                         <Tooltip
                                             contentStyle={{
@@ -257,7 +307,8 @@ export const Admin = () => {
                                         />
                                         <Area
                                             type="monotone"
-                                            dataKey="users"
+                                            dataKey="value"
+                                            name="Users"
                                             stroke="var(--chart-1)"
                                             fillOpacity={1}
                                             fill="url(#colorUsers)"
@@ -276,16 +327,17 @@ export const Admin = () => {
                             </CardHeader>
                             <CardContent>
                                 <ResponsiveContainer width="100%" height={300}>
-                                    <BarChart data={[]}>
+                                    <BarChart data={stats?.message_activity || []}>
                                         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                                         <XAxis
-                                            dataKey="day"
+                                            dataKey="label"
                                             className="text-xs"
                                             tick={{ fill: 'var(--muted-foreground)' }}
                                         />
                                         <YAxis
                                             className="text-xs"
                                             tick={{ fill: 'var(--muted-foreground)' }}
+                                            allowDecimals={false}
                                         />
                                         <Tooltip
                                             contentStyle={{
@@ -297,7 +349,8 @@ export const Admin = () => {
                                             cursor={{ fill: 'var(--muted-foreground)', opacity: 0.2, radius: 12 }}
                                         />
                                         <Bar
-                                            dataKey="messages"
+                                            dataKey="value"
+                                            name="Messages"
                                             fill="var(--chart-1)"
                                             radius={[8, 8, 0, 0]}
                                         />
@@ -382,6 +435,7 @@ export const Admin = () => {
                                         <TableHead>Name</TableHead>
                                         <TableHead>Role</TableHead>
                                         <TableHead>Status</TableHead>
+                                        <TableHead>Quota Limit</TableHead>
                                         <TableHead>Created</TableHead>
                                         <TableHead className="text-right">Actions</TableHead>
                                     </TableRow>
@@ -410,9 +464,17 @@ export const Admin = () => {
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell>
-                                                    <Badge variant={user.is_verified ? "default" : "destructive"} className={user.is_verified ? "bg-green-500" : ""}>
-                                                        {user.is_verified ? "Verified" : "Unverified"}
-                                                    </Badge>
+                                                    <div className="flex gap-2">
+                                                        <Badge variant={user.is_verified ? "default" : "destructive"} className={user.is_verified ? "bg-green-500" : ""}>
+                                                            {user.is_verified ? "Verified" : "Unverified"}
+                                                        </Badge>
+                                                        {user.is_disabled && (
+                                                            <Badge variant="destructive">Disabled</Badge>
+                                                        )}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell>
+                                                    {user.messages_used ?? 0} / {user.message_limit ?? 10}
                                                 </TableCell>
                                                 <TableCell className="text-muted-foreground">
                                                     {new Date(user.created_at).toLocaleDateString("en-US", {
@@ -462,6 +524,32 @@ export const Admin = () => {
                                                                         Update Role
                                                                     </Button>
                                                                 </div>
+                                                                <div className="space-y-2">
+                                                                    <p className="text-sm font-medium">Message Limit</p>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <Input
+                                                                            type="number"
+                                                                            placeholder={`${user.message_limit || 10}`}
+                                                                            value={selectedLimit[user.id] ?? ''}
+                                                                            onChange={(e) => setSelectedLimit({ ...selectedLimit, [user.id]: e.target.value })}
+                                                                        />
+                                                                        <Button
+                                                                            onClick={() => handleLimitUpdate(user.id)}
+                                                                            disabled={!selectedLimit[user.id]}
+                                                                        >
+                                                                            Save
+                                                                        </Button>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="pt-4 border-t flex flex-col gap-2">
+                                                                    <Button
+                                                                        variant={user.is_disabled ? "default" : "destructive"}
+                                                                        onClick={() => handleToggleDisable(user.id, user.is_disabled)}
+                                                                        className="w-full text-white"
+                                                                    >
+                                                                        {user.is_disabled ? "Enable Account" : "Disable Account"}
+                                                                    </Button>
+                                                                </div>
                                                                 <AlertDialog>
                                                                     <AlertDialogTrigger render={<Button variant="destructive" className="w-full" />}>
                                                                         <Trash2 className="mr-2 h-4 w-4" />
@@ -500,6 +588,9 @@ export const Admin = () => {
 
                 {/* Resources Tab */}
                 <TabsContent value="resources" className="space-y-4">
+                    {/* Live ingestion queue — only shown when there are tracked jobs */}
+                    <IngestionQueue />
+
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
                             <div className="space-y-1">

@@ -1,6 +1,20 @@
 @import "tailwindcss";
-
+@import "nextra-theme-docs/style.css";
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* Fix: Nextra uses --nextra-bg as a comma-separated RGB triplet for
+   rgba(var(--nextra-bg), 0.8) — the mobile sidebar (nextra-mobile-nav) uses
+   bg-nextra-bg which resolves to rgb(var(--nextra-bg)). Without this variable,
+   the sidebar is transparent, causing the "diluted" bleed-through on mobile. */
+:root {
+  --nextra-bg: 250, 250, 250;
+  /* matches nextra.site light mode */
+}
+
+.dark {
+  --nextra-bg: 17, 17, 17;
+  /* matches nextra.site dark mode */
 }

@@ -2,6 +2,8 @@
 
 import React, { createContext, useContext, useState, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { useUserStore } from "@/store/user-store";
+import { DashboardView } from "@/types/dashboard";
 
 /**
  * UI Context
@@ -10,13 +12,6 @@ import { useRouter, usePathname } from "next/navigation";
  * doesn't need persistence or complex logic suitable for a store.
  */
 
-export type DashboardView =
-    | "overview"
-    | "conversations"
-    | "sessions"
-    | "notifications"
-    | "profile"
-    | "settings";
 
 interface UiContextType {
     // Sidebar State
@@ -48,7 +43,9 @@ export function UiProvider({ children }: { children: React.ReactNode }) {
     const [isSidebarOpen, setIsSidebarOpenState] = useState(true);
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [activeModal, setActiveModal] = useState<string | null>(null);
-    const [activeDashboardView, setActiveDashboardView] = useState<DashboardView>("overview");
+
+    // Get persistent dashboard view from user store
+    const { activeDashboardView, setActiveDashboardView } = useUserStore();
 
     const toggleSidebar = useCallback(() => {
         setIsSidebarOpenState((prev) => !prev);

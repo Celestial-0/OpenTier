@@ -62,13 +62,20 @@ class TextChunker:
         """Split text into sentences."""
         # Simple sentence splitter - splits on . ! ? followed by space
         sentences = re.split(r"([.!?]+\s+)", text)
+
+        # If no punctuation matches, re.split returns a 1-element list
+        if len(sentences) == 1:
+            return [text.strip()] if text.strip() else []
+
         # Recombine sentences with their punctuation
         result = []
         for i in range(0, len(sentences) - 1, 2):
-            if i + 1 < len(sentences):
-                result.append(sentences[i] + sentences[i + 1])
-            else:
-                result.append(sentences[i])
+            result.append(sentences[i] + sentences[i + 1])
+
+        # Add the last segment if there's any text after the last punctuation
+        if len(sentences) % 2 != 0 and sentences[-1].strip():
+            result.append(sentences[-1])
+
         return [s for s in result if s.strip()]
 
     def _split_by_separator(self, text: str) -> list[str]:
@@ -80,7 +87,7 @@ class TextChunker:
         self, text: str, metadata: dict[str, Any] | None = None
     ) -> list[TextChunk]:
         """
-        Chunk text into overlapping segments.
+        Chunk text into overlapping segments semantically.
 
         Args:
             text: Text to chunk
@@ -106,90 +113,96 @@ class TextChunker:
         if metadata is None:
             metadata = {}
 
-        # First try to split by separator (paragraphs)
+        # 1. Split by primary separator (paragraphs)
         parts = self._split_by_separator(text)
         if not parts:
             parts = [text]
 
+        # 2. Break down parts that are too large into sub-parts
+        parts_to_process = []
+        for part in parts:
+            if len(part) > self.chunk_size:
+                sentences = self._split_by_sentences(part)
+                for s in sentences:
+                    if len(s) > self.chunk_size:
+                        # Hard character-level split for extremely long "sentences"
+                        # We use a slightly smaller step to allow for some overlap room later
+                        step = self.chunk_size - self.chunk_overlap
+                        if step <= 0:
+                            step = self.chunk_size // 2  # Safety
+                        for i in range(0, len(s), step):
+                            parts_to_process.append(s[i : i + step])
+                    else:
+                        parts_to_process.append(s)
+            else:
+                parts_to_process.append(part)
+
         chunks: list[TextChunk] = []
-        current_chunk = ""
-        current_start = 0
+        current_content = ""
+        current_offset = 0  # This offset tracking is difficult across splits, usually tracked by index
         chunk_index = 0
 
-        for part in parts:
-            # If adding this part would exceed chunk size
-            if len(current_chunk) + len(part) + len(self.separator) > self.chunk_size:
-                # Save current chunk if it has content
-                if current_chunk:
+        # 3. Assemble sub-parts into chunks up to chunk_size
+        for p in parts_to_process:
+            # Separator between sub-parts (use space or newline)
+            sep = (
+                self.separator
+                if current_content and not current_content.endswith(self.separator)
+                else ""
+            )
+
+            # Potential chunk if we add this part
+            merged = (current_content + sep + p) if current_content else p
+
+            if len(merged) > self.chunk_size:
+                # Flush the current content
+                if current_content:
+                    content_to_save = current_content.strip()
                     chunks.append(
                         TextChunk(
-                            content=current_chunk.strip(),
+                            content=content_to_save,
                             index=chunk_index,
-                            start_char=current_start,
-                            end_char=current_start + len(current_chunk),
+                            start_char=current_offset,
+                            end_char=current_offset + len(content_to_save),
                             metadata=metadata.copy(),
                         )
                     )
                     chunk_index += 1
 
-                    # Start new chunk with overlap
+                    # Estimate next offset (non-critical, usually for UI hits)
+                    current_offset += len(content_to_save)
+
+                    # Manage overlap for the next chunk
+                    overlap = ""
                     if (
                         self.chunk_overlap > 0
-                        and len(current_chunk) > self.chunk_overlap
+                        and len(current_content) > self.chunk_overlap
                     ):
-                        overlap_text = current_chunk[-self.chunk_overlap :]
-                        current_chunk = overlap_text + self.separator + part
-                        current_start = (
-                            current_start
-                            + len(current_chunk)
-                            - len(overlap_text)
-                            - len(self.separator)
-                            - len(part)
-                        )
-                    else:
-                        current_chunk = part
-                        current_start = current_start + len(current_chunk)
-                else:
-                    # Part is larger than chunk size, need to split it
-                    if len(part) > self.chunk_size:
-                        sentences = self._split_by_sentences(part)
-                        for sentence in sentences:
-                            if len(current_chunk) + len(sentence) > self.chunk_size:
-                                if current_chunk:
-                                    chunks.append(
-                                        TextChunk(
-                                            content=current_chunk.strip(),
-                                            index=chunk_index,
-                                            start_char=current_start,
-                                            end_char=current_start + len(current_chunk),
-                                            metadata=metadata.copy(),
-                                        )
-                                    )
-                                    chunk_index += 1
-                                current_chunk = sentence
-                                current_start = current_start + len(sentence)
-                            else:
-                                current_chunk += (
-                                    " " + sentence if current_chunk else sentence
-                                )
-                    else:
-                        current_chunk = part
-                        current_start = current_start + len(part)
-            else:
-                # Add part to current chunk
-                if current_chunk:
-                    current_chunk += self.separator + part
-                else:
-                    current_chunk = part
+                        overlap = current_content[-self.chunk_overlap :]
 
-        # Add final chunk
-        if current_chunk:
+                    # New content starts with overlap + separator + current part p
+                    sep = (
+                        self.separator
+                        if overlap and not overlap.endswith(self.separator)
+                        else ""
+                    )
+                    current_content = (overlap + sep + p) if overlap else p
+                else:
+                    # Individual part P is too large for an empty chunk?
+                    # (Should not happen due to parts_to_process logic, but safety)
+                    current_content = p
+            else:
+                current_content = merged
+
+        # Final flush
+        if current_content.strip():
+            content_to_save = current_content.strip()
             chunks.append(
                 TextChunk(
-                    content=current_chunk.strip(),
+                    content=content_to_save,
                     index=chunk_index,
-                    start_char=current_start,
-                    end_char=current_start + len(current_chunk),
+                    start_char=current_offset,
+                    end_char=current_offset + len(content_to_save),
                     metadata=metadata.copy(),
                 )
             )

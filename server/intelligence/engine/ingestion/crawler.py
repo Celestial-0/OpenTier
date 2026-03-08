@@ -2,7 +2,6 @@
 
 import asyncio
 from collections import deque
-from typing import Optional
 from urllib.parse import urljoin, urlparse
 from xml.etree import ElementTree
 
@@ -23,6 +22,7 @@ class WebCrawler:
         max_depth: int = 3,
         same_domain_only: bool = True,
         rate_limit_ms: int = 1000,
+        use_browser: bool = False,
     ):
         """Initialize web crawler.
 
@@ -31,24 +31,34 @@ class WebCrawler:
             max_depth: Maximum depth from start URL
             same_domain_only: Only crawl pages on same domain
             rate_limit_ms: Delay between requests in milliseconds
+            use_browser: Whether to use playwright browser for crawling
         """
         self.max_pages = max_pages
         self.max_depth = max_depth
         self.same_domain_only = same_domain_only
         self.rate_limit_ms = rate_limit_ms
+        self.use_browser = use_browser
 
         self.visited: set[str] = set()
         self.discovered: set[str] = set()
         self.queue: deque = deque()
 
         self.client = httpx.AsyncClient(timeout=30.0, follow_redirects=True)
+        self.browser_scraper = None
 
     async def __aenter__(self):
         """Async context manager entry."""
+        if self.use_browser:
+            from engine.ingestion.scrapers.browser import BrowserScraper
+
+            self.browser_scraper = BrowserScraper()
+            await self.browser_scraper.start()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit."""
+        if self.use_browser and self.browser_scraper:
+            await self.browser_scraper.close()
         await self.close()
 
     async def crawl(self, start_url: str, follow_sitemap: bool = False) -> list[dict]:
@@ -100,32 +110,53 @@ class WebCrawler:
                     await asyncio.sleep(self.rate_limit_ms / 1000.0)
 
                 # Fetch page
-                response = await self.client.get(url)
-                response.raise_for_status()
+                if self.use_browser and self.browser_scraper:
+                    logger.debug(f"Scraping with browser: {url}")
+                    # We scroll to bottom to get all lazy-loaded links and content in crawling
+                    res = await self.browser_scraper.scrape(url, scroll_to_bottom=True)
+                    self.visited.add(url)
 
-                self.visited.add(url)
+                    html = res.get("html", "")
+                    content = res.get("content", "")
+                    soup = BeautifulSoup(html, "lxml")
 
-                # Parse HTML
-                soup = BeautifulSoup(response.text, "lxml")
+                    page_info = {
+                        "url": url,
+                        "final_url": res.get("metadata", {}).get("final_url", url),
+                        "title": res.get(
+                            "title", soup.title.string if soup.title else ""
+                        ),
+                        "content": content,
+                        "depth": depth,
+                        "status_code": 200,
+                    }
+                else:
+                    response = await self.client.get(url)
+                    response.raise_for_status()
 
-                # Extract text content (similar to WebScraper)
-                for script in soup(["script", "style", "nav", "footer", "header"]):
-                    script.decompose()
+                    self.visited.add(url)
 
-                # Get text content
-                text = soup.get_text(separator="\n", strip=True)
-                lines = [line.strip() for line in text.split("\n") if line.strip()]
-                content = "\n\n".join(lines)
+                    # Parse HTML
+                    soup = BeautifulSoup(response.text, "lxml")
 
-                # Extract page info
-                page_info = {
-                    "url": url,
-                    "final_url": str(response.url),
-                    "title": soup.title.string if soup.title else "",
-                    "content": content,
-                    "depth": depth,
-                    "status_code": response.status_code,
-                }
+                    # Extract text content (similar to WebScraper)
+                    for script in soup(["script", "style", "nav", "footer", "header"]):
+                        script.decompose()
+
+                    # Get text content
+                    text = soup.get_text(separator="\n", strip=True)
+                    lines = [line.strip() for line in text.split("\n") if line.strip()]
+                    content = "\n\n".join(lines)
+
+                    # Extract page info
+                    page_info = {
+                        "url": url,
+                        "final_url": str(response.url),
+                        "title": soup.title.string if soup.title else "",
+                        "content": content,
+                        "depth": depth,
+                        "status_code": response.status_code,
+                    }
 
                 pages.append(page_info)
 

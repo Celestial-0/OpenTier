@@ -202,11 +202,18 @@ export type ConversationWithMessages = z.infer<typeof ConversationWithMessagesSc
 // ============================================================================
 
 // Admin Stats Types
+export const DataPointSchema = z.object({
+    label: z.string(),
+    value: z.number(),
+});
+
 export const AdminStatsSchema = z.object({
     total_users: z.number(),
     active_users_24h: z.number(),
     total_conversations: z.number(),
     total_messages: z.number(),
+    user_growth: z.array(DataPointSchema),
+    message_activity: z.array(DataPointSchema),
 });
 export type AdminStats = z.infer<typeof AdminStatsSchema>;
 
@@ -219,6 +226,9 @@ export const UserAdminViewSchema = z.object({
     is_verified: z.boolean(),
     created_at: z.string(),
     updated_at: z.string(),
+    is_disabled: z.boolean().optional(),
+    message_limit: z.number().optional(),
+    messages_used: z.number().optional(),
 });
 export type UserAdminView = z.infer<typeof UserAdminViewSchema>;
 

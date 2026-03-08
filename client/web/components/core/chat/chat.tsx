@@ -31,6 +31,7 @@ export const Chat = ({ children }: ChatProps) => {
     createNewConversation,
     deleteConversation,
     reset: resetChatStore,
+    freeMessageCount,
   } = useChatStore();
 
   // ── Initialization ─────────────────────────────────────────────────────
@@ -155,6 +156,8 @@ export const Chat = ({ children }: ChatProps) => {
             user={sidebarUser}
             onLogout={handleLogout}
             onNavigateToDashboard={handleNavigateToDashboard}
+            isAuthenticated={!!user}
+            freeMessageCount={freeMessageCount}
           />
         </Suspense>
         <SidebarInset>

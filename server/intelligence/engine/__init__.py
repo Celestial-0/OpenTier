@@ -1,7 +1,7 @@
 """Unified Intelligence Engine Orchestrator."""
 
+import asyncio
 import uuid
-import logging
 from typing import AsyncGenerator, Dict, Any, Optional
 
 from engine.query.llm import LLMClient
@@ -176,54 +176,144 @@ class IntelligenceEngine:
         resource_type: int,
         is_global: bool = False,
     ) -> intelligence_pb2.AddResourceResponse:
-        """Add a resource, crawling URLs if needed."""
-        async with get_session() as session:
-            doc_storage = DocumentStorage(session)
-            job_storage = JobStorage(session)
-            processor = DocumentProcessor(doc_storage, job_storage, session)
+        """Add a resource, crawling URLs if needed.
 
-            # Determine content based on resource type
+        Returns immediately with QUEUED status and runs ingestion in background.
+        This keeps the gRPC event loop free so other calls (ListResources, chat)
+        can be served concurrently.
+        """
+        # Assign a stable resource ID up front so the caller can poll it
+        doc_id = resource_id or str(uuid.uuid4())
+
+        # Create the job record immediately so the caller gets a trackable job_id
+        job_id_str: str
+        async with get_session() as session:
+            job_storage = JobStorage(session)
+            job = await job_storage.create_job(user_id=user_id, total_documents=1)
+            job_id_str = str(job.id)
+
+        # Return the queued response immediately — ingestion runs in the background
+        logger.info(
+            f"Queued ingestion job {job_id_str} for resource {doc_id} (user={user_id})"
+        )
+        asyncio.create_task(
+            self._run_ingestion_background(
+                user_id=user_id,
+                resource_id=doc_id,
+                job_id=uuid.UUID(job_id_str),
+                url=url,
+                text=text,
+                file_content=file_content,
+                title=title,
+                metadata=metadata,
+                config=config,
+                resource_type=resource_type,
+                is_global=is_global,
+            )
+        )
+
+        return intelligence_pb2.AddResourceResponse(
+            job_id=job_id_str,
+            resource_id=doc_id,
+            status=intelligence_pb2.RESOURCE_STATUS_QUEUED,
+        )
+
+    async def _run_ingestion_background(
+        self,
+        user_id: str,
+        resource_id: str,
+        job_id: uuid.UUID,
+        url: Optional[str],
+        text: Optional[str],
+        file_content: Optional[bytes],
+        title: Optional[str],
+        metadata: Dict[str, str],
+        config: Optional[intelligence_pb2.IngestionConfig],
+        resource_type: int,
+        is_global: bool,
+    ) -> None:
+        """Background ingestion task — runs crawling, chunking, embedding, and storage."""
+        try:
+            async with get_session() as session:
+                job_storage = JobStorage(session)
+                # Mark as processing
+                await job_storage.update_job_status(job_id, status="processing")
+
             content = ""
             source_url = None
             document_type = resource_type
 
             if text:
-                # Direct text content
                 content = text
             elif url:
-                # Crawl URL to extract content
-                from engine.ingestion.crawler import WebCrawler
+                follow_links = (
+                    config.follow_links
+                    if config and config.HasField("follow_links")
+                    else False
+                )
+                max_depth = (
+                    config.max_depth if config and config.HasField("max_depth") else 1
+                )
 
                 try:
-                    async with WebCrawler(max_pages=10) as crawler:
-                        pages = await crawler.crawl(url)
-                        if pages:
-                            # Combine all page content
-                            content_parts = []
-                            for page in pages:
-                                page_title = page.get("title", "")
-                                page_url = page.get("final_url", "")
-                                page_content = page.get("content", "")
-                                content_parts.append(
-                                    f"# {page_title}\nSource: {page_url}\n\n{page_content}\n"
-                                )
-                            content = "\n\n".join(content_parts)
+                    if follow_links:
+                        from engine.ingestion.crawler import WebCrawler
+
+                        max_pages = 50 if max_depth > 1 else 10
+                        async with WebCrawler(
+                            max_pages=max_pages, max_depth=max_depth, use_browser=True
+                        ) as crawler:
+                            pages = await crawler.crawl(url)
+                            if pages:
+                                content_parts = []
+                                for page in pages:
+                                    page_title = page.get("title", "")
+                                    page_url = page.get("final_url", "")
+                                    page_content = page.get("content", "")
+                                    content_parts.append(
+                                        f"# {page_title}\nSource: {page_url}\n\n{page_content}\n"
+                                    )
+                                content = "\n\n".join(content_parts)
+                                source_url = url
+                                logger.info(f"Crawled {len(pages)} pages from {url}")
+                            else:
+                                logger.warning(f"No content crawled from {url}")
+                                content = f"URL: {url}"
+                    else:
+                        from engine.ingestion.scrapers.browser import BrowserScraper
+
+                        async with BrowserScraper() as scraper:
+                            result = await scraper.scrape(url)
+                            page_title = result.get("title", "")
+                            page_content = result.get("content", "")
+                            content = (
+                                f"# {page_title}\nSource: {url}\n\n{page_content}\n"
+                            )
                             source_url = url
-                            logger.info(f"Crawled {len(pages)} pages from {url}")
-                        else:
-                            logger.warning(f"No content crawled from {url}")
-                            content = f"URL: {url}"
+                            logger.info(
+                                f"Scraped single page {url} using BrowserScraper"
+                            )
+
                 except Exception as e:
-                    logger.error(f"Failed to crawl URL {url}: {e}")
-                    content = f"Failed to crawl: {url}\nError: {str(e)}"
+                    logger.error(f"Failed to process URL {url}: {e}")
+                    content = f"Failed to process: {url}\nError: {str(e)}"
                     source_url = url
             elif file_content:
-                # Decode file content
                 content = file_content.decode("utf-8", errors="ignore")
 
-            # Create Document proto
+            if not content:
+                logger.warning(
+                    f"No content for resource {resource_id}, marking as failed"
+                )
+                async with get_session() as session:
+                    job_storage = JobStorage(session)
+                    await job_storage.update_job_status(
+                        job_id, status="failed", errors=["No content extracted"]
+                    )
+                return
+
             doc_proto = intelligence_pb2.Document(
-                id=resource_id or str(uuid.uuid4()),
+                id=resource_id,
                 title=title or (url if url else "Uploaded Document"),
                 content=content,
                 type=document_type,
@@ -231,18 +321,39 @@ class IntelligenceEngine:
                 metadata=metadata,
             )
 
-            job_id = await processor.process_batch(
-                user_id=user_id,
-                documents=[doc_proto],
-                config=config,
-                is_global=is_global,
+            async with get_session() as session:
+                doc_storage = DocumentStorage(session)
+                job_storage = JobStorage(session)
+                processor = DocumentProcessor(doc_storage, job_storage, session)
+                await processor.process_document(
+                    user_id=user_id,
+                    document=doc_proto,
+                    config=config,
+                    job_id=job_id,
+                    is_global=is_global,
+                )
+
+            async with get_session() as session:
+                job_storage = JobStorage(session)
+                await job_storage.complete_job(job_id)
+
+            logger.info(
+                f"Background ingestion complete: job={job_id}, resource={resource_id}"
             )
 
-            return intelligence_pb2.AddResourceResponse(
-                job_id=str(job_id),
-                resource_id=doc_proto.id,
-                status=intelligence_pb2.RESOURCE_STATUS_QUEUED,
+        except Exception as e:
+            logger.error(
+                f"Background ingestion failed: job={job_id}, resource={resource_id}: {e}",
+                exc_info=True,
             )
+            try:
+                async with get_session() as session:
+                    job_storage = JobStorage(session)
+                    await job_storage.update_job_status(
+                        job_id, status="failed", errors=[str(e)]
+                    )
+            except Exception as inner:
+                logger.error(f"Failed to update job status after failure: {inner}")
 
     async def get_resource_status(
         self, job_id: str, resource_id: str, user_id: str = ""

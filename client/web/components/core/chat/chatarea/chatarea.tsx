@@ -282,6 +282,14 @@ export const ChatArea = () => {
         <ConversationScrollButton />
       </Conversation>
 
+      <div className="mx-auto w-full max-w-4xl px-4 mt-2">
+        {error && (
+          <div className="bg-destructive/10 text-destructive text-sm font-medium py-2 px-3 rounded-md flex items-center justify-center">
+            {error}
+          </div>
+        )}
+      </div>
+
       <ChatInput
         text={text}
         status={status}

@@ -6,6 +6,7 @@ import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { ThemeProvider } from "@/components/provider/theme-provider";
 import { AuthProvider } from "@/context/auth-context";
+import { AuthOverlay } from "@/components/core/auth/auth-overlay";
 import { AdminProvider } from "@/context/admin-context";
 import { UiProvider } from "@/context/ui-context";
 import { Toaster } from "@/components/ui/sonner";
@@ -44,6 +45,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <AuthProvider>
+            <AuthOverlay />
             <AdminProvider>
               <UiProvider>
                 <TooltipProvider>

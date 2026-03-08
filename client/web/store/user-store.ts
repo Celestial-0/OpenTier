@@ -7,8 +7,23 @@ import {
     SessionListResponseSchema,
     UserResponseSchema
 } from '@/lib/api-types';
-import { UserPreferences, DashboardSession } from '@/types/dashboard';
+import { UserPreferences, DashboardSession, DashboardView } from '@/types/dashboard';
 import { getAuthHeaders, getAuthToken } from '@/lib/auth-utils';
+
+/** Safely parse the error message from a non-OK fetch response. */
+async function parseErrorResponse(res: Response, fallback: string): Promise<string> {
+    try {
+        const ct = res.headers.get('content-type') ?? '';
+        if (ct.includes('application/json')) {
+            const data = await res.json();
+            return data?.message ?? data?.error ?? fallback;
+        }
+        const text = await res.text();
+        return text.trim() || fallback;
+    } catch {
+        return fallback;
+    }
+}
 
 /**
  * User Store
@@ -22,13 +37,14 @@ interface UserState {
     sessions: DashboardSession[];
     preferences: UserPreferences;
 
-    // UI State
     isLoading: boolean;
     isLoadingSessions: boolean;
+    activeDashboardView: DashboardView;
     error: string | null;
 
     // Actions
     setUser: (user: UserResponse | null) => void;
+    setActiveDashboardView: (view: DashboardView) => void;
     updatePreferences: (prefs: Partial<UserPreferences>) => void;
     resetPreferences: () => void;
 
@@ -61,9 +77,12 @@ export const useUserStore = create<UserState>()(
                 },
                 isLoading: false,
                 isLoadingSessions: false,
+                activeDashboardView: 'overview',
                 error: null,
 
                 setUser: (user) => set({ user }),
+
+                setActiveDashboardView: (view) => set({ activeDashboardView: view }),
 
                 updatePreferences: (newPrefs) =>
                     set((state) => ({
@@ -168,8 +187,8 @@ export const useUserStore = create<UserState>()(
                         });
 
                         if (!res.ok) {
-                            const errData = await res.json();
-                            throw new Error(errData.message || 'Failed to change password');
+                            const msg = await parseErrorResponse(res, 'Failed to change password');
+                            throw new Error(msg);
                         }
 
                         set({ isLoading: false });
@@ -248,7 +267,10 @@ export const useUserStore = create<UserState>()(
             }),
             {
                 name: 'user-storage', // Key for localStorage
-                partialize: (state) => ({ preferences: state.preferences }), // Only persist preferences
+                partialize: (state) => ({
+                    preferences: state.preferences,
+                    activeDashboardView: state.activeDashboardView
+                }), // Persist preferences and current view
             }
         ),
         { name: 'UserStore' }

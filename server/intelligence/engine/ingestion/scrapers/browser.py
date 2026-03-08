@@ -122,18 +122,21 @@ class BrowserScraper:
             title = await page.title()
             content = await page.content()
 
-            # Extract text content - use textContent to get ALL text
+            # Extract text content - use innerText or better structured text
             text_content = await page.evaluate("""() => {
                 // Remove script, style, and noscript elements
-                const unwanted = document.querySelectorAll('script, style, noscript, iframe');
+                const unwanted = document.querySelectorAll('script, style, noscript, iframe, nav, footer, header');
                 unwanted.forEach(el => el.remove());
                 
-                // Use textContent to get all text (including hidden/formatted)
-                return document.body.textContent || document.body.innerText || '';
+                // innerText respects CSS formatting like display:block better than textContent
+                return document.body.innerText || '';
             }""")
 
-            # Clean up the text - remove excessive whitespace
-            text_content = re.sub(r"\s+", " ", text_content).strip()
+            # Clean up the text - preserve paragraphs but remove excessive whitespace
+            # Replace 3+ newlines with 2
+            text_content = re.sub(r"\n{3,}", "\n\n", text_content)
+            # Replace horizontal whitespace with single space
+            text_content = re.sub(r"[ \t]+", " ", text_content).strip()
 
             metadata = {
                 "url": url,

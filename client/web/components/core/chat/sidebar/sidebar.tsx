@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useAuth } from "@/context/auth-context";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
   Dialog,
@@ -48,6 +49,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
+import { FREE_MESSAGE_LIMIT } from "@/store/chat-store";
+import { Progress } from "@/components/ui/progress";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -72,6 +75,8 @@ interface SidebarProps {
   };
   onLogout?: () => void;
   onNavigateToDashboard?: (view: string) => void;
+  isAuthenticated?: boolean;
+  freeMessageCount?: number;
 }
 
 // ─── Thread List ─────────────────────────────────────────────────────────────
@@ -144,14 +149,17 @@ const ThreadListItem = ({
 
 const UserMenu = ({
   user,
+  isAuthenticated,
   onLogout,
   onNavigateToDashboard,
 }: {
   user: { name: string; email: string; avatar?: string };
+  isAuthenticated?: boolean;
   onLogout?: () => void;
   onNavigateToDashboard?: (view: string) => void;
 }) => {
-  const initials = user.name ? user.name.substring(0, 2).toUpperCase() : "U";
+  const { openModal } = useAuth();
+  const initials = isAuthenticated ? (user.name ? user.name.substring(0, 2).toUpperCase() : "U") : "G";
 
   const menuItems = [
     { label: "Dashboard", view: "overview" },
@@ -178,10 +186,10 @@ const UserMenu = ({
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-semibold tracking-tight">
-                  {user.name}
+                  {isAuthenticated ? user.name : "Guest User"}
                 </span>
                 <span className="truncate text-xs text-muted-foreground">
-                  {user.email}
+                  {isAuthenticated ? user.email : "Not signed in"}
                 </span>
               </div>
               <ChevronsUpDown className="ml-auto size-4 text-muted-foreground/50" />
@@ -204,9 +212,9 @@ const UserMenu = ({
                     </AvatarFallback>
                   </Avatar>
                   <div className="grid flex-1 text-left text-sm leading-tight">
-                    <span className="truncate font-semibold">{user.name}</span>
+                    <span className="truncate font-semibold">{isAuthenticated ? user.name : "Guest User"}</span>
                     <span className="truncate text-xs text-muted-foreground">
-                      {user.email}
+                      {isAuthenticated ? user.email : "Not signed in"}
                     </span>
                   </div>
                 </div>
@@ -215,28 +223,39 @@ const UserMenu = ({
 
             <DropdownMenuSeparator className="my-1 bg-border/50" />
 
-            <DropdownMenuGroup>
-              {menuItems.map((item) => (
-                <DropdownMenuItem
-                  key={item.label}
-                  onClick={() => onNavigateToDashboard?.(item.view)}
-                  className="group gap-3 p-2 cursor-pointer focus:bg-accent focus:text-accent-foreground"
-                >
-                  <span className="font-medium text-sm">{item.label}</span>
+            {isAuthenticated ? (
+              <>
+                <DropdownMenuGroup>
+                  {menuItems.map((item) => (
+                    <DropdownMenuItem
+                      key={item.label}
+                      onClick={() => onNavigateToDashboard?.(item.view)}
+                      className="group gap-3 p-2 cursor-pointer focus:bg-accent focus:text-accent-foreground"
+                    >
+                      <span className="font-medium text-sm">{item.label}</span>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator className="my-1 bg-border/50" />
+                <DropdownMenuGroup>
+                  <DropdownMenuItem
+                    onClick={onLogout}
+                    className="group gap-3 p-2 cursor-pointer focus:bg-accent focus:text-accent-foreground"
+                  >
+                    <span className="font-medium text-sm text-red-500">Log out</span>
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+              </>
+            ) : (
+              <DropdownMenuGroup>
+                <DropdownMenuItem onClick={() => openModal('signin')} className="group gap-3 p-2 cursor-pointer focus:bg-accent focus:text-accent-foreground">
+                  <span className="font-medium text-sm">Sign In</span>
                 </DropdownMenuItem>
-              ))}
-            </DropdownMenuGroup>
-
-            <DropdownMenuSeparator className="my-1 bg-border/50" />
-
-            <DropdownMenuGroup>
-              <DropdownMenuItem
-                onClick={onLogout}
-                className="group gap-3 p-2 cursor-pointer focus:bg-accent focus:text-accent-foreground"
-              >
-                <span className="font-medium text-sm text-red-500">Log out</span>
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
+                <DropdownMenuItem onClick={() => openModal('signup')} className="group gap-3 p-2 cursor-pointer focus:bg-accent focus:text-accent-foreground">
+                  <span className="font-medium text-sm">Create account</span>
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>
@@ -256,6 +275,8 @@ export const Sidebar = ({
   user = { name: "User", email: "m@example.com" },
   onLogout,
   onNavigateToDashboard,
+  isAuthenticated = false,
+  freeMessageCount = 0,
 }: SidebarProps) => {
   const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
   const isMobile = useIsMobile();
@@ -316,9 +337,22 @@ export const Sidebar = ({
 
       <SidebarRail />
 
+      {!isAuthenticated && (
+        <div className="px-4 py-4 border-t">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Free Plan</span>
+              <span>{Math.min(freeMessageCount, FREE_MESSAGE_LIMIT)} / {FREE_MESSAGE_LIMIT} used</span>
+            </div>
+            <Progress value={Math.min((freeMessageCount / FREE_MESSAGE_LIMIT) * 100, 100)} className="h-1.5" />
+          </div>
+        </div>
+      )}
+
       <SidebarFooter className="border-t flex items-center">
         <UserMenu
           user={user}
+          isAuthenticated={isAuthenticated}
           onLogout={onLogout}
           onNavigateToDashboard={onNavigateToDashboard}
         />
