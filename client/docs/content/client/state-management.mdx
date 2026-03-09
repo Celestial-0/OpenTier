@@ -43,6 +43,7 @@ interface UserStoreState {
   user: UserResponse | null
   sessions: DashboardSession[]
   preferences: UserPreferences
+  activeDashboardView: DashboardView      // Persisted dashboard tab
 }
 
 interface UserPreferences {
@@ -55,6 +56,8 @@ interface UserPreferences {
 ```
 
 **401 handling**: `fetchUser()` catches 401 responses and sets `user = null`, effectively signing the user out without throwing. This makes the store safe to call on app boot.
+
+**Dashboard Persistence**: The `activeDashboardView` is stored in the user store and persisted via `user-storage`. This ensures that the selected tab (Overview, Admin, Settings, etc.) is remembered across page refreshes without requiring URL parameters.
 
 **Session management**: `fetchSessions()` loads all active sessions; `revokeSession(sessionId)` calls `DELETE /user/sessions/{sessionId}` and removes the entry from local state immediately (optimistic update).
 

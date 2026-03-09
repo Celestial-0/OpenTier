@@ -140,18 +140,31 @@ The `$4::vector` cast stores the numpy array as a pgvector `vector(384)` column,
 
 ## Web Scraping Subsystem (`engine/ingestion/scrapers/`)
 
-For `ResourceType.WEBSITE`, the ingestion pipeline routes through:
+For `ResourceType.WEBSITE`, the ingestion pipeline utilizes a multi-stage scraping architecture to handle everything from static documents to complex single-page applications:
 
-1. **Playwright scraper**: headless Chromium renders JavaScript-heavy pages
-2. **httpx scraper**: lightweight HTTP fetch for static HTML
-3. **BeautifulSoup + lxml**: HTML parsing, tag extraction, link discovery
+1. **BrowserScraper (Playwright)**: A headless Chromium-based scraper that handles JavaScript-heavy pages and SPAs using improved navigation logic and modern content extraction APIs.
+2. **HTTpx Scraper**: A lightweight, high-performance fetcher for static HTML content.
+3. **WebCrawler (`engine/ingestion/crawler.py`)**: A robust discovery engine with optimized link finding and depth management, designed for comprehensive site indexing while respecting rate limits.
+4. **Parsing**: Uses BeautifulSoup4 with `lxml` to extract clean text before converting it to Markdown for the chunking pipeline.
 
-Configuration via `ScrapingConfig`:
+Configuration is centralized in `ScrapingConfig`:
 - `timeout: 30s`
 - `max_retries: 3`
 - `user_agent: "OpenTier Intelligence Bot/1.0"`
 
-Crawled content is converted to Markdown via `markdown` library before entering the standard text chunking pipeline.
+## Testing & Validation
+
+### End-to-End Ingestion Test (`server/intelligence/script/full_ingestion.py`)
+
+A comprehensive test script that validates the entire pipeline from URL scraping to vector storage. It can be run with custom user IDs and persistence options to verify dashboard visibility.
+
+**Usage**:
+```powershell
+uv run script/full_ingestion.py "https://example.com" --user "YOUR_USER_ID" --persist
+```
+
+- `--user`: Associate the ingestion with a specific user ID.
+- `--persist`: Prevents the script from deleting the resource after the test, allowing it to be viewed in the dashboard.
 
 ## GitHub Integration (`engine/ingestion/scrapers/`)
 
