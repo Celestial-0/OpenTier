@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 from .retrieval.hybrid_search import HybridSearchEngine, SearchResult
 from .llm import LLMClient
+from .tokenizer import count_tokens
 from core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -336,7 +337,7 @@ class QueryPipeline:
         sorted_chunks = sorted(chunks, key=lambda x: x.similarity_score, reverse=True)
 
         for i, chunk in enumerate(sorted_chunks):
-            approx_tokens = len(chunk.content) // 4
+            approx_tokens = count_tokens(chunk.content)
 
             if total_tokens + approx_tokens > limit:
                 break
