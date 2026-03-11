@@ -1,10 +1,12 @@
 # syntax=docker/dockerfile:1
-FROM pytorch/pytorch:2.10.0-cuda13.0-cudnn9-runtime
+ARG BASE_IMAGE=pytorch/pytorch:2.10.0-cuda13.0-cudnn9-runtime
+FROM ${BASE_IMAGE}
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for fast Python package management
@@ -25,7 +27,8 @@ COPY --chown=appuser:appuser pyproject.toml uv.lock ./
 
 # Install dependencies using uv
 # --no-dev to avoid installing dev dependencies (like pytest, ruff, mypy)
-RUN uv sync
+ARG UV_EXTRA_ARGS=""
+RUN uv sync ${UV_EXTRA_ARGS}
 
 # Copy the rest of the application code
 COPY --chown=appuser:appuser . .

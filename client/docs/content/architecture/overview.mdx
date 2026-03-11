@@ -90,8 +90,8 @@ RustAPI -->|"lettre  SMTP"| SMTP
 ## Deployment Implications
 
 - **Three independent processes**: client (Node/Bun), API (Rust binary), Intelligence (Python). Each can be scaled, restarted, and deployed independently.
-- **Single database**: both Rust and Python connect to the same PostgreSQL instance. All migrations are centralized in `server/db/migrations/` and managed by [`golang-migrate`](https://github.com/golang-migrate/migrate).
-- **Orchestrated startup**: Docker Compose enforces the startup order: `db` (healthcheck) → `migrations` (run all pending SQL files) → `intelligence` → `api`. The migrations container runs once, applies any pending changes, and exits.
+- **Single database**: both Rust and Python connect to the same PostgreSQL instance. All migrations are centralized in `server/db/migrations/` and managed by [`sqlx-cli`](https://crates.io/crates/sqlx-cli).
+- **Orchestrated startup**: Docker Compose enforces the startup order: `db` (healthcheck) → `api` & `intelligence`. The `api` container applies any pending SQL migrations, prepares the `sqlx` cache dynamically, and builds at runtime sequentially.
 - **Port assignments**: API default `4000`, Intelligence gRPC default `50051` (configurable via `INTELLIGENCE_SERVICE_URL`).
 - **gRPC lazy connect**: if the Intelligence service is down, the Rust API boots successfully (with degraded chat functionality). Auth, user, and admin endpoints remain fully operational.
-- **`.sqlx/` offline cache**: Rust sqlx queries are verified at compile time against the query cache checked into source control. CI does not need a live database to compile.
+- **Runtime `sqlx` preparation**: Rust sqlx queries are built at runtime in the API Docker container when the database is available. This enables SQL types to be rigorously database-checked automatically on docker compose start, ensuring the db matches the API schemas without tracking offline cache files.

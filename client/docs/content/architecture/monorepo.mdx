@@ -41,7 +41,7 @@ server/api/
 **Build commands**:
 - `cargo build --release` — produces a single static binary
 - `cargo test` — runs integration tests (requires `DATABASE_URL`)
-- `cargo sqlx prepare` — regenerates `.sqlx/` offline query cache
+- `cargo sqlx prepare` — checks the schema cache interactively locally and builds validation bindings inside the container
 
 **Two-phase compilation**: `build.rs` runs `tonic_build::compile_protos("../proto/intelligence.proto")` which generates Rust structs and client stubs into `OUT_DIR`. The generated module is imported via `include!` macro in `grpc/proto.rs`.
 
@@ -67,7 +67,7 @@ server/intelligence/
 - `mypy` — static type checking
 - `pytest` + `pytest-asyncio` — async test runner
 
-## Database Migrations — golang-migrate
+## Database Migrations — sqlx
 
 All database schema migrations are centralized in `server/db/migrations/`. Both the Rust API and Python Intelligence service share the same PostgreSQL instance, so keeping migrations in a single location ensures consistent schema state.
 
@@ -80,12 +80,13 @@ server/db/
     └── 20260115000009_create_user_memories.up.sql
 ```
 
-**Migration tool**: [`golang-migrate`](https://github.com/golang-migrate/migrate) — a lightweight, standalone CLI that reads standard `{timestamp}_{name}.up.sql` / `.down.sql` files.
+**Migration tool**: `sqlx-cli` — a standard toolkit that processes `{timestamp}_{name}.up.sql` / `.down.sql` files directly in Rust workflows.
 
-**Docker Compose integration**: a dedicated `migrations` service in `server/docker-compose.yml` runs `migrate up` after the database passes its healthcheck and before any application service starts. The startup order is enforced via `depends_on` conditions:
+**Docker Compose integration**: The API's `Dockerfile` pulls `db/migrations` and executes `sqlx migrate run` as part of its primary container startup sequence before compiling. This enforces type-safety checks against the live schema and runs migrations before serving traffic. The startup order is enforced via `depends_on` conditions:
 
 ```
-db (service_healthy) → migrations (service_completed_successfully) → intelligence → api
+db (service_healthy) → intelligence
+db (service_healthy) → api (runs migrations & prepares query cache & builds binary)
 ```
 
 **Local development**:

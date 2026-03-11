@@ -19,6 +19,8 @@ cp .env.example .env    # Configure LLM provider and credentials
 
 When running via Docker Compose (recommended), `DB_URL` is injected automatically. See the [Docker deployment guide](https://celestial-0.github.io/OpenTier/deployment/docker).
 
+> **Note on Docker Builds (GPU vs CPU)**: By default, the Docker image builds with the large PyTorch CUDA runtime. For CPU-only deployments (like AWS), set `INTELLIGENCE_BASE_IMAGE=debian:bookworm-slim` and `INTELLIGENCE_UV_ARGS="--extra cpu"` in the root `server/.env` file.
+
 ## Development
 
 ```bash

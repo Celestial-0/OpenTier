@@ -6,9 +6,9 @@ OpenTier uses a **single PostgreSQL database** shared between both services. All
 
 | Migration Tool | Location | Tables |
 |---------------|----------|--------|
-| [`golang-migrate`](https://github.com/golang-migrate/migrate) | `server/db/migrations/` | users, sessions, accounts, verification_tokens, password_reset_tokens, conversations, messages, documents, document_chunks, ingestion_jobs, chat_messages, user_memories |
+| [`sqlx-cli`](https://crates.io/crates/sqlx-cli) | `server/db/migrations/` | users, sessions, accounts, verification_tokens, password_reset_tokens, conversations, messages, documents, document_chunks, ingestion_jobs, chat_messages, user_memories |
 
-Migrations are applied automatically by Docker Compose during startup via a dedicated `migrations` container that runs before all application services. The container uses `golang-migrate` with standard `{timestamp}_{name}.up.sql` / `.down.sql` files.
+Migrations are applied automatically by the API container during its startup sequence before the server boots. The API container uses `sqlx migrate run` underneath to apply standard `{timestamp}_{name}.up.sql` / `.down.sql` files directly.
 
 ## Entity Relationship Diagram
 

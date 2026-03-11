@@ -10,19 +10,18 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /usr/src/app
 
+# install sqlx-cli
+RUN cargo install sqlx-cli --no-default-features --features postgres
+
 # Copy the source code for api
 COPY . .
 # Copy proto from the additional context
 COPY --from=proto . ../proto/
-
-# Build the application
-# We use --release to get an optimized binary
-# Use sqlx offline mode so database is not required during build
-ENV SQLX_OFFLINE=true
-RUN cargo build --release
+# Copy migrations from db
+COPY --from=db ./migrations ../db/migrations/
 
 # Expose the port the app runs on
 EXPOSE 4000
 
-# Command to run the application
-CMD ["cargo", "run", "--release"]
+# Migrate the database, prepare the sql migrations using sqlx, and run
+CMD ["sh", "-c", "sqlx migrate run --source ../db/migrations --database-url $DATABASE_URL && cargo sqlx prepare --database-url $DATABASE_URL && cargo run --release"]

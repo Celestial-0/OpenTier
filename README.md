@@ -30,7 +30,12 @@ cat > server/.env << 'EOF'
 POSTGRES_USER=opentier
 POSTGRES_PASSWORD=your-secure-password
 POSTGRES_DB=opentier
+
+# Optional: Intelligence service build arguments (for CPU-only deployments like AWS)
+# INTELLIGENCE_BASE_IMAGE=debian:bookworm-slim
+# INTELLIGENCE_UV_ARGS="--extra cpu"
 EOF
+
 
 # 2. Start the server stack
 cd server && docker compose up
@@ -51,7 +56,7 @@ OpenTier/
 └── server/
     ├── api/            # Rust/Axum API gateway
     ├── intelligence/   # Python gRPC intelligence engine
-    ├── db/migrations/  # Unified SQL migrations (golang-migrate)
+    ├── db/migrations/  # Unified SQL migrations (sqlx)
     └── proto/          # Shared Protobuf contract
 ```
 

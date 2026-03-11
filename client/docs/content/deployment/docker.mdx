@@ -26,6 +26,10 @@ cat > server/.env << 'EOF'
 POSTGRES_USER=opentier
 POSTGRES_PASSWORD=your-secure-password
 POSTGRES_DB=opentier
+
+# Optional: Intelligence service build arguments (for CPU-only deployments like AWS)
+# INTELLIGENCE_BASE_IMAGE=debian:bookworm-slim
+# INTELLIGENCE_UV_ARGS="--extra cpu"
 EOF
 ```
 
@@ -79,6 +83,8 @@ cd server
 docker compose up
 ```
 
+> **Note on GPU vs CPU**: Be default, the intelligence service container will download and install PyTorch with massive NVIDIA CUDA dependencies suitable for GPU-enabled machines. If you are deploying on a CPU-only VM (such as AWS EC2) or simply want to save a few gigabytes of space, uncomment the `INTELLIGENCE_BASE_IMAGE` and `INTELLIGENCE_UV_ARGS` variables in `server/.env` to force the Docker container to build a much smaller, CPU-only configuration.
+
 That's it. On first run, Docker will:
 
 1. Pull all required images
@@ -96,10 +102,9 @@ Once you see the following in your terminal, the stack is fully operational:
 
 ```
 opentier-db           | database system is ready to accept connections
-opentier-migrations   | 20260111000001/u create_users_table (10ms)
-opentier-migrations   | ...
-opentier-migrations   | 20260115000009/u create_user_memories (5ms)
 opentier-intelligence | gRPC server started on port 50051
+opentier-api          | Applied migration 20260111000001 create_users_table
+opentier-api          | ...
 opentier-api          | 🚀 API Gateway listening on http://0.0.0.0:4000
 ```
 
@@ -122,13 +127,11 @@ Docker Compose enforces a strict startup order using `depends_on` conditions:
 <Mermaid chart={`
 flowchart LR
     DB["db\n(pgvector/pg16)"]
-    MIG["migrations\n(golang-migrate)"]
     INT["intelligence\n(Python + PyTorch)"]
     API["api\n(Rust + Axum)"]
 
-    DB -->|"service_healthy\n(pg_isready)"| MIG
-    MIG -->|"service_completed\n_successfully"| INT
-    MIG -->|"service_completed\n_successfully"| API
+    DB -->|"service_healthy\n(pg_isready)"| INT
+    DB -->|"service_healthy\n(pg_isready)"| API
     INT -->|"service_started"| API
 `} />
 
@@ -136,9 +139,8 @@ flowchart LR
 | Step | Container | Image | What Happens |
 |------|-----------|-------|-------------|
 | 1 | `opentier-db` | `pgvector/pgvector:pg16` | PostgreSQL starts. On first run, creates the database and user. Healthcheck runs `pg_isready` every 5s. |
-| 2 | `opentier-migrations` | `migrate/migrate:latest` | Runs all pending `.sql` files from `server/db/migrations/`. Exits with code 0 when done. Idempotent — skips already-applied migrations. |
-| 3 | `opentier-intelligence` | Built from `server/intelligence/Dockerfile` | Python gRPC service with PyTorch. Loads embedding model, connects to PostgreSQL, starts listening on port 50051. |
-| 4 | `opentier-api` | Built from `server/api/Dockerfile` | Rust API gateway. Connects to PostgreSQL and the intelligence gRPC service. Exposes HTTP API on port 4000. |
+| 2 | `opentier-intelligence` | Built from `server/intelligence/Dockerfile` | Python gRPC service with PyTorch. Loads embedding model, connects to PostgreSQL, starts listening on port 50051. |
+| 3 | `opentier-api` | Built from `server/api/Dockerfile` | Rust API gateway. Connects to PostgreSQL, runs `sqlx migrate run`, compiles `cargo sqlx prepare` and the API, and exposes HTTP API on port 4000. |
 
 ### Network & Ports
 
@@ -209,11 +211,10 @@ The next `docker compose up` will automatically apply the new migration.
 ### Roll Back a Migration
 
 ```bash
-# Roll back the last migration
-docker compose run --rm migrations \
-  -path /migrations \
-  -database "postgres://user:pass@db:5432/opentier?sslmode=disable" \
-  down 1
+# Roll back the last migration inside the API container
+docker compose run --rm api sqlx migrate revert \
+  --source ../db/migrations \
+  --database-url "postgres://opentier:your-secure-password@db:5432/opentier?sslmode=disable"
 ```
 
 ### Reset the Database

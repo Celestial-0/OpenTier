@@ -18,11 +18,22 @@ Client → Rust API Gateway → gRPC → Python Intelligence Engine → PostgreS
 # Configure environment
 cp api/.env.example api/.env
 cp intelligence/.env.example intelligence/.env
-echo "POSTGRES_USER=opentier\nPOSTGRES_PASSWORD=changeme\nPOSTGRES_DB=opentier" > .env
+cp .env.example .env
 
 # Start everything
 docker compose up
 ```
+
+### Building for CPU / Cloud (AWS, etc.)
+
+By default, the Intelligence engine builds a large image containing full PyTorch CUDA drivers for GPU usage. If you are deploying to a CPU-only environment (e.g., standard AWS EC2 instances) or want to save gigabytes of disk space, configure the root `.env` file first:
+
+```bash
+# Inside server/.env
+INTELLIGENCE_BASE_IMAGE=debian:bookworm-slim
+INTELLIGENCE_UV_ARGS="--extra cpu"
+```
+Then build it using: `docker compose build intelligence`.
 
 The API will be available at `http://localhost:4000`.
 
@@ -33,7 +44,7 @@ server/
 ├── docker-compose.yml    # Full stack orchestration
 ├── api/                  # Rust/Axum API gateway
 ├── intelligence/         # Python gRPC intelligence engine
-├── db/migrations/        # Unified SQL migrations (golang-migrate)
+├── db/migrations/        # Unified SQL migrations (sqlx)
 └── proto/                # Shared Protobuf contract
 ```
 
