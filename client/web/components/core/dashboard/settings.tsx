@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useTheme } from "next-themes";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -12,15 +12,15 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Lock, Bell, Palette, Globe, Shield, Trash2, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Lock, Bell, Palette, Shield, Trash2, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { useChatStore } from "@/store/chat-store";
 import { useUserStore } from "@/store/user-store";
+import { useUi } from "@/context/ui-context";
 
-interface SettingsProps {
-    onNavigateToSessions?: () => void;
-}
+const emptySubscribe = () => () => {};
 
-export const Settings = ({ onNavigateToSessions }: SettingsProps) => {
+export const Settings = () => {
+    const { setActiveDashboardView } = useUi();
     const {
         user,
         preferences,
@@ -38,15 +38,11 @@ export const Settings = ({ onNavigateToSessions }: SettingsProps) => {
     const [passwordError, setPasswordError] = useState<string | null>(null);
     const [passwordSuccess, setPasswordSuccess] = useState(false);
 
-    const { theme, setTheme, resolvedTheme } = useTheme();
-    const [mounted, setMounted] = useState(false);
+    const { setTheme, resolvedTheme } = useTheme();
+    const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false);
 
     // Chat title generation setting
     const { useAiTitleGeneration, setUseAiTitleGeneration } = useChatStore();
-
-    useEffect(() => {
-        setMounted(true);
-    }, []);
 
     const handleChangePassword = async () => {
         setPasswordError(null);
@@ -98,7 +94,7 @@ export const Settings = ({ onNavigateToSessions }: SettingsProps) => {
             </Card>
 
             {/* Settings Accordion */}
-            <Accordion className="space-y-4" defaultValue={['account'] as any}>
+            <Accordion className="space-y-4" defaultValue={["account"]}>
                 {/* Account Settings */}
                 <AccordionItem value="account" className="border rounded-lg px-4">
                     <AccordionTrigger className="hover:no-underline">
@@ -300,7 +296,7 @@ export const Settings = ({ onNavigateToSessions }: SettingsProps) => {
                                     View and manage logged-in devices
                                 </p>
                             </div>
-                            <Button variant="outline" size="sm" onClick={onNavigateToSessions}>
+                            <Button variant="outline" size="sm" onClick={() => setActiveDashboardView("sessions")}>
                                 Manage
                             </Button>
                         </div>

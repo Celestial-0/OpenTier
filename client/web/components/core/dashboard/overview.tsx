@@ -8,6 +8,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { useUserStore } from "@/store/user-store";
 import { useChatStore } from "@/store/chat-store";
 import { formatDistanceToNow } from "date-fns";
+import { useUi } from "@/context/ui-context";
 
 const formatTimeAgo = (timestamp: number) => {
     // Handle seconds vs milliseconds - API usually returns seconds
@@ -15,13 +16,10 @@ const formatTimeAgo = (timestamp: number) => {
     return formatDistanceToNow(new Date(time), { addSuffix: true });
 };
 
-interface OverviewProps {
-    onNavigateToConversations: () => void;
-}
-
-export const Overview = ({ onNavigateToConversations }: OverviewProps) => {
+export const Overview = () => {
     const { user, sessions, fetchSessions } = useUserStore();
     const { conversations, totalConversationsCount, fetchConversations } = useChatStore();
+    const { setActiveDashboardView } = useUi();
 
     useEffect(() => {
         fetchSessions();
@@ -161,7 +159,7 @@ export const Overview = ({ onNavigateToConversations }: OverviewProps) => {
                                     Start New Chat
                                 </Button>
                             </Link>
-                            <Button variant="outline" className="w-full justify-start h-12 text-base" onClick={onNavigateToConversations}>
+                            <Button variant="outline" className="w-full justify-start h-12 text-base" onClick={() => setActiveDashboardView("sessions")}>
                                 <Shield className="mr-3 h-5 w-5" />
                                 Manage Sessions
                             </Button>
@@ -212,7 +210,7 @@ export const Overview = ({ onNavigateToConversations }: OverviewProps) => {
                         )}
                     </div>
                     <div className="mt-6 flex justify-between items-center">
-                        <Button variant="outline" onClick={onNavigateToConversations} disabled={conversations.length === 0}>
+                        <Button variant="outline" onClick={() => setActiveDashboardView("conversations")} disabled={conversations.length === 0}>
                             View All Conversations →
                         </Button>
                         <Link href="/chat" className={buttonVariants()}>

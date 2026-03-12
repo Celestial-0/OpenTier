@@ -4,11 +4,19 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import useMeasure from "react-use-measure";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
-import { UserIcon, SettingsIcon, BellIcon, LogoutIcon, UsersIcon, MessageCircleMoreIcon, ShieldCheckIcon, FingerprintIcon } from "@/components/core/common/icons/animated";
+import {
+    UserIcon,
+    SettingsIcon,
+    LogoutIcon,
+    MessageCircleMoreIcon,
+    ShieldCheckIcon,
+    FingerprintIcon,
+    FolderPlusIcon,
+} from "@/components/core/common/icons/animated";
 import { UserResponse } from "@/lib/api-types";
 import { useAuth } from "@/context/auth-context";
 import { useUi } from "@/context/ui-context";
+import { DashboardView } from "@/types/dashboard";
 
 // Smooth Profile Dropdown Component
 const easeOutQuint: [number, number, number, number] = [0.23, 1, 0.32, 1];
@@ -17,8 +25,12 @@ interface SmoothProfileDropdownProps {
     user: UserResponse;
 }
 
+type AnimatedIconRef = {
+    startAnimation?: () => void;
+    stopAnimation?: () => void;
+};
+
 export const SmoothProfileDropdown = ({ user }: SmoothProfileDropdownProps) => {
-    const router = useRouter();
     const { logout } = useAuth();
     const { navigateToDashboard } = useUi();
     const [isOpen, setIsOpen] = useState(false);
@@ -27,7 +39,7 @@ export const SmoothProfileDropdown = ({ user }: SmoothProfileDropdownProps) => {
     const containerRef = useRef<HTMLDivElement>(null);
 
     // Refs for animated icons
-    const iconRefs = useRef<Record<string, any>>({});
+    const iconRefs = useRef<Record<string, AnimatedIconRef | null>>({});
 
     const [contentRef, contentBounds] = useMeasure();
 
@@ -36,6 +48,7 @@ export const SmoothProfileDropdown = ({ user }: SmoothProfileDropdownProps) => {
         { id: "sessions", label: "Sessions", icon: ShieldCheckIcon },
         { id: "profile", label: "Profile", icon: UserIcon },
         { id: "settings", label: "Settings", icon: SettingsIcon },
+        ...(user.role === 'contributor' ? [{ id: "contributor", label: "Contribute", icon: FolderPlusIcon }] : []),
         ...(user.role === 'admin' ? [{ id: "admin", label: "Admin Panel", icon: FingerprintIcon }] : []),
         { id: "divider", label: "", icon: null },
         { id: "logout", label: "Log out", icon: LogoutIcon },
@@ -155,7 +168,7 @@ export const SmoothProfileDropdown = ({ user }: SmoothProfileDropdownProps) => {
                             }}
                             className="flex items-center gap-3 px-3 py-2 mb-1"
                         >
-                            <div className="relative h-10 w-10 rounded-full overflow-hidden ring-2 ring-primary/20 flex-shrink-0">
+                            <div className="relative h-10 w-10 rounded-full overflow-hidden ring-2 ring-primary/20 shrink-0">
                                 <Image
                                     src={avatarUrl}
                                     alt={user.name || "User"}
@@ -214,8 +227,10 @@ export const SmoothProfileDropdown = ({ user }: SmoothProfileDropdownProps) => {
                                             if (item.id === "logout") {
                                                 logout();
                                                 setIsOpen(false);
+                                            } else if (item.id === "conversations" || item.id === "sessions" || item.id === "profile" || item.id === "settings" || item.id === "contributor" || item.id === "admin") {
+                                                navigateToDashboard(item.id as DashboardView);
+                                                setIsOpen(false);
                                             } else {
-                                                navigateToDashboard(item.id as any);
                                                 setIsOpen(false);
                                             }
                                         }}
@@ -248,7 +263,7 @@ export const SmoothProfileDropdown = ({ user }: SmoothProfileDropdownProps) => {
                                         {showIndicator && (
                                             <motion.div
                                                 layoutId="leftBar"
-                                                className={`absolute left-0 top-0 bottom-0 my-auto w-[3px] h-5 rounded-full ${isLogout ? "bg-red-500" : "bg-foreground"
+                                                className={`absolute left-0 top-0 bottom-0 my-auto h-5 w-0.75 rounded-full ${isLogout ? "bg-red-500" : "bg-foreground"
                                                     }`}
                                                 transition={{
                                                     type: "spring",
@@ -259,7 +274,9 @@ export const SmoothProfileDropdown = ({ user }: SmoothProfileDropdownProps) => {
                                             />
                                         )}
                                         <Icon
-                                            ref={(el: any) => iconRefs.current[item.id] = el}
+                                            ref={(el: AnimatedIconRef | null) => {
+                                                iconRefs.current[item.id] = el;
+                                            }}
                                             size={18}
                                             className="relative z-10"
                                         />

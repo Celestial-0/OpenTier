@@ -1,30 +1,32 @@
-import {
+// ============================================================================
+// DASHBOARD VIEW TYPES - Centralized aliases for UI concerns
+// ============================================================================
+
+import type {
     AdminStats,
     UserAdminView,
+} from "./admin";
+import type {
+    HealthResponse,
+} from "./health";
+import type {
+    Session,
+} from "./session";
+import type {
     ResourceItemResponse,
     ResourceConfig,
-    HealthResponse,
     AddResourceRequest,
-    Session
-} from "@/lib/api-types";
+} from "./resources";
 
-// ============================================================================
-// DASHBOARD TYPES
-// ============================================================================
-
+// Dashboard-specific type aliases for view layer
 export type DashboardStats = AdminStats;
-
 export type DashboardUser = UserAdminView;
-
-export type DashboardResource = ResourceItemResponse;
-
-export type DashboardResourceConfig = ResourceConfig;
-
 export type DashboardHealth = HealthResponse;
-
+export type DashboardSession = Session;
+export type DashboardResource = ResourceItemResponse;
+export type DashboardResourceConfig = ResourceConfig;
 export type DashboardAddResourceRequest = AddResourceRequest;
 
-export type DashboardSession = Session;
 export type DashboardView =
     | "overview"
     | "conversations"
@@ -32,7 +34,8 @@ export type DashboardView =
     | "notifications"
     | "profile"
     | "settings"
-    | "admin";
+    | "admin"
+    | "contributor";
 
 export interface CreateResourceForm {
     resource_type: string;
@@ -41,11 +44,6 @@ export interface CreateResourceForm {
     is_global: boolean;
     config: ResourceConfig;
 }
-
-export type UserRole = "user" | "admin";
-
-export type ResourceType = string; // e.g., "url", "pdf", "markdown", etc.
-export type ResourceStatus = string; // e.g., "completed", "processing", "failed"
 
 export interface Notification {
     id: string;

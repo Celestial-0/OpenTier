@@ -3,6 +3,7 @@ pub mod auth;
 pub mod chat;
 pub mod contact;
 pub mod health;
+pub mod resources;
 pub mod user;
 
 use axum::{Router, extract::FromRef, middleware, response::Html};
@@ -85,6 +86,45 @@ pub fn router(db: PgPool, config: Config, intelligence_client: IntelligenceClien
         .nest(
             "/admin",
             admin::router()
+                .layer(middleware::from_fn_with_state(
+                    app_state.clone(),
+                    crate::middleware::require_admin,
+                ))
+                .layer(middleware::from_fn_with_state(
+                    app_state.clone(),
+                    crate::middleware::auth_middleware,
+                )),
+        )
+        // Resource submission routes (contributor or admin)
+        .nest(
+            "/resources",
+            resources::submit_routes()
+                .layer(middleware::from_fn_with_state(
+                    app_state.clone(),
+                    crate::middleware::require_contributor_or_admin,
+                ))
+                .layer(middleware::from_fn_with_state(
+                    app_state.clone(),
+                    crate::middleware::auth_middleware,
+                )),
+        )
+        // Resource queue routes (admin only)
+        .nest(
+            "/resources",
+            resources::queue_routes()
+                .layer(middleware::from_fn_with_state(
+                    app_state.clone(),
+                    crate::middleware::require_admin,
+                ))
+                .layer(middleware::from_fn_with_state(
+                    app_state.clone(),
+                    crate::middleware::auth_middleware,
+                )),
+        )
+        // Resource management routes (admin only)
+        .nest(
+            "/resources",
+            resources::admin_management_routes()
                 .layer(middleware::from_fn_with_state(
                     app_state.clone(),
                     crate::middleware::require_admin,

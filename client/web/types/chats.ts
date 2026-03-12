@@ -1,5 +1,10 @@
 
-export type MessageRoles = "user" | "assistant" | "system";
+// ============================================================================
+// CHAT TYPES
+// ============================================================================
+
+export type MessageRole = "user" | "assistant" | "system";
+export type MessageRoles = MessageRole; // Backward compatibility
 
 export interface SourceChunk {
     chunk_id: string;
@@ -12,7 +17,7 @@ export interface SourceChunk {
 
 export interface ChatMessage {
     id: string;
-    role: MessageRoles;
+    role: MessageRole;
     content: string;
     sources?: SourceChunk[];
     created_at: number; // Unix timestamp in seconds
@@ -26,6 +31,17 @@ export interface ConversationSummary {
     last_message_preview?: string | null;
     created_at: number;
     updated_at: number;
+}
+
+export interface ConversationListResponse {
+    conversations: ConversationSummary[];
+    next_cursor?: string | null;
+    total_count: number;
+}
+
+export interface CreateConversationRequest {
+    title?: string;
+    metadata?: Record<string, unknown>;
 }
 
 export interface ConversationWithMessages {
@@ -47,16 +63,11 @@ export interface ChatMetrics {
 export interface MessageResponse {
     message_id: string;
     conversation_id: string;
-    role: MessageRoles;
+    role: MessageRole;
     content: string;
     sources: SourceChunk[];
     metrics?: ChatMetrics;
     created_at: number;
-}
-
-export interface CreateConversationRequest {
-    title?: string;
-    metadata?: Record<string, any>;
 }
 
 export interface SendMessageRequest {

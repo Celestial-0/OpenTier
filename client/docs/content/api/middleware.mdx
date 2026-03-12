@@ -13,22 +13,22 @@ flowchart TD
     Router["3. Axum Router\n(route matching)"]
     RateLimit["4. Rate Limit Layer\n(tower_governor, per-route group)\nPeerIpKeyExtractor"]
     AuthMiddleware["5. auth_middleware\n(custom Tower middleware)\nSession DB lookup → inject user_id + role"]
-    RequireAdmin["6. require_admin\nAxum extractor\nReads role from Extensions, no DB query"]
+    RequireRole["6. Role guard\nrequire_admin OR require_contributor_or_admin\nReads role from Extensions, no DB query"]
     Handler["7. Route Handler"]
     Response["HTTP Response"]
 
-    Request --> TraceLayer --> CORSLayer --> Router --> RateLimit --> AuthMiddleware --> RequireAdmin --> Handler --> Response
+    Request --> TraceLayer --> CORSLayer --> Router --> RateLimit --> AuthMiddleware --> RequireRole --> Handler --> Response
 `} />
 
 
 **Layers 1–2** apply globally to every request.  
-**Layer 4** applies per route group (separate `tower_governor` instances for `auth`, `contact`, `user/chat/admin`).  
+**Layer 4** applies per route group (separate `tower_governor` instances for `auth`, `contact`, `user/chat/admin/resources`).  
 **Layer 5** applies to all routes except `/health`, `/auth`, and `/contact`.  
-**Layer 6** applies only to `/admin` routes.
+**Layer 6** applies to protected role-gated routes (`/admin/*` and `/resources/*`).
 
 ## `auth_middleware`
 
-Injected as an Axum middleware layer on the `/user`, `/chat`, and `/admin` router groups.
+Injected as an Axum middleware layer on protected router groups including `/user`, `/chat`, `/admin`, and `/resources`.
 
 **Implementation**:
 1. Reads `Authorization: Bearer <token>` header
@@ -56,6 +56,18 @@ pub async fn require_admin(
 ```
 
 Reads `role` from the request extensions set by `auth_middleware`. **Zero database queries** — pure memory read.
+
+## `require_contributor_or_admin`
+
+Applied to contributor submission endpoints under `/resources/submissions*`.
+
+```rust
+if !role.can_submit_resources() {
+    return Err(StatusCode::FORBIDDEN);
+}
+```
+
+Allows `Role::Contributor` and `Role::Admin`, rejects `Role::User`.
 
 ## Rate Limiting
 
@@ -91,6 +103,15 @@ let app = Router::new()
     .nest("/user", user_router().layer(auth_layer))
     .nest("/chat", chat_router().layer(auth_layer))
     .nest("/admin", admin_router()
+        .layer(require_admin_layer)
+        .layer(auth_layer))
+    .nest("/resources", resources_submit_router()
+        .layer(require_contributor_or_admin_layer)
+        .layer(auth_layer))
+    .nest("/resources", resources_queue_router()
+        .layer(require_admin_layer)
+        .layer(auth_layer))
+    .nest("/resources", resources_admin_management_router()
         .layer(require_admin_layer)
         .layer(auth_layer))
     .layer(cors_layer)

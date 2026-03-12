@@ -1,0 +1,378 @@
+# Type System & Organization
+
+## Overview
+
+All TypeScript types are organized in the `types/` folder using **domain-based separation**. This ensures:
+- 🎯 Clear responsibility boundaries
+- 📦 Scalable module organization  
+- 🔄 Backward compatibility
+- ✨ Type-safe API validation with Zod
+
+## Type Organization
+
+### Domain-Based Modules
+
+```
+types/
+├── auth.ts              # Auth request/response types
+├── contact.ts           # Contact form types
+├── health.ts            # Health check response types
+├── user.ts              # User profile & session types
+├── session.ts           # Session management types
+├── resources.ts         # Knowledge resource types
+├── admin.ts             # Admin dashboard & management types
+├── submissions.ts       # Knowledge submission queue types
+├── chats.ts             # Chat messages & conversations
+├── dashboard.ts         # View-specific type aliases
+├── index.ts             # Barrel exports (single entry point)
+└── (existing files)
+```
+
+### Type Categories
+
+#### 1. **auth.ts** — Authentication
+
+```typescript
+export interface SignInRequest {
+    email: string;
+    password: string;
+}
+
+export interface SignUpRequest {
+    email: string;
+    password: string;
+    name?: string;
+    username?: string;
+    contributor_opt_in?: boolean;
+}
+
+export interface SignInResponse {
+    user_id: string;
+    email: string;
+    session_token: string;
+    expires_at: string; // ISO String
+}
+
+export interface SignUpResponse {
+    user_id: string;
+    email: string;
+    session_token: string;
+    expires_at: string;
+    message: string;
+}
+```
+
+#### 2. **user.ts** — User Profile & Management
+
+```typescript
+export type UserRole = "user" | "admin" | "contributor";
+
+export interface UserResponse {
+    id: string;
+    email: string;
+    email_verified: boolean;
+    name?: string | null;
+    username?: string | null;
+    avatar_url?: string | null;
+    role: string;
+    created_at: string;
+}
+
+export interface UpdateProfileRequest {
+    name?: string;
+    username?: string;
+    avatar_url?: string;
+    contributor_opt_in?: boolean;
+}
+
+export interface ChangePasswordRequest {
+    current_password: string;
+    new_password: string;
+}
+```
+
+#### 3. **health.ts** — Health Check Responses
+
+```typescript
+export interface HealthResponse {
+    status: string;
+    version: string;
+    uptime_seconds: number;
+}
+```
+
+#### 4. **chats.ts** — Chat & Conversations
+
+```typescript
+export type MessageRole = "user" | "assistant" | "system";
+
+export interface ChatMessage {
+    id: string;
+    role: MessageRole;
+    content: string;
+    sources?: SourceChunk[];
+    created_at: number;
+    parent_id?: string;
+}
+
+export interface ConversationSummary {
+    id: string;
+    title?: string | null;
+    message_count: number;
+    last_message_preview?: string | null;
+    created_at: number;
+    updated_at: number;
+}
+
+export interface SendMessageRequest {
+    message: string;
+    config?: {
+        temperature?: number;
+        max_tokens?: number;
+        use_rag?: boolean;
+        model?: string;
+    };
+}
+```
+
+#### 5. **resources.ts** — Knowledge Resources
+
+```typescript
+export interface ResourceConfig {
+    depth?: number;
+    chunk_size?: number;
+    chunk_overlap?: number;
+    auto_clean?: boolean;
+    generate_embeddings?: boolean;
+    follow_links?: boolean;
+}
+
+export interface AddResourceRequest {
+    resource_type: string;
+    content: string;
+    title?: string;
+    metadata?: Record<string, string>;
+    config?: ResourceConfig;
+    is_global?: boolean;
+}
+
+export interface ResourceItemResponse {
+    id: string;
+    type: string;
+    title?: string | null;
+    status: string;
+    chunks_created: number;
+    created_at: number;
+    is_global: boolean;
+}
+```
+
+#### 6. **admin.ts** — Admin Dashboard Types
+
+```typescript
+export interface AdminStats {
+    total_users: number;
+    active_users_24h: number;
+    total_conversations: number;
+    total_messages: number;
+    user_growth: DataPoint[];
+    message_activity: DataPoint[];
+}
+
+export interface UserAdminView {
+    id: string;
+    email: string;
+    full_name?: string | null;
+    role: string;
+    is_verified: boolean;
+    created_at: string;
+    updated_at: string;
+}
+```
+
+#### 7. **submissions.ts** — Knowledge Submissions
+
+```typescript
+export interface SubmitResourceRequest {
+    title: string;
+    content: string;
+    resource_type?: string;
+    metadata?: Record<string, string>;
+}
+
+export interface SubmissionItem {
+    id: string;
+    contributor_id: string;
+    title: string;
+    status: string;
+    admin_feedback?: string | null;
+    reviewed_by?: string | null;
+}
+
+export interface ReviewRequest {
+    action: "approve" | "reject";
+    feedback?: string;
+}
+```
+
+#### 8. **dashboard.ts** — View-Specific Aliases
+
+Centralizes type aliases used in dashboard views:
+
+```typescript
+export type DashboardStats = AdminStats;
+export type DashboardUser = UserAdminView;
+export type DashboardHealth = HealthResponse;
+export type DashboardSession = Session;
+export type DashboardResource = ResourceItemResponse;
+export type DashboardResourceConfig = ResourceConfig;
+export type DashboardAddResourceRequest = AddResourceRequest;
+
+export type DashboardView =
+    | "overview"
+    | "conversations"
+    | "sessions"
+    | "notifications"
+    | "profile"
+    | "settings"
+    | "admin"
+    | "contributor";
+```
+
+## Type Imports
+
+### Barrel Export (Recommended)
+
+```typescript
+// Import from single entry point
+import type {
+    UserRole,
+    ChatMessage,
+    ConversationSummary,
+    AdminStats,
+    DashboardView,
+} from "@/types";
+```
+
+### Domain-Specific Import
+
+```typescript
+// Import from specific domain module
+import type {
+    ChatMessage,
+    SourceChunk,
+    ConversationSummary,
+} from "@/types/chats";
+
+import type { AdminStats, UserAdminView } from "@/types/admin";
+```
+
+## API Validation with Zod
+
+The `lib/api-types.ts` file contains **Zod schemas** for runtime validation of API responses:
+
+```typescript
+// Validation schemas (for runtime checks)
+import { z } from "zod";
+
+export const HealthResponseSchema = z.object({
+    status: z.string(),
+    version: z.string(),
+    uptime_seconds: z.number(),
+});
+
+export const SignUpResponseSchema = z.object({
+    user_id: z.uuid(),
+    email: z.email(),
+    session_token: z.string(),
+    expires_at: z.string(),
+    message: z.string(),
+});
+
+// Type re-exports from types/ (for components)
+export type { 
+    HealthResponse,
+    SignUpResponse,
+    // ... all other types
+} from "@/types";
+```
+
+### Using Validation in API Calls
+
+```typescript
+// api/auth-api.ts
+import { SignUpResponseSchema } from "@/lib/api-types";
+
+export async function signUpApi(data: SignUpRequest): Promise<SignUpResponse> {
+    const res = await apiClient<unknown>("/auth/signup", {
+        method: "POST",
+        body: JSON.stringify(data),
+    });
+
+    const parsed = SignUpResponseSchema.safeParse(res);
+    if (!parsed.success) {
+        throw new Error("Invalid sign-up response");
+    }
+
+    return parsed.data;
+}
+```
+
+## Separation of Concerns
+
+```
+┌─────────────────────────────────────┐
+│   React Components                   │
+│   (use types from @/types)          │
+└────────────┬────────────────────────┘
+             │
+┌────────────▼────────────────────────┐
+│   API Layer (lib/api/*.ts)          │
+│   - Import types for typing         │
+│   - Use Zod schemas for validation  │
+└────────────┬────────────────────────┘
+             │
+┌────────────▼────────────────────────┐
+│   HTTP Client (lib/api-client.ts)   │
+│   - Generic fetch wrapper           │
+└─────────────────────────────────────┘
+```
+
+## Migration Guide
+
+If you have old type files:
+
+**Before:**
+```typescript
+// lib/api-types.ts (old - mixed types and schemas)
+import { z } from "zod";
+
+export interface UserRole = "user" | "admin" | "contributor";
+export type UserRole = z.infer<typeof UserRoleSchema>;
+```
+
+**After:**
+```typescript
+// types/user.ts (domain-specific)
+export type UserRole = "user" | "admin" | "contributor";
+
+// lib/api-types.ts (validation only)
+import { z } from "zod";
+
+export const UserRoleSchema = z.enum(["user", "admin", "contributor"]);
+export type { UserRole } from "@/types";
+```
+
+## Best Practices
+
+✅ **DO:**
+- Import types from `@/types` or `@/types/[domain]`
+- Use Zod schemas in API layer for validation
+- Keep types in domain modules (auth, user, chat, etc.)
+- Use `type` imports for zero runtime cost: `import type { ... }`
+
+❌ **DON'T:**
+- Mix type definitions with Zod schemas
+- Create new types in components
+- Duplicate type definitions across files
+- Import from `api-types.ts` in components (use `types/` instead)

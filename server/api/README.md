@@ -10,7 +10,15 @@ The API gateway is the sole public-facing entry point. It handles:
 - **Rate Limiting** — Tiered per-endpoint throttling (Governor)
 - **Chat Streaming** — SSE bridge from gRPC server-streaming
 - **Contact** — Public contact form with email delivery
-- **Admin** — User management, resource ingestion, RBAC
+- **Admin** — User management, queue moderation, direct resource ingestion
+- **Contributor Flow** — Submission queue for knowledge resources (`/resources/submissions*`)
+
+Detailed route, middleware, and contract updates are documented in the docs site:
+- API Overview
+- Route Map
+- Middleware Pipeline
+- Auth & Session Model
+- Admin & RBAC
 
 ## Setup
 

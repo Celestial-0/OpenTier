@@ -11,19 +11,14 @@ use super::types::*;
 use crate::gateway::AppState;
 use crate::grpc::proto::opentier::intelligence::v1 as pb;
 
-// ============================================================================
-// HANDLERS
-// ============================================================================
-
 /// Add a new resource for ingestion
-/// POST /admin/resources
+/// POST /resources
 pub async fn add_resource(
     State(state): State<AppState>,
     Extension(user_id): Extension<Uuid>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Json<AddResourceResponse>, ResourceError> {
-    // Check Content-Type header
     let content_type = headers
         .get(header::CONTENT_TYPE)
         .and_then(|value| value.to_str().ok())
@@ -36,19 +31,14 @@ pub async fn add_resource(
         )));
     }
 
-    // Parse body
     let req: AddResourceRequest = serde_json::from_slice(&body)
         .map_err(|e| ResourceError::Validation(format!("Invalid JSON: {}", e)))?;
 
-    // Validate request
     req.validate()?;
 
     let mut client = state.intelligence_client.clone();
-
-    // Generate IDs
     let resource_id = Uuid::new_v4().to_string();
 
-    // Map to appropriate gRPC call based on type
     let content = match req.resource_type.to_lowercase().as_str() {
         "url" => Some(pb::add_resource_request::Content::Url(req.content.clone())),
         "text" | "markdown" | "html" | "code" => {
@@ -77,16 +67,13 @@ pub async fn add_resource(
 
     let mut metadata = req.metadata.clone().unwrap_or_default();
 
-    // Ensure title is preserved in metadata
     if let Some(ref t) = req.title {
         metadata.insert("title".to_string(), t.clone());
     } else {
-        // fallback to generated title
         let generated: String = req.content.chars().take(50).collect();
         metadata.insert("title".to_string(), generated);
     }
 
-    // Preserve original requested type
     metadata.insert("original_type".to_string(), req.resource_type.clone());
 
     let grpc_req = pb::AddResourceRequest {
@@ -134,7 +121,7 @@ pub async fn add_resource(
 }
 
 /// List all resources
-/// GET /admin/resources
+/// GET /resources
 pub async fn list_resources(
     State(state): State<AppState>,
     Extension(user_id): Extension<Uuid>,
@@ -167,9 +154,8 @@ pub async fn list_resources(
             _ => pb::ResourceStatus::Unspecified as i32,
         });
 
-    // Validate limit
     let limit = params.limit.unwrap_or(20);
-    if limit < 1 || limit > 100 {
+    if !(1..=100).contains(&limit) {
         return Err(ResourceError::InvalidFilters);
     }
 
@@ -177,8 +163,8 @@ pub async fn list_resources(
         user_id: user_id.to_string(),
         limit: Some(limit),
         cursor: params.cursor.clone(),
-        type_filter: type_filter,
-        status_filter: status_filter,
+        type_filter,
+        status_filter,
     };
 
     let response = client
@@ -219,8 +205,6 @@ pub async fn list_resources(
                 .to_string();
 
             let title = item.metadata.get("title").cloned();
-
-            // Prefer original type from metadata if available, otherwise use mapped type
             let final_type = if let Some(orig) = item.metadata.get("original_type") {
                 orig.clone()
             } else {
@@ -250,7 +234,7 @@ pub async fn list_resources(
 }
 
 /// Get resource status
-/// GET /admin/resources/{id}
+/// GET /resources/{id}
 pub async fn get_resource_status(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -294,7 +278,7 @@ pub async fn get_resource_status(
 }
 
 /// Delete resource and all associated data
-/// DELETE /admin/resources/{id}
+/// DELETE /resources/{id}
 pub async fn delete_resource(
     State(state): State<AppState>,
     Extension(user_id): Extension<Uuid>,

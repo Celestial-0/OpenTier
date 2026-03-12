@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/components/provider/theme-provider";
 import { AuthProvider } from "@/context/auth-context";
 import { AuthOverlay } from "@/components/core/auth/auth-overlay";
 import { AdminProvider } from "@/context/admin-context";
+import { ContributorProvider } from "@/context/contributor-context";
 import { UiProvider } from "@/context/ui-context";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -37,6 +38,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning className={`${jetbrainsMono.variable} scroll-smooth`}>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        suppressHydrationWarning
       >
         <ThemeProvider
           attribute="class"
@@ -47,11 +49,13 @@ export default function RootLayout({
           <AuthProvider>
             <AuthOverlay />
             <AdminProvider>
-              <UiProvider>
-                <TooltipProvider>
-                  {children}
-                </TooltipProvider>
-              </UiProvider>
+              <ContributorProvider>
+                <UiProvider>
+                  <TooltipProvider>
+                    {children}
+                  </TooltipProvider>
+                </UiProvider>
+              </ContributorProvider>
             </AdminProvider>
             <Toaster />
           </AuthProvider>

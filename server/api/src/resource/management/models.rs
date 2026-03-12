@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
-/// Resource status enum
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "resource_status", rename_all = "lowercase")]
 pub enum ResourceStatus {
@@ -26,7 +25,6 @@ impl From<String> for ResourceStatus {
     }
 }
 
-/// Resource type enum
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "resource_type", rename_all = "lowercase")]
 pub enum ResourceType {
@@ -46,7 +44,6 @@ impl From<String> for ResourceType {
     }
 }
 
-/// Resource domain model - represents an ingested resource
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct Resource {
     pub id: Uuid,
@@ -64,7 +61,6 @@ pub struct Resource {
     pub job_id: Option<String>,
     pub error: Option<String>,
 
-    // Stats
     pub documents_count: i32,
     pub chunks_count: i32,
 
@@ -73,7 +69,6 @@ pub struct Resource {
 }
 
 impl Resource {
-    /// Create a new resource
     pub fn new(user_id: Uuid, resource_type: ResourceType, content: String) -> Self {
         let now = Utc::now();
         Self {
@@ -92,14 +87,12 @@ impl Resource {
         }
     }
 
-    /// Mark resource as processing
     pub fn mark_processing(&mut self, job_id: String) {
         self.status = ResourceStatus::Processing;
         self.job_id = Some(job_id);
         self.updated_at = Utc::now();
     }
 
-    /// Mark resource as completed
     pub fn mark_completed(&mut self, documents: i32, chunks: i32) {
         self.status = ResourceStatus::Completed;
         self.documents_count = documents;
@@ -107,14 +100,12 @@ impl Resource {
         self.updated_at = Utc::now();
     }
 
-    /// Mark resource as failed
     pub fn mark_failed(&mut self, error: String) {
         self.status = ResourceStatus::Failed;
         self.error = Some(error);
         self.updated_at = Utc::now();
     }
 
-    /// Check if resource is completed
     pub fn is_completed(&self) -> bool {
         matches!(self.status, ResourceStatus::Completed)
     }

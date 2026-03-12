@@ -39,17 +39,24 @@ pub async fn signup(
         return Err(AuthError::EmailAlreadyExists);
     }
 
+    let requested_role = if req.contributor_opt_in {
+        crate::auth::Role::Contributor
+    } else {
+        crate::auth::Role::User
+    };
+
     // Create user
     let user = sqlx::query!(
         r#"
-        INSERT INTO users (email, password_hash, name, username, email_verified)
-        VALUES ($1, $2, $3, $4, FALSE)
+        INSERT INTO users (email, password_hash, name, username, email_verified, role)
+        VALUES ($1, $2, $3, $4, FALSE, $5::text::user_role)
         RETURNING id
         "#,
         req.email,
         password_hash,
         req.name,
-        req.username
+        req.username,
+        requested_role.to_string(),
     )
     .fetch_one(db)
     .await?;

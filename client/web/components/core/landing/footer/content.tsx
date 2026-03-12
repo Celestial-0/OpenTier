@@ -5,7 +5,7 @@ import { motion } from "motion/react";
 import { CheckCircle2, CalendarDays } from "lucide-react";
 
 import { useQuery } from "@/hooks/use-query";
-import { apiClient } from "@/lib/api-client";
+import { getRustApiHealth, getIntelligenceApiHealth } from "@/lib/api/health-api";
 
 import { buttonVariants } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -37,11 +37,11 @@ export function FooterContent() {
 
     const RustApiHealth = useQuery<HealthResponse>({
         queryKey: ["rust-api-health"],
-        queryFn: () => apiClient<HealthResponse>("/health/api"),
+        queryFn: getRustApiHealth,
     });
     const PythonApiHealth = useQuery<HealthResponse>({
         queryKey: ["python-api-health"],
-        queryFn: () => apiClient<HealthResponse>("/health/intelligence"),
+        queryFn: getIntelligenceApiHealth,
     });
 
     const isSystemHealthy = RustApiHealth.data?.status === "healthy" && PythonApiHealth.data?.status === "healthy";
@@ -172,25 +172,26 @@ export function FooterContent() {
                 className="pt-6 flex flex-col items-center gap-6 text-center"
             >
                 <HoverCard>
-                    <HoverCardTrigger
-                        {...({
-                            href: DEVELOPER_PROFILE.portfolioUrl,
-                            target: "_blank",
-                            rel: "noopener noreferrer"
-                        } as any)}
-                        className="
+                    <Link
+                        href={DEVELOPER_PROFILE.portfolioUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        <HoverCardTrigger
+                            className="
                                 text-xs text-muted-foreground transition-colors
                                 hover:text-foreground underline-offset-4
                                 text-center
                                 cursor-pointer
                                 
                             "
-                    >
-                        {FOOTER_TEXT.designedBy}{" "}
-                        <span className="underline">
-                            {DEVELOPER_PROFILE.name}
-                        </span>
-                    </HoverCardTrigger>
+                        >
+                            {FOOTER_TEXT.designedBy}{" "}
+                            <span className="underline">
+                                {DEVELOPER_PROFILE.name}
+                            </span>
+                        </HoverCardTrigger>
+                    </Link>
 
                     <HoverCardContent className="w-[360px] border-foreground/10  backdrop-blur-xl p-0 overflow-hidden relative">
 

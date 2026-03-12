@@ -14,13 +14,13 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Users, Database, BarChart3, Search, Shield, Trash2, FileText, Activity, CheckCircle2, XCircle, AlertCircle, Code, Send, RefreshCw, Copy, Check } from "lucide-react";
+import { Users, Database, BarChart3, Search, Shield, Trash2, FileText, Activity, CheckCircle2, XCircle, AlertCircle, Inbox } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { SiRust, SiPython } from "react-icons/si";
 import { toast } from "sonner";
 
 import { useQuery } from "@/hooks/use-query";
-import { apiClient } from "@/lib/api-client";
+import { getIntelligenceApiHealth, getRustApiHealth } from "@/lib/api/health-api";
 import {
     DashboardStats,
     DashboardHealth,
@@ -32,6 +32,7 @@ import {
 import { useAdmin } from "@/context/admin-context";
 import { useAdminStore } from "@/store/admin-store";
 import { IngestionQueue } from "./ingestion-queue";
+import { Queue } from "./queue";
 
 // Mock data matching /admin/* API responses
 const formatDate = (timestamp: number) => {
@@ -85,11 +86,11 @@ export const Admin = () => {
     // Health checks
     const RustApiHealth = useQuery<DashboardHealth>({
         queryKey: ["rust-api-health"],
-        queryFn: () => apiClient<DashboardHealth>("/api/health/api"),
+        queryFn: getRustApiHealth,
     });
     const PythonApiHealth = useQuery<DashboardHealth>({
         queryKey: ["python-api-health"],
-        queryFn: () => apiClient<DashboardHealth>("/api/health/intelligence"),
+        queryFn: getIntelligenceApiHealth,
     });
 
     // Local state
@@ -248,7 +249,7 @@ export const Admin = () => {
 
             {/* Admin Tabs */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-                <TabsList className="grid w-full grid-cols-4">
+                <TabsList className="grid w-full grid-cols-5">
                     <TabsTrigger value="stats">
                         <BarChart3 className="mr-2 h-4 w-4" />
                         Statistics
@@ -260,6 +261,10 @@ export const Admin = () => {
                     <TabsTrigger value="resources">
                         <Database className="mr-2 h-4 w-4" />
                         Resources
+                    </TabsTrigger>
+                    <TabsTrigger value="queue">
+                        <Inbox className="mr-2 h-4 w-4" />
+                        Submissions
                     </TabsTrigger>
                     <TabsTrigger value="monitoring">
                         <Activity className="mr-2 h-4 w-4" />
@@ -513,6 +518,7 @@ export const Admin = () => {
                                                                         </SelectTrigger>
                                                                         <SelectContent>
                                                                             <SelectItem value="user">User</SelectItem>
+                                                                            <SelectItem value="contributor">Contributor</SelectItem>
                                                                             <SelectItem value="admin">Admin</SelectItem>
                                                                         </SelectContent>
                                                                     </Select>
@@ -874,7 +880,7 @@ export const Admin = () => {
                                                             <AlertDialogHeader>
                                                                 <AlertDialogTitle>Delete Resource?</AlertDialogTitle>
                                                                 <AlertDialogDescription>
-                                                                    This will permanently delete "{resource.title ?? resource.metadata?.title ?? resource.id}" and all {resource.chunks_created} associated chunks from the knowledge base.
+                                                                    This will permanently delete &quot;{resource.title ?? resource.metadata?.title ?? resource.id}&quot; and all {resource.chunks_created} associated chunks from the knowledge base.
                                                                 </AlertDialogDescription>
                                                             </AlertDialogHeader>
                                                             <AlertDialogFooter>
@@ -995,11 +1001,16 @@ export const Admin = () => {
                     </Card>
                 </TabsContent>
 
+                {/* Queue Tab */}
+                <TabsContent value="queue" className="space-y-4">
+                    <Queue />
+                </TabsContent>
+
                 {/* Admin Footer */}
-                <Card className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950">
-                    <CardContent>
+                <Card className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950 mt-8">
+                    <CardContent className="pt-6">
                         <div className="flex gap-3">
-                            <Shield className="h-5 w-5 text-blue-600 dark:text-blue-500 flex-shrink-0 mt-0.5" />
+                            <Shield className="h-5 w-5 text-blue-600 dark:text-blue-500 shrink-0 mt-0.5" />
                             <div className="space-y-1">
                                 <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
                                     Admin Panel
@@ -1011,9 +1022,6 @@ export const Admin = () => {
                         </div>
                     </CardContent>
                 </Card>
-
-
-
             </Tabs>
         </div>
     );

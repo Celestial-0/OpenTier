@@ -6,8 +6,9 @@ import { Conversations } from "./conversations";
 import { Sessions } from "./sessions";
 import { Profile } from "./profile";
 import { Settings } from "./settings";
+import { Contributor } from "./contributor";
 import { Admin } from "./admin";
-import { LayoutDashboard, MessageSquare, Shield, User, Settings as SettingsIcon, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, MessageSquare, Shield, User, Settings as SettingsIcon, ShieldCheck, BookOpen } from "lucide-react";
 import { useAuth } from "@/context/auth-context";
 import { useUi } from "@/context/ui-context";
 import { DashboardView } from "@/types/dashboard";
@@ -17,19 +18,23 @@ export const DashboardUI = () => {
     const { activeDashboardView, setActiveDashboardView } = useUi();
 
     return (
-        <div className="container mx-auto p-6 max-w-6xl">
+        <div className="container mx-auto p-6 max-w-7xl">
             <div className="space-y-6">
                 {/* Dashboard Header */}
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-                    <p className="text-muted-foreground">
+                <div className="pt-4">
+                    <h1 className="text-4xl font-bold tracking-tight">Dashboard</h1>
+                    <p className="text-muted-foreground text-lg">
                         Manage your account, conversations, and settings
                     </p>
                 </div>
 
                 {/* Dashboard Tabs */}
-                <Tabs value={activeDashboardView} onValueChange={(v) => setActiveDashboardView(v as DashboardView)} className="space-y-6">
-                    <TabsList className={`grid w-full grid-cols-2 ${user?.role === 'admin' ? 'lg:grid-cols-6' : 'lg:grid-cols-5'} gap-2`}>
+                <Tabs value={activeDashboardView} onValueChange={(v) => setActiveDashboardView(v as DashboardView)} className="space-y-2">
+                    <TabsList className={`grid w-full grid-cols-2 ${
+                        user?.role === 'admin' ? 'lg:grid-cols-6' :
+                        user?.role === 'contributor' ? 'lg:grid-cols-6' :
+                        'lg:grid-cols-5'
+                    } gap-2`}>
                         <TabsTrigger value="overview">
                             <LayoutDashboard className="mr-2 h-4 w-4" />
                             <span className="hidden sm:inline">Overview</span>
@@ -50,6 +55,12 @@ export const DashboardUI = () => {
                             <SettingsIcon className="mr-2 h-4 w-4" />
                             <span className="hidden sm:inline">Settings</span>
                         </TabsTrigger>
+                        {user?.role === "contributor" && (
+                            <TabsTrigger value="contributor">
+                                <BookOpen className="mr-2 h-4 w-4 text-blue-400" />
+                                <span className="hidden sm:inline">Contribute</span>
+                            </TabsTrigger>
+                        )}
                         {user?.role === "admin" && (
                             <TabsTrigger value="admin">
                                 <ShieldCheck className="mr-2 h-4 w-4 text-red-500" />
@@ -59,7 +70,7 @@ export const DashboardUI = () => {
                     </TabsList>
 
                     <TabsContent value="overview">
-                        <Overview onNavigateToConversations={() => setActiveDashboardView("conversations")} />
+                        <Overview />
                     </TabsContent>
 
                     <TabsContent value="conversations">
@@ -76,12 +87,18 @@ export const DashboardUI = () => {
 
 
                     <TabsContent value="settings">
-                        <Settings onNavigateToSessions={() => setActiveDashboardView("sessions")} />
+                        <Settings />
                     </TabsContent>
 
                     {user?.role === "admin" && (
                         <TabsContent value="admin">
                             <Admin />
+                        </TabsContent>
+                    )}
+
+                    {user?.role === "contributor" && (
+                        <TabsContent value="contributor">
+                            <Contributor />
                         </TabsContent>
                     )}
                 </Tabs>

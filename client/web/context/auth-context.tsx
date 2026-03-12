@@ -7,13 +7,31 @@ import { useUserStore } from "@/store/user-store";
 import { UserResponse, SignInRequest, SignUpRequest } from "@/lib/api-types";
 import { AuthView } from "@/components/core/auth/constants";
 import { setAuthToken, removeAuthToken } from "@/lib/auth-utils";
+import {
+    forgotPasswordApi,
+    resendVerificationApi,
+    resetPasswordApi,
+    signInApi,
+    signOutApi,
+    signUpApi,
+    verifyEmailApi,
+} from "@/lib/api/auth-api";
+
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+    if (error instanceof Error && error.message) {
+        return error.message;
+    }
+
+    return fallback;
+};
 
 interface AuthContextType {
     user: UserResponse | null;
     isLoading: boolean;
     isAuthenticated: boolean;
     signIn: (data: SignInRequest) => Promise<void>;
-    signUp: (data: any) => Promise<void>;
+    signUp: (data: SignUpRequest) => Promise<void>;
     logout: () => Promise<void>;
     checkAuth: () => Promise<void>;
     resendVerification: (email: string) => Promise<void>;
@@ -52,7 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const router = useRouter();
 
     // Use the UserStore for the single source of truth regarding user data
-    const { user, setUser, fetchUser, logout: storeLogout } = useUserStore();
+    const { user, fetchUser, logout: storeLogout } = useUserStore();
 
     // Local loading state for the initial check or auth actions
     const [isLoading, setIsLoading] = useState(true);
@@ -99,26 +117,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const signIn = async (data: SignInRequest) => {
         setIsLoading(true);
         try {
-            const res = await fetch("/api/auth/signin", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(data),
-            });
-
-            if (!res.ok) {
-                const text = await res.text();
-                // console.error("SignIn Raw Response:", text); // Removed
-                let message = "Failed to sign in";
-                try {
-                    const json = JSON.parse(text);
-                    message = json.error || json.message || message;
-                } catch (e) {
-                    if (text.length > 0) message = text;
-                }
-                throw new Error(message);
-            }
-
-            const responseData = await res.json();
+            const responseData = await signInApi(data);
 
             // Save session token if present
             if (responseData.session_token) {
@@ -128,12 +127,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             await fetchUser();
             setIsModalOpen(false);
             router.push("/chat");
-        } catch (error: any) {
-            if (error.message === "Email not verified" || error.message?.includes("verified")) {
+        } catch (error: unknown) {
+            const message = getErrorMessage(error, "Failed to sign in");
+
+            if (message === "Email not verified" || message.includes("verified")) {
                 setAuthView('verify');
                 setAuthError(null);
             } else {
-                setAuthError(error.message || "Failed to sign in");
+                setAuthError(message);
             }
             throw error;
         } finally {
@@ -141,37 +142,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    const signUp = async (data: any) => {
+    const signUp = async (data: SignUpRequest) => {
         setIsLoading(true);
         try {
             const apiData = {
                 email: data.email,
                 password: data.password,
-                name: data.fullName || data.name,
-                username: data.username
+                name: data.name,
+                username: data.username,
+                contributor_opt_in: data.contributor_opt_in ?? false,
             };
 
-            const res = await fetch("/api/auth/signup", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(apiData),
-            });
+            await signUpApi(apiData);
 
             setAttemptedEmail(data.email);
-
-            if (!res.ok) {
-                const text = await res.text();
-                // console.error("SignUp Raw Response:", text); // Removed
-                let message = "Failed to sign up";
-                try {
-                    const json = JSON.parse(text);
-                    message = json.error || json.message || message;
-                } catch (e) {
-                    // Not JSON, use text if available or default
-                    if (text.length > 0) message = text;
-                }
-                throw new Error(message);
-            }
 
             // After signup, we might be automatically logged in or need to log in.
             // Rust API typically returns just a success message or user_id.
@@ -192,7 +176,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const logout = async () => {
         try {
             // Attempt server-side logout, but always clear local state
-            await fetch("/api/auth/signout", { method: "POST" });
+            await signOutApi();
         } catch (error) {
             console.error("Logout failed", error);
         } finally {
@@ -202,28 +186,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-    // Derived state
-    const isAuthenticated = !!user;
-
     const resendVerification = async (email: string) => {
         try {
-            const res = await fetch("/api/auth/resend-verification", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email }),
-            });
-
-            if (!res.ok) {
-                const text = await res.text();
-                let message = "Failed to resend verification email";
-                try {
-                    const json = JSON.parse(text);
-                    message = json.error || json.message || message;
-                } catch (e) {
-                    if (text.length > 0) message = text;
-                }
-                throw new Error(message);
-            }
+            await resendVerificationApi(email);
         } catch (error) {
             // console.error("Resend verification failed", error); // Removed
             throw error;
@@ -232,27 +197,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const verifyEmail = async (email: string, otp: string, token?: string) => {
         try {
-            const url = token
-                ? `/api/auth/verify-email?token=${encodeURIComponent(token)}`
-                : "/api/auth/verify-email";
-
-            const res = await fetch(url, {
-                method: token ? "GET" : "POST",
-                headers: { "Content-Type": "application/json" },
-                body: token ? undefined : JSON.stringify({ email, otp }),
-            });
-
-            if (!res.ok) {
-                const text = await res.text();
-                let message = "Failed to verify email";
-                try {
-                    const json = JSON.parse(text);
-                    message = json.error || json.message || message;
-                } catch (e) {
-                    if (text.length > 0) message = text;
-                }
-                throw new Error(message);
-            }
+            await verifyEmailApi(email, otp, token);
         } catch (error) {
             throw error;
         }
@@ -260,23 +205,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const forgotPassword = async (email: string) => {
         try {
-            const res = await fetch("/api/auth/forgot-password", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email }),
-            });
-
-            if (!res.ok) {
-                const text = await res.text();
-                let message = "Failed to send password reset email";
-                try {
-                    const json = JSON.parse(text);
-                    message = json.error || json.message || message;
-                } catch (e) {
-                    if (text.length > 0) message = text;
-                }
-                throw new Error(message);
-            }
+            await forgotPasswordApi(email);
         } catch (error) {
             throw error;
         }
@@ -284,23 +213,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const resetPassword = async (password: string, token: string) => {
         try {
-            const res = await fetch("/api/auth/reset-password", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ new_password: password, token }),
-            });
-
-            if (!res.ok) {
-                const text = await res.text();
-                let message = "Failed to reset password";
-                try {
-                    const json = JSON.parse(text);
-                    message = json.error || json.message || message;
-                } catch (e) {
-                    if (text.length > 0) message = text;
-                }
-                throw new Error(message);
-            }
+            await resetPasswordApi(password, token);
         } catch (error) {
             throw error;
         }

@@ -1,6 +1,6 @@
 -- Create role enum type (must be created before users table)
 -- Using DO block to handle re-runs gracefully
-DO $$ BEGIN CREATE TYPE user_role AS ENUM ('user', 'admin');
+DO $$ BEGIN CREATE TYPE user_role AS ENUM ('user', 'contributor', 'admin');
 EXCEPTION
 WHEN duplicate_object THEN null;
 END $$;

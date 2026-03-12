@@ -39,7 +39,8 @@ export function SignUpFlow({
         defaultValues: {
             email: "",
             password: "",
-            fullName: "",
+            name: "",
+            contributor_opt_in: false,
         },
     })
 
@@ -52,7 +53,7 @@ export function SignUpFlow({
         {
             title: "Personal Details",
             subtitle: "Tell us a bit about yourself",
-            fields: ["fullName"] as const
+            fields: ["name"] as const
         },
         {
             title: "Verification",
@@ -71,7 +72,7 @@ export function SignUpFlow({
         const values = form.state.values
         const validationResult = step === 0
             ? signupSchema.pick({ email: true, password: true }).safeParse(values)
-            : signupSchema.pick({ fullName: true }).safeParse(values)
+            : signupSchema.pick({ name: true, contributor_opt_in: true }).safeParse(values)
 
         if (!validationResult.success) {
             // Touch fields to surface errors via field-level validators
@@ -236,25 +237,43 @@ export function SignUpFlow({
                             )}
 
                             {step === 1 && (
-                                <form.Field
-                                    name="fullName"
-                                    validators={{ onChange: signupSchema.shape.fullName }}
-                                >
-                                    {(field) => (
-                                        <div className="space-y-2">
-                                            <Label>Full Name</Label>
-                                            <Input
-                                                placeholder="John Doe"
-                                                value={field.state.value}
-                                                onBlur={field.handleBlur}
-                                                onChange={(e) => field.handleChange(e.target.value)}
-                                            />
-                                            {field.state.meta.errors.length > 0 && (
-                                                <p className="text-xs text-destructive">{String(field.state.meta.errors[0])}</p>
-                                            )}
-                                        </div>
-                                    )}
-                                </form.Field>
+                                <>
+                                    <form.Field
+                                        name="name"
+                                        validators={{ onChange: signupSchema.shape.name }}
+                                    >
+                                        {(field) => (
+                                            <div className="space-y-2">
+                                                <Label>Full Name</Label>
+                                                <Input
+                                                    placeholder="John Doe"
+                                                    value={field.state.value}
+                                                    onBlur={field.handleBlur}
+                                                    onChange={(e) => field.handleChange(e.target.value)}
+                                                />
+                                                {field.state.meta.errors.length > 0 && (
+                                                    <p className="text-xs text-destructive">{String(field.state.meta.errors[0])}</p>
+                                                )}
+                                            </div>
+                                        )}
+                                    </form.Field>
+
+                                    <form.Field name="contributor_opt_in">
+                                        {(field) => (
+                                            <label className="flex items-start gap-3 rounded-lg border border-border px-3 py-3">
+                                                <input
+                                                    type="checkbox"
+                                                    className="mt-1 h-4 w-4"
+                                                    checked={field.state.value}
+                                                    onChange={(e) => field.handleChange(e.target.checked)}
+                                                />
+                                                <span className="text-sm text-muted-foreground">
+                                                    I want to opt in as a contributor and submit knowledge resources.
+                                                </span>
+                                            </label>
+                                        )}
+                                    </form.Field>
+                                </>
                             )}
 
                             {step === 2 && (

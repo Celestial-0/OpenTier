@@ -2,19 +2,14 @@
 use super::errors::ResourceError;
 use serde::{Deserialize, Serialize};
 
-// Constants for validation
 const MAX_CONTENT_SIZE: usize = 10 * 1024 * 1024; // 10MB
 const MAX_TITLE_LENGTH: usize = 500;
 const MIN_CONTENT_LENGTH: usize = 1;
 
-// ============================================================================
-// RESOURCE REQUEST/RESPONSE TYPES
-// ============================================================================
-
 #[derive(Debug, Deserialize)]
 pub struct AddResourceRequest {
     #[serde(rename = "type", alias = "resource_type")]
-    pub resource_type: String, // "url", "file", "text", "markdown", "pdf", "html", "code"
+    pub resource_type: String,
     pub content: String,
     pub title: Option<String>,
     pub metadata: Option<std::collections::HashMap<String, String>>,
@@ -23,9 +18,7 @@ pub struct AddResourceRequest {
 }
 
 impl AddResourceRequest {
-    /// Validate the resource request
     pub fn validate(&self) -> Result<(), ResourceError> {
-        // Validate resource type
         match self.resource_type.to_lowercase().as_str() {
             "url" | "text" | "markdown" | "pdf" | "html" | "code" | "file" => {}
             _ => {
@@ -35,7 +28,6 @@ impl AddResourceRequest {
             }
         }
 
-        // Validate content length
         if self.content.is_empty() {
             return Err(ResourceError::InvalidContent);
         }
@@ -50,12 +42,10 @@ impl AddResourceRequest {
             return Err(ResourceError::ContentTooLarge);
         }
 
-        // Validate URL format if type is URL
         if self.resource_type.to_lowercase() == "url" {
             self.validate_url()?;
         }
 
-        // Validate title length if provided
         if let Some(ref title) = self.title {
             if title.len() > MAX_TITLE_LENGTH {
                 return Err(ResourceError::Validation(format!(
@@ -65,7 +55,6 @@ impl AddResourceRequest {
             }
         }
 
-        // Validate config if provided
         if let Some(ref config) = self.config {
             config.validate()?;
         }
@@ -73,16 +62,13 @@ impl AddResourceRequest {
         Ok(())
     }
 
-    /// Validate URL format
     fn validate_url(&self) -> Result<(), ResourceError> {
-        // Basic URL validation
         if !self.content.starts_with("http://") && !self.content.starts_with("https://") {
             return Err(ResourceError::InvalidUrl(
                 "URL must start with http:// or https://".to_string(),
             ));
         }
 
-        // Check if URL has at least a domain
         let url_part = if self.content.starts_with("https://") {
             &self.content[8..]
         } else {
@@ -110,29 +96,25 @@ pub struct ResourceConfig {
 }
 
 impl ResourceConfig {
-    /// Validate the resource config
     pub fn validate(&self) -> Result<(), ResourceError> {
-        // Validate depth
         if let Some(depth) = self.depth {
-            if depth < 0 || depth > 10 {
+            if !(0..=10).contains(&depth) {
                 return Err(ResourceError::Validation(
                     "Depth must be between 0 and 10".to_string(),
                 ));
             }
         }
 
-        // Validate chunk_size
         if let Some(size) = self.chunk_size {
-            if size < 100 || size > 10000 {
+            if !(100..=10000).contains(&size) {
                 return Err(ResourceError::Validation(
                     "Chunk size must be between 100 and 10000".to_string(),
                 ));
             }
         }
 
-        // Validate chunk_overlap
         if let Some(overlap) = self.chunk_overlap {
-            if overlap < 0 || overlap > 1000 {
+            if !(0..=1000).contains(&overlap) {
                 return Err(ResourceError::Validation(
                     "Chunk overlap must be between 0 and 1000".to_string(),
                 ));
@@ -239,6 +221,6 @@ pub struct ResourceStatusResponse {
 
 #[derive(Debug, Serialize)]
 pub struct ResourceProgress {
-    pub stage: String, // "scraping", "cleaning", "embedding", "indexing"
+    pub stage: String,
     pub percent: i32,
 }
