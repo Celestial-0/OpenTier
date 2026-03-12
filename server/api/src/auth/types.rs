@@ -30,6 +30,8 @@ pub struct SignUpRequest {
     pub password: String,
     pub name: Option<String>,
     pub username: Option<String>,
+    #[serde(default)]
+    pub contributor_opt_in: bool,
 }
 
 #[derive(Debug, Serialize)]

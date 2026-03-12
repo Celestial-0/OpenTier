@@ -7,7 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Bell, CheckCheck, Trash2, Mail, Shield, MessageSquare, AlertCircle } from "lucide-react";
-import { useNotificationStore } from "@/store/notification-store";
+import { useUserStore } from "@/store/user-store";
 import { Notification } from "@/types/dashboard";
 
 
@@ -34,7 +34,12 @@ const formatTimeAgo = (timestamp: number) => {
 };
 
 export const Notifications = () => {
-    const { notifications, markAsRead, markAllAsRead, clearAll } = useNotificationStore();
+    const {
+        notifications,
+        markNotificationAsRead,
+        markAllNotificationsAsRead,
+        clearNotifications,
+    } = useUserStore();
     const unreadCount = notifications.filter((n) => !n.read).length;
 
     return (
@@ -60,7 +65,7 @@ export const Notifications = () => {
                 </div>
 
                 {/* Notifications List */}
-                <ScrollArea className="h-[400px]">
+                <ScrollArea className="h-100">
                     {notifications.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-12 text-center">
                             <Bell className="h-12 w-12 text-muted-foreground mb-4" />
@@ -75,10 +80,10 @@ export const Notifications = () => {
                                     key={notification.id}
                                     className={`p-4 hover:bg-muted/50 transition-colors cursor-pointer ${!notification.read ? "bg-muted/30" : ""
                                         }`}
-                                    onClick={() => markAsRead(notification.id)}
+                                    onClick={() => markNotificationAsRead(notification.id)}
                                 >
                                     <div className="flex gap-3">
-                                        <div className="flex-shrink-0 mt-1">
+                                        <div className="shrink-0 mt-1">
                                             {getNotificationIcon(notification.type)}
                                         </div>
                                         <div className="flex-1 space-y-1">
@@ -87,7 +92,7 @@ export const Notifications = () => {
                                                     {notification.title}
                                                 </p>
                                                 {!notification.read && (
-                                                    <div className="h-2 w-2 rounded-full bg-blue-500 flex-shrink-0 mt-1" />
+                                                    <div className="h-2 w-2 rounded-full bg-blue-500 shrink-0 mt-1" />
                                                 )}
                                             </div>
                                             <p className="text-sm text-muted-foreground line-clamp-2">
@@ -114,7 +119,7 @@ export const Notifications = () => {
                                     variant="ghost"
                                     size="sm"
                                     className="flex-1"
-                                    onClick={markAllAsRead}
+                                    onClick={markAllNotificationsAsRead}
                                 >
                                     <CheckCheck className="mr-2 h-4 w-4" />
                                     Mark all read
@@ -124,7 +129,7 @@ export const Notifications = () => {
                                 variant="ghost"
                                 size="sm"
                                 className="flex-1"
-                                onClick={clearAll}
+                                onClick={clearNotifications}
                             >
                                 <Trash2 className="mr-2 h-4 w-4" />
                                 Clear all

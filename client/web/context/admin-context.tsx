@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext } from 'react';
 import { useUserStore } from '@/store/user-store';
 import { useAdminStore } from '@/store/admin-store';
 import { DashboardAddResourceRequest } from '@/types/dashboard';
@@ -35,21 +35,10 @@ const AdminContext = createContext<AdminContextValue | null>(null);
 
 export const AdminProvider = ({ children }: { children: React.ReactNode }) => {
     const user = useUserStore((state) => state.user);
-    const [isAdmin, setIsAdmin] = useState(false);
-    const [isLoading, setIsLoading] = useState(true);
+    const isLoading = useUserStore((state) => state.isLoading);
 
     const adminStore = useAdminStore();
-
-    useEffect(() => {
-        // Check if user has admin role
-        if (user) {
-            const userRole = user.role.toLowerCase();
-            setIsAdmin(userRole === 'admin' || userRole === 'superadmin');
-        } else {
-            setIsAdmin(false);
-        }
-        setIsLoading(false);
-    }, [user]);
+    const isAdmin = user?.role.toLowerCase() === 'admin';
 
     const value: AdminContextValue = {
         isAdmin,

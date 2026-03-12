@@ -29,7 +29,8 @@ export const signupSchema = z.object({
         .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
         .regex(/[a-z]/, "Password must contain at least one lowercase letter")
         .regex(/[0-9]/, "Password must contain at least one number"),
-    fullName: z.string().min(2, "Full name is required"),
+    name: z.string().min(2, "Full name is required"),
+    contributor_opt_in: z.boolean().default(false),
 })
 
 export type AuthView = 'signin' | 'signup' | 'forgot-password' | 'verify'

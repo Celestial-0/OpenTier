@@ -90,3 +90,33 @@ pub async fn require_admin(
 
     Ok(next.run(request).await)
 }
+
+// ===== Contributor or Admin Middleware =====
+
+/// Contributor-or-Admin middleware
+///
+/// Requires auth middleware to run first (to inject user_id and role).
+/// Checks if the authenticated user has contributor or admin role.
+///
+/// **Performance:** No database query needed - role is read from request extensions.
+///
+/// # Errors
+/// Returns `UNAUTHORIZED` if user_id or role is not in request extensions
+/// Returns `FORBIDDEN` if user is neither a contributor nor an admin
+pub async fn require_contributor_or_admin(
+    State(_app_state): State<AppState>,
+    request: Request,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    let role = request
+        .extensions()
+        .get::<Role>()
+        .copied()
+        .ok_or(StatusCode::UNAUTHORIZED)?;
+
+    if !role.can_submit_resources() {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    Ok(next.run(request).await)
+}

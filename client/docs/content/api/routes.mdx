@@ -45,7 +45,7 @@ All routes are prefixed by the API's base path. The Next.js proxy strips the `/a
 | Method | Path | Handler | Description |
 |--------|------|---------|-------------|
 | GET | `/user/me` | `me` | Returns current user profile |
-| PATCH | `/user/update-profile` | `update_profile` | Updates name, username, avatar_url |
+| PATCH | `/user/update-profile` | `update_profile` | Updates name, username, avatar_url, and supports one-way `contributor_opt_in=true` |
 | POST | `/user/change-password` | `change_password` | Requires `current_password` + `new_password` |
 | DELETE | `/user/delete-account` | `delete_account` | Soft-deletes user (`deleted_at = NOW()`) |
 | GET | `/user/list-sessions` | `list_sessions` | Returns all active sessions |
@@ -71,9 +71,18 @@ All routes are prefixed by the API's base path. The Next.js proxy strips the `/a
 | GET | `/admin/users` | `list_users` | `?search=&limit=&offset=` |
 | GET | `/admin/users/{id}` | `get_user` | Single user details |
 | DELETE | `/admin/users/{id}` | `delete_user` | Hard-deletes user |
-| PATCH | `/admin/users/{id}/role` | `update_user_role` | `{ role: "user" \| "admin" }` |
+| PATCH | `/admin/users/{id}/role` | `update_user_role` | `{ role: "user" \| "contributor" \| "admin" }` |
 | GET | `/admin/stats` | `get_stats` | Platform-wide statistics |
-| POST | `/admin/resources` | `add_resource` | gRPC: `ResourceService.AddResource` |
-| GET | `/admin/resources` | `list_resources` | `?resource_type=&status=&limit=&cursor=` |
-| GET | `/admin/resources/{id}` | `get_resource_status` | gRPC: `ResourceService.GetResourceStatus` |
-| DELETE | `/admin/resources/{id}` | `delete_resource` | gRPC: `ResourceService.DeleteResource` |
+
+## `/resources` — Session authentication required (role-gated per route)
+
+| Method | Path | Handler | Access | Description |
+|--------|------|---------|--------|-------------|
+| POST | `/resources/submissions` | `submit_resource` | Contributor or Admin | Submit a knowledge resource for review |
+| GET | `/resources/submissions/mine` | `list_my_submissions` | Contributor or Admin | List own submissions |
+| GET | `/resources/submissions` | `list_queue` | Admin | Queue listing (`?status=&limit=&offset=`) |
+| POST | `/resources/submissions/{id}/review` | `review_submission` | Admin | Approve/reject submission and optionally ingest |
+| POST | `/resources` | `add_resource` | Admin | Direct ingestion via gRPC `ResourceService.AddResource` |
+| GET | `/resources` | `list_resources` | Admin | Indexed resources (`?resource_type=&status=&limit=&cursor=`) |
+| GET | `/resources/{id}` | `get_resource_status` | Admin | gRPC `ResourceService.GetResourceStatus` |
+| DELETE | `/resources/{id}` | `delete_resource` | Admin | gRPC `ResourceService.DeleteResource` |

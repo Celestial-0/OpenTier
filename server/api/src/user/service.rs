@@ -37,8 +37,41 @@ pub async fn update_profile(
     user_id: Uuid,
     req: UpdateProfileRequest,
 ) -> Result<UserResponse, UserError> {
+    let UpdateProfileRequest {
+        name,
+        username,
+        avatar_url,
+        contributor_opt_in,
+    } = req;
+
+    // Normalize optional string fields so blank values behave like "not provided".
+    let normalized_name = name.and_then(|v| {
+        let trimmed = v.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    });
+    let normalized_username = username.and_then(|v| {
+        let trimmed = v.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    });
+    let normalized_avatar_url = avatar_url.and_then(|v| {
+        let trimmed = v.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
+    });
+
     // Check username uniqueness if provided
-    if let Some(ref username) = req.username {
+    if let Some(ref username) = normalized_username {
         let existing = sqlx::query!(
             "SELECT id FROM users WHERE username = $1 AND id != $2",
             username,
@@ -61,13 +94,54 @@ pub async fn update_profile(
             avatar_url = COALESCE($3, avatar_url)
         WHERE id = $4
         "#,
-        req.name,
-        req.username,
-        req.avatar_url,
+        normalized_name,
+        normalized_username,
+        normalized_avatar_url,
         user_id
     )
     .execute(db)
     .await?;
+
+    // One-way self-service role escalation: user -> contributor.
+    if contributor_opt_in.unwrap_or(false) {
+        let current_role = sqlx::query!(
+            r#"
+            SELECT role::text as role
+            FROM users
+            WHERE id = $1 AND deleted_at IS NULL
+            "#,
+            user_id
+        )
+        .fetch_one(db)
+        .await?;
+
+        if current_role.role.as_deref() == Some("user") {
+            sqlx::query!(
+                r#"
+                UPDATE users
+                SET role = 'contributor'::user_role, updated_at = NOW()
+                WHERE id = $1
+                "#,
+                user_id
+            )
+            .execute(db)
+            .await?;
+
+            // Keep active session authorization consistent with the user role change.
+            sqlx::query!(
+                r#"
+                UPDATE sessions
+                SET role = 'contributor'::user_role
+                WHERE user_id = $1
+                  AND expires_at > NOW()
+                  AND role = 'user'::user_role
+                "#,
+                user_id
+            )
+            .execute(db)
+            .await?;
+        }
+    }
 
     // Return updated user
     get_user_by_id(db, user_id).await

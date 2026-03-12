@@ -7,6 +7,7 @@ The Rust API service is the **sole public-facing entry point**. It handles:
 - HTTP request routing and middleware (Axum + Tower)
 - Authentication and session validation
 - Authorization (role enforcement)
+- Contributor submission queue orchestration (`/resources/submissions*`)
 - Request proxying to the Intelligence service via gRPC
 - All PostgreSQL writes for identity, sessions, and conversations
 - Reading `chat_messages` written by the Intelligence service
@@ -41,7 +42,8 @@ graph TD
     User["user/\nhandlers, service, errors, types"]
     Chat["chat/\nhandlers, error, types"]
     Contact["contact/\nhandle_contact, ContactRequest"]
-    Admin["admin/\nmanagement/, resources/"]
+    Admin["admin/\nmanagement/"]
+    Resource["resource/\nhandlers, management, types, errors"]
     Common["common/\nbackground.rs, validation.rs"]
     Email["email/\nEmailService (SMTP via lettre)"]
     GRPC["grpc/\nclient.rs, proto.rs"]
@@ -55,12 +57,14 @@ graph TD
     Gateway --> Chat
     Gateway --> Contact
     Gateway --> Admin
+    Gateway --> Resource
     Gateway --> Common
     Auth --> Email
     Contact --> Email
     Auth --> GRPC
     Chat --> GRPC
     Admin --> GRPC
+    Resource --> GRPC
 `} />
 
 

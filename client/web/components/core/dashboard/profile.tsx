@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -19,9 +19,24 @@ export function Profile() {
     const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
     const [name, setName] = useState(user?.name || "");
     const [username, setUsername] = useState(user?.username || "");
+    const [contributorOptIn, setContributorOptIn] = useState(false);
+
+    useEffect(() => {
+        if (!isEditDialogOpen || !user) return;
+        setName(user.name || "");
+        setUsername(user.username || "");
+        setContributorOptIn(false);
+    }, [isEditDialogOpen, user]);
 
     const handleSave = async () => {
-        await updateProfile({ name, username });
+        const trimmedName = name.trim();
+        const trimmedUsername = username.trim();
+
+        await updateProfile({
+            name: trimmedName.length > 0 ? trimmedName : undefined,
+            username: trimmedUsername.length > 0 ? trimmedUsername : undefined,
+            contributor_opt_in: contributorOptIn ? true : undefined,
+        });
         setIsEditDialogOpen(false);
     };
 
@@ -64,7 +79,10 @@ export function Profile() {
                                     <h3 className="text-2xl font-bold tracking-tight">
                                         {user.name || "User"}
                                     </h3>
-                                    <Badge variant={user.role === "admin" ? "default" : "secondary"} className="capitalize">
+                                    <Badge
+                                        variant={user.role === "admin" ? "destructive" : user.role === "contributor" ? "default" : "secondary"}
+                                        className="capitalize mx-2 rounded-4xl"
+                                    >
                                         {user.role}
                                     </Badge>
                                 </div>
@@ -119,6 +137,19 @@ export function Profile() {
                                                     Email cannot be changed
                                                 </p>
                                             </div>
+                                            {user.role === "user" && (
+                                                <label className="flex items-start gap-3 rounded-lg border border-border px-3 py-3">
+                                                    <input
+                                                        type="checkbox"
+                                                        className="mt-1 h-4 w-4"
+                                                        checked={contributorOptIn}
+                                                        onChange={(e) => setContributorOptIn(e.target.checked)}
+                                                    />
+                                                    <span className="text-sm text-muted-foreground">
+                                                        Opt in as contributor to submit knowledge resources from your dashboard.
+                                                    </span>
+                                                </label>
+                                            )}
                                         </div>
                                         <DialogFooter>
                                             <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>

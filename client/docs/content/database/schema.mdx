@@ -6,7 +6,7 @@ OpenTier uses a **single PostgreSQL database** shared between both services. All
 
 | Migration Tool | Location | Tables |
 |---------------|----------|--------|
-| [`sqlx-cli`](https://crates.io/crates/sqlx-cli) | `server/db/migrations/` | users, sessions, accounts, verification_tokens, password_reset_tokens, conversations, messages, documents, document_chunks, ingestion_jobs, chat_messages, user_memories |
+| [`sqlx-cli`](https://crates.io/crates/sqlx-cli) | `server/db/migrations/` | users, sessions, accounts, verification_tokens, password_reset_tokens, conversations, messages, documents, document_chunks, ingestion_jobs, chat_messages, user_memories, knowledge_submissions |
 
 Migrations are applied automatically by the API container during its startup sequence before the server boots. The API container uses `sqlx migrate run` underneath to apply standard `{timestamp}_{name}.up.sql` / `.down.sql` files directly.
 
@@ -102,10 +102,26 @@ erDiagram
         timestamptz created_at
     }
 
+    knowledge_submissions {
+        uuid id PK
+        uuid contributor_id FK
+        varchar title
+        text content
+        varchar resource_type
+        jsonb metadata
+        varchar status
+        text admin_feedback
+        uuid reviewed_by FK
+        timestamptz reviewed_at
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
     users ||--o{ sessions : "has"
     users ||--o{ accounts : "links"
     users ||--o{ verification_tokens : "has"
     users ||--o{ password_reset_tokens : "has"
+    users ||--o{ knowledge_submissions : "creates"
     conversations ||--o{ messages : "contains"
     conversations ||--o{ chat_messages : "contains"
     chat_messages ||--o| chat_messages : "branches from parent"
@@ -122,7 +138,7 @@ erDiagram
 | `email` | VARCHAR(255) | Unique, indexed |
 | `email_verified` | BOOLEAN | Default `false`; OAuth users set `true` immediately |
 | `password_hash` | VARCHAR(255) | `bcrypt`; `NULL` for OAuth-only accounts |
-| `role` | `user_role` ENUM | `user` or `admin` |
+| `role` | `user_role` ENUM | `user`, `contributor`, or `admin` |
 | `deleted_at` | TIMESTAMPTZ | Soft-delete; `NULL` = active |
 
 **Indexes**: `idx_users_email`, `idx_users_username`, `idx_users_role`, `idx_users_created_at`, `idx_users_deleted_at` (partial, WHERE `deleted_at IS NULL`)  
@@ -163,10 +179,23 @@ Two tables store message content. This is the most architecturally significant s
 
 In practice the Rust API uses `chat_messages` (via `get_conversation`) and `messages` appears to be vestigial or used for audit logging. This creates a dual-table situation that must be managed carefully during schema changes.
 
+### `knowledge_submissions`
+
+Stores contributor-submitted resources pending admin review.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| `contributor_id` | UUID FK | References `users.id` |
+| `status` | VARCHAR(20) | `pending`, `approved`, `rejected` |
+| `metadata` | JSONB | Free-form submission metadata |
+| `reviewed_by` | UUID FK | Admin reviewer (`users.id`) |
+
+**Indexes**: `idx_knowledge_submissions_status`, `idx_knowledge_submissions_contributor`, `idx_knowledge_submissions_created_at`.
+
 ### Enums
 
 ```sql
-CREATE TYPE user_role AS ENUM ('user', 'admin');
+CREATE TYPE user_role AS ENUM ('user', 'contributor', 'admin');
 CREATE TYPE message_role AS ENUM ('user', 'assistant', 'system');
 ```
 

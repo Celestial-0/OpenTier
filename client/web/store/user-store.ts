@@ -4,26 +4,17 @@ import {
     UserResponse,
     UpdateProfileRequest,
     ChangePasswordRequest,
-    SessionListResponseSchema,
-    UserResponseSchema
 } from '@/lib/api-types';
-import { UserPreferences, DashboardSession, DashboardView } from '@/types/dashboard';
-import { getAuthHeaders, getAuthToken } from '@/lib/auth-utils';
-
-/** Safely parse the error message from a non-OK fetch response. */
-async function parseErrorResponse(res: Response, fallback: string): Promise<string> {
-    try {
-        const ct = res.headers.get('content-type') ?? '';
-        if (ct.includes('application/json')) {
-            const data = await res.json();
-            return data?.message ?? data?.error ?? fallback;
-        }
-        const text = await res.text();
-        return text.trim() || fallback;
-    } catch {
-        return fallback;
-    }
-}
+import { UserPreferences, DashboardSession, DashboardView, Notification } from '@/types/dashboard';
+import { getAuthToken } from '@/lib/auth-utils';
+import {
+    changePasswordApi,
+    deleteAccountApi,
+    fetchCurrentUserApi,
+    listSessionsApi,
+    revokeSessionApi,
+    updateProfileApi,
+} from '@/lib/api/user-api';
 
 /**
  * User Store
@@ -35,6 +26,7 @@ interface UserState {
     // Data
     user: UserResponse | null;
     sessions: DashboardSession[];
+    notifications: Notification[];
     preferences: UserPreferences;
 
     isLoading: boolean;
@@ -47,6 +39,11 @@ interface UserState {
     setActiveDashboardView: (view: DashboardView) => void;
     updatePreferences: (prefs: Partial<UserPreferences>) => void;
     resetPreferences: () => void;
+    addNotification: (notification: Omit<Notification, 'id' | 'timestamp' | 'read'>) => void;
+    markNotificationAsRead: (id: string) => void;
+    markAllNotificationsAsRead: () => void;
+    clearNotifications: () => void;
+    removeNotification: (id: string) => void;
 
     // API Actions
     fetchUser: () => Promise<void>;
@@ -68,6 +65,7 @@ export const useUserStore = create<UserState>()(
             (set, get) => ({
                 user: null,
                 sessions: [],
+                notifications: [],
                 preferences: {
                     theme: 'system',
                     fontSize: 'medium',
@@ -87,6 +85,38 @@ export const useUserStore = create<UserState>()(
                 updatePreferences: (newPrefs) =>
                     set((state) => ({
                         preferences: { ...state.preferences, ...newPrefs },
+                    })),
+
+                addNotification: (notification) =>
+                    set((state) => ({
+                        notifications: [
+                            {
+                                id: crypto.randomUUID(),
+                                timestamp: Date.now(),
+                                read: false,
+                                ...notification,
+                            },
+                            ...state.notifications,
+                        ],
+                    })),
+
+                markNotificationAsRead: (id) =>
+                    set((state) => ({
+                        notifications: state.notifications.map((n) =>
+                            n.id === id ? { ...n, read: true } : n
+                        ),
+                    })),
+
+                markAllNotificationsAsRead: () =>
+                    set((state) => ({
+                        notifications: state.notifications.map((n) => ({ ...n, read: true })),
+                    })),
+
+                clearNotifications: () => set({ notifications: [] }),
+
+                removeNotification: (id) =>
+                    set((state) => ({
+                        notifications: state.notifications.filter((n) => n.id !== id),
                     })),
 
                 resetPreferences: () =>
@@ -111,30 +141,8 @@ export const useUserStore = create<UserState>()(
 
                     set({ isLoading: true, error: null });
                     try {
-                        const headers = getAuthHeaders();
-                        const res = await fetch('/api/user/me', {
-                            headers: {
-                                ...headers as Record<string, string>
-                            }
-                        });
-
-                        if (res.status === 401) {
-                            // Token invalid or expired
-                            set({ user: null, isLoading: false });
-                            return;
-                        }
-
-                        if (!res.ok) throw new Error('Failed to fetch user');
-                        const data = await res.json();
-
-                        // Validate with Zod
-                        const parsed = UserResponseSchema.safeParse(data);
-                        if (!parsed.success) {
-                            console.error('Invalid user data:', parsed.error);
-                            throw new Error('Invalid user data received');
-                        }
-
-                        set({ user: parsed.data, isLoading: false });
+                        const data = await fetchCurrentUserApi();
+                        set({ user: data, isLoading: false });
                     } catch (err) {
                         set({ error: (err as Error).message, isLoading: false, user: null });
                     }
@@ -143,19 +151,7 @@ export const useUserStore = create<UserState>()(
                 updateProfile: async (data) => {
                     set({ isLoading: true, error: null });
                     try {
-                        const headers = getAuthHeaders();
-                        const res = await fetch('/api/user/update-profile', {
-                            method: 'PATCH',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                ...headers as Record<string, string>
-                            },
-                            body: JSON.stringify(data),
-                        });
-
-                        if (!res.ok) throw new Error('Failed to update profile');
-
-                        const updatedUser = await res.json();
+                        const updatedUser = await updateProfileApi(data);
                         // Optimistic merge or full replace if server returns full object
                         const currentUser = get().user;
                         if (currentUser) {
@@ -176,20 +172,7 @@ export const useUserStore = create<UserState>()(
                 changePassword: async (data) => {
                     set({ isLoading: true, error: null });
                     try {
-                        const headers = getAuthHeaders();
-                        const res = await fetch('/api/user/change-password', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                ...headers as Record<string, string>
-                            },
-                            body: JSON.stringify(data),
-                        });
-
-                        if (!res.ok) {
-                            const msg = await parseErrorResponse(res, 'Failed to change password');
-                            throw new Error(msg);
-                        }
+                        await changePasswordApi(data);
 
                         set({ isLoading: false });
                     } catch (err) {
@@ -201,14 +184,7 @@ export const useUserStore = create<UserState>()(
                 deleteAccount: async () => {
                     set({ isLoading: true, error: null });
                     try {
-                        const headers = getAuthHeaders();
-                        const res = await fetch('/api/user/delete-account', {
-                            method: 'DELETE',
-                            headers: {
-                                ...headers as Record<string, string>
-                            }
-                        });
-                        if (!res.ok) throw new Error('Failed to delete account');
+                        await deleteAccountApi();
                         set({ user: null, sessions: [], isLoading: false });
                     } catch (err) {
                         set({ error: (err as Error).message, isLoading: false });
@@ -219,23 +195,8 @@ export const useUserStore = create<UserState>()(
                     if (get().isLoadingSessions) return;
                     set({ isLoadingSessions: true, error: null });
                     try {
-                        const headers = getAuthHeaders();
-                        const res = await fetch('/api/user/list-sessions', {
-                            headers: {
-                                ...headers as Record<string, string>
-                            }
-                        });
-                        if (!res.ok) throw new Error('Failed to fetch sessions');
-
-                        const data = await res.json();
-                        const parsed = SessionListResponseSchema.safeParse(data);
-
-                        if (!parsed.success) {
-                            console.error('Invalid session list:', parsed.error);
-                            throw new Error('Invalid session data received');
-                        }
-
-                        set({ sessions: parsed.data.sessions, isLoadingSessions: false });
+                        const sessions = await listSessionsApi();
+                        set({ sessions: sessions.sessions, isLoadingSessions: false });
                     } catch (err) {
                         set({ error: (err as Error).message, isLoadingSessions: false });
                     }
@@ -247,14 +208,7 @@ export const useUserStore = create<UserState>()(
                     set({ sessions: originalSessions.filter(s => s.id !== sessionId) });
 
                     try {
-                        const headers = getAuthHeaders();
-                        const res = await fetch(`/api/user/revoke-session/${sessionId}`, {
-                            method: 'DELETE',
-                            headers: {
-                                ...headers as Record<string, string>
-                            }
-                        });
-                        if (!res.ok) throw new Error('Failed to revoke session');
+                        await revokeSessionApi(sessionId);
                     } catch (err) {
                         // Revert on error
                         set({ sessions: originalSessions, error: (err as Error).message });
@@ -263,11 +217,12 @@ export const useUserStore = create<UserState>()(
 
                 clearError: () => set({ error: null }),
 
-                logout: () => set({ user: null, sessions: [], error: null }),
+                logout: () => set({ user: null, sessions: [], notifications: [], error: null }),
             }),
             {
                 name: 'user-storage', // Key for localStorage
                 partialize: (state) => ({
+                    notifications: state.notifications,
                     preferences: state.preferences,
                     activeDashboardView: state.activeDashboardView
                 }), // Persist preferences and current view

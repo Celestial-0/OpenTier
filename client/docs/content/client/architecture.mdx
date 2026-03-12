@@ -1,0 +1,439 @@
+# Architecture Guide — Type System & API Layer
+
+## Quick Start
+
+### Where to Import Types?
+```typescript
+// ✅ CORRECT
+import type { ChatMessage, UserRole } from "@/types";
+import type { AdminStats } from "@/types/admin";
+
+// ❌ Wrong
+import type { ChatMessage } from "@/lib/api-types";
+import { UserRole } from "@/lib";
+```
+
+### Where to Make API Calls?
+```typescript
+// ✅ CORRECT
+import { getRustApiHealth } from "@/lib/api/health-api";
+const data = await getRustApiHealth();
+
+// ❌ Wrong - Never do this in components
+const data = await apiClient<HealthResponse>("/health/api");
+```
+
+## Type System Architecture
+
+### Folder Structure
+
+```
+client/web/
+├── types/                          # All TypeScript type definitions
+│   ├── auth.ts                    # SignIn, SignUp, SignInResponse
+│   ├── admin.ts                   # AdminStats, UserAdminView
+│   ├── chats.ts                   # ChatMessage, Conversation*
+│   ├── contact.ts                 # ContactRequest/Response
+│   ├── dashboard.ts               # DashboardView, Dashboard* aliases
+│   ├── health.ts                  # HealthResponse
+│   ├── resources.ts               # ResourceConfig, AddResourceRequest
+│   ├── session.ts                 # Session, SessionListResponse
+│   ├── submissions.ts             # SubmitResourceRequest, ReviewRequest
+│   ├── user.ts                    # UserResponse, UserRole
+│   └── index.ts                   # Barrel export
+│
+└── lib/
+    ├── api/                        # Centralized API modules (by domain)
+    │   ├── auth-api.ts            # signInApi, signUpApi, signOutApi
+    │   ├── admin-api.ts           # getAdminStats, listUsers, etc.
+    │   ├── chat-api.ts            # listConversations, sendMessage
+    │   ├── health-api.ts          # getRustApiHealth, getIntelligenceApiHealth
+    │   ├── user-api.ts            # fetchCurrentUserApi, updateProfileApi
+    │   ├── contributor-api.ts     # getMySubmissions, submitContribution
+    │   ├── contact-api.ts         # submitContact
+    │   ├── external-api.ts        # fetchGithubStarsApi, external calls
+    │   └── base.ts                # resolveApiUrl, parseApiError
+    │
+    ├── api-client.ts              # Generic apiClient<T>() wrapper
+    ├── api-types.ts               # Zod schemas + type re-exports
+    └── ...
+```
+
+### Layer Responsibilities
+
+#### 1. Types Layer — `types/`
+**What:** Pure TypeScript interfaces and type aliases  
+**Responsibility:** Define shape of data
+**Example:**
+```typescript
+// types/user.ts
+export type UserRole = "user" | "admin" | "contributor";
+
+export interface UserResponse {
+    id: string;
+    email: string;
+    role: UserRole;
+    created_at: string;
+}
+```
+
+**Key Rules:**
+- No Zod schemas here
+- No `api-types` imports
+- Pure TypeScript only
+- Domain-specific modules
+
+#### 2. API Types Layer — `lib/api-types.ts`
+**What:** Zod schemas for API response validation + type re-exports  
+**Responsibility:** Runtime validation and type normalization
+**Example:**
+```typescript
+// Zod schema for validation
+export const UserResponseSchema = z.object({
+    id: z.uuid(),
+    email: z.email(),
+    role: z.string(),
+    created_at: z.string(),
+});
+
+// Type re-export from types/ folder
+export type { UserResponse } from "@/types";
+```
+
+**Key Rules:**
+- Contains Zod schemas only
+- Re-exports types from `types/` for backward compatibility
+- Never imported directly by components
+- Only used in API layer
+
+#### 3. API Layer — `lib/api/*.ts`
+**What:** Domain-specific API modules with centralized endpoints  
+**Responsibility:** Making HTTP calls with validation
+**Example:**
+```typescript
+// lib/api/user-api.ts
+import { apiClient } from "@/lib/api-client";
+import { UserResponseSchema } from "@/lib/api-types";
+import type { UserResponse } from "@/types";
+
+export async function getUserProfile(): Promise<UserResponse> {
+    const res = await apiClient<unknown>("/user/me");
+    const parsed = UserResponseSchema.safeParse(res);
+    if (!parsed.success) throw new Error("Invalid response");
+    return parsed.data;
+}
+```
+
+**Key Rules:**
+- Centralizes all API calls for a domain
+- Uses Zod schemas for validation
+- Imports types from `@/types`
+- Never called directly with `apiClient`
+
+#### 4. Components Layer
+**What:** React components using centralized API calls  
+**Responsibility:** UI logic and user interaction
+**Example:**
+```typescript
+// components/user-profile.tsx
+import { useQuery } from "@tanstack/react-query";
+import { getUserProfile } from "@/lib/api/user-api";
+import type { UserResponse } from "@/types";
+
+export function UserProfile() {
+    const { data: user } = useQuery<UserResponse>({
+        queryKey: ["user-profile"],
+        queryFn: getUserProfile,  // ✅ Centralized
+    });
+
+    return <div>{user?.email}</div>;
+}
+```
+
+**Key Rules:**
+- Imports from `@/lib/api/[domain]-api.ts`
+- Uses type imports from `@/types`
+- Never calls `apiClient` directly
+- Never calls Zod schemas directly
+
+## Data Flow Diagram
+
+```
+┌─────────────────────────────────────┐
+│   React Component                   │
+│   imports: types + API function     │
+└────────────┬────────────────────────┘
+             │
+             ├─→ import type { UserResponse } from "@/types"
+             ├─→ import { getUserProfile } from "@/lib/api/user-api"
+             │
+             └─→ useQuery({ queryFn: getUserProfile })
+                   │
+┌──────────────────▼──────────────────┐
+│   API Function (lib/api/user-api.ts)│
+│   - Calls apiClient()               │
+│   - Validates with Zod             │
+│   - Returns typed data              │
+└────────────┬────────────────────────┘
+             │
+             └─→ (1) apiClient<unknown>("/user/me")
+                   │
+┌──────────────────▼──────────────────┐
+│   API Client (lib/api-client.ts)    │
+│   - Generic fetch wrapper           │
+│   - Error handling                  │
+│   - Header injection                │
+└────────────┬────────────────────────┘
+             │
+             └─→ fetch() to backend
+                   │
+┌──────────────────▼──────────────────┐
+│   Backend Response                  │
+│   { user_id: "...", email: "..." }  │
+└────────────┬────────────────────────┘
+             │
+┌──────────────────▼──────────────────┐
+│   Zod Validation (UserResponseSchema)
+│   - Validates structure             │
+│   - Throws if invalid               │
+└────────────┬────────────────────────┘
+             │
+             └─→ Typed UserResponse { ... }
+                   │
+┌──────────────────▼──────────────────┐
+│   Component Receives Data           │
+│   Fully typed, validated, safe      │
+└─────────────────────────────────────┘
+```
+
+## Import Patterns
+
+### Pattern 1: Importing Types in Components
+
+```typescript
+// ✅ Correct
+import type { ChatMessage, UserRole } from "@/types";
+import type { AdminStats } from "@/types/admin";
+
+// ✅ Also correct (single barrel import)
+import type { 
+    ChatMessage, 
+    UserRole, 
+    AdminStats 
+} from "@/types";
+
+// ❌ Wrong - api-types not for components
+import { ChatMessage } from "@/lib/api-types";
+```
+
+### Pattern 2: API Functions in Components
+
+```typescript
+// ✅ Correct
+import { sendMessage } from "@/lib/api/chat-api";
+import type { MessageResponse } from "@/types";
+
+const { data: response } = useQuery<MessageResponse>({
+    queryFn: sendMessage,
+});
+
+// ❌ Wrong - Inline apiClient call
+const response = await apiClient<MessageResponse>(
+    "/chat/messages",
+    { method: "POST", ... }
+);
+```
+
+### Pattern 3: Creating a New API Module
+
+```typescript
+// lib/api/new-feature-api.ts
+import { apiClient } from "@/lib/api-client";
+import { NewFeatureResponseSchema } from "@/lib/api-types";
+import type { 
+    NewFeatureRequest,
+    NewFeatureResponse 
+} from "@/types";
+
+export async function getNewFeatureData(
+    id: string
+): Promise<NewFeatureResponse> {
+    const res = await apiClient<unknown>(`/new-feature/${id}`);
+    const parsed = NewFeatureResponseSchema.safeParse(res);
+    if (!parsed.success) {
+        throw new Error("Invalid response");
+    }
+    return parsed.data;
+}
+```
+
+## Common Mistakes & Fixes
+
+### Mistake 1: Importing Types from Wrong Place
+```typescript
+// ❌ Wrong
+import { UserResponse } from "@/lib/api-types";
+
+// ✅ Correct
+import type { UserResponse } from "@/types";
+```
+
+**Why?** `api-types` contains Zod schemas for validation, not for component use. Types are in `types/`.
+
+### Mistake 2: Inline API Calls in Components
+```typescript
+// ❌ Wrong
+const health = await apiClient<HealthResponse>("/health/api");
+
+// ✅ Correct
+import { getRustApiHealth } from "@/lib/api/health-api";
+const health = await getRustApiHealth();
+```
+
+**Why?** Centralizing API calls makes them reusable, testable, and maintainable.
+
+### Mistake 3: Skipping Validation
+```typescript
+// ❌ Wrong
+const data = res.json() as UserResponse;
+
+// ✅ Correct
+const parsed = UserResponseSchema.safeParse(res.json());
+if (!parsed.success) throw new Error("...");
+const data = parsed.data;
+```
+
+**Why?** Runtime validation catches unexpected server changes before they cause bugs.
+
+### Mistake 4: Using Runtime Values as Types
+```typescript
+// ❌ Wrong
+const user: any = await apiClient("/user");
+
+// ✅ Correct
+import type { UserResponse } from "@/types";
+const user: UserResponse = await getUserProfile();
+```
+
+**Why?** TypeScript catches errors at compile time, not runtime.
+
+## Validation Strategy
+
+### When to Validate?
+
+```
+API Response
+    ↓
+    └─→ [Only in API layer]
+        ├─ Parse with Zod schema
+        ├─ Throw if invalid
+        └─ Pass to component (already validated)
+        
+Component receives
+    └─→ [No re-validation needed - trust validated data]
+        ├─ Use type definitions
+        └─ TypeScript ensures type safety
+```
+
+### Validation Pattern
+
+```typescript
+// lib/api/example-api.ts
+import { SomeResponseSchema } from "@/lib/api-types";
+
+export async function getSomeData(): Promise<SomeResponse> {
+    // ← Types here are for return value
+    const res = await apiClient<unknown>("/endpoint");
+    
+    // Always validate before returning
+    const parsed = SomeResponseSchema.safeParse(res);
+    if (!parsed.success) {
+        throw new Error(`Invalid response: ${parsed.error.message}`);
+    }
+    
+    // Return validated, typed data
+    return parsed.data;
+}
+```
+
+## Health API — Real Example
+
+### Before (Anti-pattern)
+```typescript
+// components/footer/content.tsx
+const RustApiHealth = useQuery({
+    queryKey: ["rust-api-health"],
+    queryFn: () => apiClient<HealthResponse>("/health/api"),  // ❌ Inline!
+});
+```
+
+### After (Best Practice)
+```typescript
+// lib/api/health-api.ts (Centralized)
+import { apiClient } from "@/lib/api-client";
+import { HealthResponseSchema } from "@/lib/api-types";
+import type { HealthResponse } from "@/types";
+
+export async function getRustApiHealth(): Promise<HealthResponse> {
+    const res = await apiClient<unknown>("/health/api");
+    const parsed = HealthResponseSchema.safeParse(res);
+    if (!parsed.success) throw new Error("Invalid health response");
+    return parsed.data;
+}
+
+// components/footer/content.tsx (Component - Clean!)
+import { getRustApiHealth } from "@/lib/api/health-api";
+import type { HealthResponse } from "@/types";
+
+const RustApiHealth = useQuery<HealthResponse>({
+    queryKey: ["rust-api-health"],
+    queryFn: getRustApiHealth,  // ✅ Centralized & clean
+});
+```
+
+## Checklist for New Features
+
+When adding a new API feature:
+
+- [ ] Create type definitions in `types/[domain].ts`
+- [ ] Create Zod schema in `lib/api-types.ts`
+- [ ] Create API function in `lib/api/[domain]-api.ts`
+- [ ] Validate response with Zod in API function
+- [ ] Import types from `@/types` in components
+- [ ] Call API function from `@/lib/api/[domain]-api.ts` (never inline)
+- [ ] Re-export new type in `types/index.ts` barrel export
+- [ ] Update documentation if adding new domain
+
+## Summary
+
+```
+┌─ TYPES ───────────────────────┐
+│ Pure TypeScript interfaces  │
+│ Domain-specific modules     │
+│ types/[domain].ts           │
+└─────────────────────────────┘
+         ↑
+         │ imported by
+         │
+┌─ API TYPES ────────────────────┐
+│ Zod schemas for validation   │
+│ Type re-exports for compat   │
+│ lib/api-types.ts             │
+└────────────────────────────────┘
+         ↑
+         │ imported by
+         │
+┌─ API LAYER ────────────────────┐
+│ Centralized API functions    │
+│ Validation + error handling  │
+│ lib/api/[domain]-api.ts      │
+└────────────────────────────────┘
+         ↑
+         │ imported by
+         │
+┌─ COMPONENTS ───────────────────┐
+│ React components             │
+│ Import types + API calls     │
+│ Never inline apiClient()     │
+└────────────────────────────────┘
+```

@@ -102,14 +102,14 @@ function JobRow({ job, onDismiss }: { job: IngestionJob; onDismiss: () => void }
             {/* Top row */}
             <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0">
-                    <div className="flex-shrink-0 mt-0.5">
+                    <div className="mt-0.5 shrink-0">
                         {statusIcon(job.status)}
                     </div>
                     <p className="text-sm font-medium truncate" title={job.label}>
                         {job.label}
                     </p>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="flex shrink-0 items-center gap-2">
                     {statusBadge(job.status)}
                     {isDone && (
                         <Button

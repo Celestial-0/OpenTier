@@ -8,6 +8,7 @@ mod gateway;
 mod grpc;
 mod middleware;
 mod observability;
+mod resource;
 mod user;
 
 use std::net::SocketAddr;

@@ -13,7 +13,18 @@ import {
     ConversationWithMessagesSchema,
     MessageResponseSchema,
 } from '@/lib/api-types';
-import { getAuthToken, getAuthHeaders } from '@/lib/auth-utils';
+import { getAuthToken } from '@/lib/auth-utils';
+import {
+    createConversationApi,
+    deleteConversationApi,
+    fetchConversationDetailApi,
+    fetchConversationsApi,
+    fetchChatQuotaApi,
+    generateConversationTitleApi,
+    sendConversationMessageApi,
+    streamConversationMessageApi,
+    updateConversationTitleApi,
+} from '@/lib/api/chat-api';
 
 // --- Store State ---
 
@@ -97,14 +108,8 @@ export const useChatStore = create<ChatState>()(
 
                 fetchQuota: async () => {
                     try {
-                        const headers = getAuthHeaders() || {};
-                        const res = await fetch('/api/chat/quota', {
-                            headers: { ...headers as Record<string, string> }
-                        });
-                        if (res.ok) {
-                            const data = await res.json();
-                            set({ freeMessageCount: data.messages_used });
-                        }
+                        const data = await fetchChatQuotaApi();
+                        set({ freeMessageCount: data.messages_used });
                     } catch (err) {
                         console.error('Failed to fetch quota', err);
                     }
@@ -120,15 +125,8 @@ export const useChatStore = create<ChatState>()(
 
                     set({ isLoadingConversations: true, error: null });
                     try {
-                        const headers = getAuthHeaders();
                         const cursor = reset ? undefined : get().nextCursor;
-                        const query = cursor ? `?cursor=${cursor}` : '';
-                        const response = await fetch(`/api/chat/conversations${query}`, {
-                            headers: { ...headers as Record<string, string> }
-                        });
-                        if (!response.ok) throw new Error('Failed to fetch conversations');
-
-                        const data = await response.json();
+                        const data = await fetchConversationsApi(cursor);
                         const parsed = ConversationListResponseSchema.parse(data); // Zod validation
 
                         set((state) => {
@@ -169,13 +167,7 @@ export const useChatStore = create<ChatState>()(
                     // For newly created chats that haven't streamed yet, or existing chats we navigate to.
                     set({ isLoadingMessages: true, error: null });
                     try {
-                        const headers = getAuthHeaders();
-                        const response = await fetch(`/api/chat/conversations/${conversationId}`, {
-                            headers: { ...headers as Record<string, string> }
-                        });
-                        if (!response.ok) throw new Error('Failed to fetch conversation details');
-
-                        const data = await response.json();
+                        const data = await fetchConversationDetailApi(conversationId);
                         const parsed = ConversationWithMessagesSchema.parse(data);
 
                         set((s) => ({
@@ -214,20 +206,8 @@ export const useChatStore = create<ChatState>()(
                     }
 
                     try {
-                        const headers = getAuthHeaders();
                         const payload: CreateConversationRequest = { title: 'New Chat' };
-                        const response = await fetch('/api/chat/conversations', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                ...headers as Record<string, string>
-                            },
-                            body: JSON.stringify(payload),
-                        });
-
-                        if (!response.ok) throw new Error('Failed to create conversation');
-
-                        const newConv = await response.json();
+                        const newConv = await createConversationApi(payload.title || 'New Chat');
 
                         const summary: ConversationSummary = {
                             id: newConv.id,
@@ -339,8 +319,6 @@ export const useChatStore = create<ChatState>()(
                     // But to be safe, I'll try calling with no headers if no token.
 
                     try {
-                        const headers = getAuthHeaders();
-
                         if (useStream) {
                             // STREAMING IMPLEMENTATION (GET /stream)
                             // Note: GET method limits message size due to URL length. 
@@ -356,16 +334,11 @@ export const useChatStore = create<ChatState>()(
                                 assistant_message_id: tempAssistantId,
                             };
 
-                            const response = await fetch(`/api/chat/conversations/${activeConversationId}/stream`, {
-                                method: 'POST',
-                                signal: abortController.signal,
-                                headers: {
-                                    'Accept': 'text/event-stream',
-                                    'Content-Type': 'application/json',
-                                    ...headers as Record<string, string>
-                                },
-                                body: JSON.stringify(payload),
-                            });
+                            const response = await streamConversationMessageApi(
+                                activeConversationId,
+                                payload,
+                                abortController.signal
+                            );
 
                             if (!response.ok) {
                                 let errMsg = 'Failed to start stream';
@@ -465,15 +438,11 @@ export const useChatStore = create<ChatState>()(
                                 user_message_id: tempUserId,
                                 assistant_message_id: tempAssistantId,
                             };
-                            const response = await fetch(`/api/chat/conversations/${activeConversationId}/messages`, {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    ...headers as Record<string, string>
-                                },
-                                body: JSON.stringify(payload),
-                                signal: abortController.signal,
-                            });
+                            const response = await sendConversationMessageApi(
+                                activeConversationId,
+                                payload,
+                                abortController.signal
+                            );
 
                             if (!response.ok) {
                                 let errMsg = 'Failed to send message';
@@ -628,7 +597,6 @@ export const useChatStore = create<ChatState>()(
 
                     // Stream the new response
                     try {
-                        const headers = getAuthHeaders();
                         const payload = {
                             message: newContent,
                             temperature: 0.7,
@@ -639,18 +607,10 @@ export const useChatStore = create<ChatState>()(
                             assistant_message_id: newAssistantId,
                         };
 
-                        const response = await fetch(
-                            `/api/chat/conversations/${activeConversationId}/stream`,
-                            {
-                                method: 'POST',
-                                signal: abortController.signal,
-                                headers: {
-                                    Accept: 'text/event-stream',
-                                    'Content-Type': 'application/json',
-                                    ...(headers as Record<string, string>),
-                                },
-                                body: JSON.stringify(payload),
-                            }
+                        const response = await streamConversationMessageApi(
+                            activeConversationId,
+                            payload,
+                            abortController.signal
                         );
 
                         if (!response.ok) {
@@ -831,7 +791,6 @@ export const useChatStore = create<ChatState>()(
                     // 3. Execute Request (Copy of sendMessage logic)
                     try {
                         const token = getAuthToken();
-                        const headers = getAuthHeaders();
                         const content = lastUserMsg.content;
 
                         // Check free limit if no token? 
@@ -848,16 +807,11 @@ export const useChatStore = create<ChatState>()(
                             assistant_message_id: tempAssistantId,
                         };
 
-                        const response = await fetch(`/api/chat/conversations/${activeConversationId}/stream`, {
-                            method: 'POST',
-                            signal: abortController.signal,
-                            headers: {
-                                'Accept': 'text/event-stream',
-                                'Content-Type': 'application/json',
-                                ...headers as Record<string, string>
-                            },
-                            body: JSON.stringify(payload),
-                        });
+                        const response = await streamConversationMessageApi(
+                            activeConversationId,
+                            payload,
+                            abortController.signal
+                        );
 
                         if (!response.ok) throw new Error('Failed to start stream');
                         if (!response.body) throw new Error('No response body');
@@ -963,20 +917,7 @@ export const useChatStore = create<ChatState>()(
 
                         // If authenticated, sync with backend
                         if (token) {
-                            const headers = getAuthHeaders();
-                            const response = await fetch(`/api/chat/conversations/${conversationId}`, {
-                                method: 'PATCH',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    ...headers as Record<string, string>
-                                },
-                                body: JSON.stringify({ title }),
-                            });
-
-                            if (!response.ok) {
-                                // Revert on error
-                                throw new Error('Failed to update conversation title');
-                            }
+                            await updateConversationTitleApi(conversationId, title);
                         }
                     } catch (err) {
                         // Silently fail - title update is not critical
@@ -989,22 +930,11 @@ export const useChatStore = create<ChatState>()(
                         const token = getAuthToken();
                         if (!token) return null;
 
-                        const headers = getAuthHeaders();
-                        const response = await fetch(`/api/chat/conversations/${conversationId}/generate-title`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                ...headers as Record<string, string>
-                            },
-                            body: JSON.stringify({
-                                user_message: userMessage,
-                                assistant_message: assistantMessage
-                            }),
-                        });
-
-                        if (!response.ok) throw new Error('Failed to generate AI title');
-
-                        const data = await response.json();
+                        const data = await generateConversationTitleApi(
+                            conversationId,
+                            userMessage,
+                            assistantMessage
+                        );
                         return data.title;
                     } catch (err) {
                         console.error('AI title generation failed, falling back to simple:', err);
@@ -1016,11 +946,7 @@ export const useChatStore = create<ChatState>()(
 
                 deleteConversation: async (conversationId) => {
                     try {
-                        const headers = getAuthHeaders();
-                        await fetch(`/api/chat/conversations/${conversationId}`, {
-                            method: 'DELETE',
-                            headers: { ...headers as Record<string, string> }
-                        });
+                        await deleteConversationApi(conversationId);
                         set((state) => ({
                             conversations: state.conversations.filter(c => c.id !== conversationId),
                             activeConversationId: state.activeConversationId === conversationId ? null : state.activeConversationId,

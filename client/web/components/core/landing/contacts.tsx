@@ -15,6 +15,7 @@ import { BorderBeam } from "@/components/ui/border-beam";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { submitContactMessage } from "@/lib/api/contact-api";
 
 const MOTION_VARIANTS = {
     container: {
@@ -190,17 +191,7 @@ function ContactForm() {
             setErrorMsg("");
 
             try {
-                const res = await fetch("/api/contact", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(value),
-                });
-
-                const data = await res.json().catch(() => ({}));
-
-                if (!res.ok) {
-                    throw new Error(data.message || "Failed to send message.");
-                }
+                await submitContactMessage(value);
 
                 setStatus("sent");
             } catch (err) {

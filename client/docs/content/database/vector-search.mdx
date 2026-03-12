@@ -135,7 +135,7 @@ CREATE TABLE user_memories (
 
 <Mermaid chart={`
 flowchart TD
-    Upload["Admin uploads resource\n(POST /admin/resources)"]
+    Upload["Admin uploads resource\n(POST /resources)"]
     IngestJob["ingestion_jobs row\nstatus: queued"]
     Scrape["Scraper fetches content\n(Playwright / httpx)"]
     Clean["Cleaning strategy applied"]

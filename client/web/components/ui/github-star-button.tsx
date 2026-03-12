@@ -6,6 +6,7 @@ import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { useState, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { fetchGithubStarsApi } from '@/lib/api/external-api';
 
 
 interface GitHubStarButtonProps {
@@ -31,9 +32,8 @@ export function GitHubStarButton({ repo, className }: GitHubStarButtonProps) {
     useEffect(() => {
         const fetchStars = async () => {
             try {
-                const response = await fetch(`https://api.github.com/repos/${repo}`);
-                const data = await response.json();
-                setStars(data.stargazers_count);
+                const count = await fetchGithubStarsApi(repo);
+                setStars(count);
             } catch (error) {
                 console.error('Failed to fetch GitHub stars:', error);
                 setStars(0);
@@ -78,7 +78,7 @@ export function GitHubStarButton({ repo, className }: GitHubStarButtonProps) {
             onMouseLeave={handleMouseLeave}
             style={{ rotateX, rotateY }}
             className={cn(
-                "inline-flex will-change-transform [transform-style:preserve-3d]",
+                "inline-flex transform-3d will-change-transform",
                 className
             )}
         >
@@ -95,7 +95,7 @@ export function GitHubStarButton({ repo, className }: GitHubStarButtonProps) {
                 {/* Hover gradient overlay */}
                 <motion.div
                     aria-hidden
-                    className="absolute inset-0 bg-gradient-to-r from-primary/0 via-primary/5 to-primary/0"
+                    className="absolute inset-0 bg-linear-to-r from-primary/0 via-primary/5 to-primary/0"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: isHovered ? 1 : 0 }}
                     transition={{ duration: 0.25 }}
@@ -164,7 +164,7 @@ export function GitHubStarButton({ repo, className }: GitHubStarButtonProps) {
                     transition={{ duration: 0.25 }}
                 >
                     <motion.div
-                        className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent"
+                        className="absolute inset-0 bg-linear-to-r from-transparent via-white/10 to-transparent"
                         animate={isHovered ? { x: ["-100%", "100%"] } : { x: "-100%" }}
                         transition={{
                             duration: 0.75,

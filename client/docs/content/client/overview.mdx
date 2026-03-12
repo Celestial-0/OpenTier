@@ -48,13 +48,14 @@ Providers in `app/layout.tsx` are nested in this exact order (outermost → inne
 ThemeProvider            ← next-themes (SSR-safe dark/light)
   └─ AuthProvider        ← session token, auth modal state
        └─ AdminProvider  ← admin context (delegates to useAdminStore)
-            └─ UiProvider ← sidebar, modal, dashboard view state
-                 └─ TooltipProvider
-                      └─ {children}
+            └─ ContributorProvider ← contributor role context
+                 └─ UiProvider ← sidebar, modal, dashboard view state
+                      └─ TooltipProvider
+                           └─ {children}
        Toaster           ← Sonner (sibling of AdminProvider, inside AuthProvider)
 ```
 
-**Significance of ordering**: `AdminProvider` reads `user.role` from `AuthProvider`, so it must be nested inside it. `UiProvider` reads nothing from auth — it is purely UI state. `Toaster` is placed inside `AuthProvider` so auth-triggered toasts are rendered correctly.
+**Significance of ordering**: both `AdminProvider` and `ContributorProvider` read `user.role` from `AuthProvider`, so they must be nested inside it. `UiProvider` remains role-agnostic UI state. `Toaster` stays inside `AuthProvider` so auth-triggered toasts render correctly.
 
 ## Route-Level Component Mapping
 
@@ -88,6 +89,8 @@ type DashboardView =
   | "notifications"
   | "profile"
   | "settings"
+  | "admin"
+  | "contributor"
 ```
 
 `navigateToDashboard(view)` — navigates to `/dashboard` if not already there, then sets the active view. This allows components anywhere in the tree to deep-link into a specific dashboard tab.

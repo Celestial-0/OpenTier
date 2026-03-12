@@ -21,7 +21,7 @@ flowchart TD
     AuthMiddleware -- "Token valid" --> RoleCheck
     AuthMiddleware -- "Token invalid/expired" --> Unauthorized
     RoleCheck -- "Yes" --> Handler
-    RoleCheck -- "No (Role::User)" --> Forbidden
+    RoleCheck -- "No (User or Contributor)" --> Forbidden
 `} />
 
 
@@ -47,7 +47,7 @@ flowchart TD
 
 ## Resource Management
 
-Resources (documents for RAG ingestion) are managed by the Intelligence service. The Rust admin handlers act as a proxy layer:
+Admin-managed resources (documents for RAG ingestion) are now exposed on `/resources` (admin-only middleware), and proxied to the Intelligence service:
 
 
 <Mermaid chart={`
@@ -57,7 +57,7 @@ sequenceDiagram
     participant Python as Python Intelligence
     participant DB as PostgreSQL + pgvector
 
-    Admin->>Rust: POST /admin/resources resource_type content title is_global config
+    Admin->>Rust: POST /resources resource_type content title is_global config
     Rust->>Rust: Map resource_type string to pb::ResourceType enum
     Rust->>Python: gRPC AddResource user_id=admin resource_id=uuid content type is_global
     Note over Rust,Python: Timeout: 3000s (50 min - large document ingestion)
@@ -65,7 +65,7 @@ sequenceDiagram
     Python-->>Rust: resource_id + job_id + status queued
     Rust-->>Admin: 202 resource_id + job_id + status
 
-    Admin->>Rust: GET /admin/resources/id
+    Admin->>Rust: GET /resources/{id}
     Rust->>Python: gRPC GetResourceStatus resource_id
     Python-->>Rust: status=processing progress_percent=45.0
     Rust-->>Admin: ResourceStatusResponse
@@ -77,14 +77,23 @@ sequenceDiagram
 - `"markdown"` → `MARKDOWN`
 - `"pdf"` → `PDF`
 - `"html"` → `HTML`
-- `"website"` → `WEBSITE` (triggers Playwright scraper)
+- `"url"` → `WEBSITE` (triggers Playwright scraper)
 - `"code"` → `CODE`
+- `"file"` → file-content ingestion path
 
 **Global resources** (`is_global: true`): searchable by all users in hybrid search. Global resources are typically set by admins for shared knowledge base documents.
 
+## Contributor Queue (Admin Review)
+
+Admins also review contributor submissions via:
+- `GET /resources/submissions?status=pending|approved|rejected`
+- `POST /resources/submissions/{id}/review` with `{ action: "approve" | "reject", feedback?: string }`
+
+On **approve**, the API forwards content to the Intelligence service (`AddResource`) and marks the submission as approved.
+
 ## Weaknesses
 
-1. **Role change inconsistency**: Changing a user's role via `PATCH /admin/users/{id}/role` updates `users.role` but does NOT update existing sessions' `role` column. Active sessions retain the old role until expiry (7 days) or re-login.
+1. **Role change inconsistency (admin path)**: Changing a user's role via `PATCH /admin/users/{id}/role` updates `users.role` but does NOT update existing sessions' `role` column. Active sessions retain the old role until expiry (7 days) or re-login.
 
 2. **Hard vs soft delete asymmetry**: Hard-deleting a user via admin bypasses the recovery mechanism available through `POST /auth/recover-account`.
 

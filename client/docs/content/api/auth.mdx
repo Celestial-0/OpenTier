@@ -41,13 +41,14 @@ sequenceDiagram
     participant DB as PostgreSQL
     participant Email as SMTP
 
-    Client->>API: POST /auth/signup with email, password, name
+    Client->>API: POST /auth/signup with email, password, name, contributor_opt_in
     API->>API: validate_email() — regex check
     API->>API: validate_password() — 8-128 chars, upper+lower+digit
     API->>DB: SELECT user WHERE email = $1
     DB-->>API: None (not exists)
     API->>API: hash_password(password) — bcrypt
-    API->>DB: INSERT INTO users (email, password_hash, name, role='user')
+    API->>DB: INSERT INTO users (email, password_hash, name, role)
+    Note over API,DB: role = contributor when contributor_opt_in=true, else user
     DB-->>API: new user row
     API->>API: generate_token(32) → verification_token
     API->>API: generate_otp(6) → otp
@@ -138,11 +139,12 @@ sequenceDiagram
 pub enum Role {
     User,
     Admin,
+    Contributor,
 }
 ```
 
-The `user_role` PostgreSQL enum has exactly two variants: `user` and `admin`. The frontend `api-types.ts` also exposes a `superadmin` variant in the `AdminContext.isAdmin` check — this is a client-side extension that does not correspond to a database value.
+The `user_role` PostgreSQL enum has three variants: `user`, `contributor`, and `admin`.
 
-**Role propagation**: when a user's role changes via `PATCH /admin/users/{id}/role`, existing sessions are **not** invalidated. The session row's `role` column is **not** updated. The user must sign out and sign in again to receive new role permissions in their session.
+**Role propagation**: admin role changes via `PATCH /admin/users/{id}/role` do **not** update active sessions. Users keep their previous session role until re-login or session expiry.
 
-> **Bug/weakness**: Role changes via the admin panel are not reflected in active sessions. This is an architectural inconsistency — a role downgrade takes effect only after session expiry (7 days) or explicit logout.
+**Exception**: profile self-opt-in (`PATCH /user/update-profile` with `contributor_opt_in=true`) performs one-way `user -> contributor` escalation and synchronizes active `sessions.role` rows for that user.

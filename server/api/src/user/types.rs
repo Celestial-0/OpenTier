@@ -22,6 +22,7 @@ pub struct UpdateProfileRequest {
     pub name: Option<String>,
     pub username: Option<String>,
     pub avatar_url: Option<String>,
+    pub contributor_opt_in: Option<bool>,
 }
 
 // ===== Change Password =====

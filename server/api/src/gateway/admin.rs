@@ -4,7 +4,7 @@ use axum::{
     Router,
 };
 
-use crate::admin::{management, resources};
+use crate::admin::management;
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -29,19 +29,5 @@ pub fn router() -> Router<AppState> {
         .route(
             "/users/{id}/disable",
             patch(management::toggle_user_disabled),
-        )
-        // Resource routes
-        .nest("/resources", resource_routes())
-}
-
-fn resource_routes() -> Router<AppState> {
-    Router::new()
-        .route(
-            "/",
-            post(resources::add_resource).get(resources::list_resources),
-        )
-        .route(
-            "/{id}",
-            get(resources::get_resource_status).delete(resources::delete_resource),
         )
 }

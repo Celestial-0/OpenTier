@@ -1,50 +1,579 @@
-# API Client & Types
+# API Client — Centralized Request Layer
 
-## `apiClient<T>()` Abstraction
+## Overview
 
-All API calls from Zustand stores and context providers go through a single fetch wrapper in `lib/api-client.ts`:
+The API client layer provides a **centralized, type-safe interface** for communicating with backend services. All HTTP requests flow through a single `apiClient` wrapper that handles:
+
+- ✅ URL resolution with configurable base
+- ✅ Request/response type safety with TypeScript
+- ✅ Error handling and normalization
+- ✅ Header injection (auth tokens, CORS)
+- ✅ Response validation with Zod schemas
+
+## Architecture
+
+```
+┌─────────────────────────────────┐
+│   React Components              │
+│   - Use hook-based API calls    │
+│   - Import from lib/api/*.ts    │
+└────────────┬────────────────────┘
+             │
+┌────────────▼────────────────────┐
+│   API Layer (lib/api/)          │
+│   - auth-api.ts                 │
+│   - chat-api.ts                 │
+│   - health-api.ts               │
+│   - admin-api.ts                │
+│   - contributor-api.ts          │
+│   - Centralized per domain      │
+└────────────┬────────────────────┘
+             │
+┌────────────▼────────────────────┐
+│   Base API Client               │
+│   (lib/api-client.ts)           │
+│   - Generic apiClient()         │
+│   - Error handling              │
+│   - Header injection            │
+└────────────┬────────────────────┘
+             │
+┌────────────▼────────────────────┐
+│   Next.js API Proxy             │
+│   (next.config.ts)              │
+└────────────┬────────────────────┘
+             │
+┌────────────▼────────────────────┐
+│   HTTP Backend                  │
+│   (Rust + Axum)                 │
+└─────────────────────────────────┘
+```
+
+## API Client — Base Implementation
+
+**File:** `lib/api-client.ts`
 
 ```typescript
-async function apiClient<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  // Prepend /api if not already present
-  const url = endpoint.startsWith('/api') ? endpoint : `/api${endpoint}`
+export async function apiClient<T = unknown>(
+    endpoint: string,
+    options?: RequestInit
+): Promise<T> {
+    const url = resolveApiUrl(endpoint);
+    const headers = buildApiHeaders(); // Auth token injection
 
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...getAuthHeaders(),      // { Authorization: 'Bearer <token>' } | {}
-      ...options?.headers,
-    },
-  })
+    const res = await fetch(url, {
+        ...options,
+        headers: {
+            "Content-Type": "application/json",
+            ...headers,
+            ...options?.headers,
+        },
+    });
 
-  if (response.status === 204) return undefined as T  // No Content
+    if (res.status === 204) return undefined as T; // No Content
 
-  const data = await response.json()
+    if (!res.ok) {
+        const error = await parseApiError(res);
+        throw error;
+    }
 
-  if (!response.ok) {
-    throw new Error(data.message ?? 'Request failed')
-  }
-
-  return data as T
+    return res.json() as Promise<T>;
 }
 ```
 
-**Responsibilities**:
-- URL normalization (always absolute `/api/*`)
-- Auth header injection from `localStorage` token
-- 204 handling (DELETE endpoints)
-- Error normalization (throws `Error` with `data.message`)
+### Helper Functions
 
-**Limitations**: No retry logic, no request deduplication, no caching. Each store manages its own `isLoading` flags. Caching is handled by Zustand's persisted state.
+**`resolveApiUrl(endpoint: string)`**
+- Prepends `NEXT_PUBLIC_API_URL` or `/api` to endpoint
+- Example: `/auth/signin` → `http://localhost:3001/api/auth/signin`
+
+**`buildApiHeaders()`**
+- Injects session token from auth context
+- Sets CORS headers if needed
+- Returns: `{ Authorization: "Bearer <token>" }`
+
+**`parseApiError(response: Response)`**
+- Normalizes error responses
+- Extracts message from response body
+- Returns typed `ApiError` with status, code, details
+
+## Domain-Based API Modules
+
+Each domain has a dedicated API module that **centralizes all requests** for that domain.
+
+### 1. Auth API — `lib/api/auth-api.ts`
+
+```typescript
+import { apiClient } from "@/lib/api-client";
+import {
+    SignInRequest,
+    SignInResponse,
+    SignUpRequest,
+    SignUpResponse,
+} from "@/types";
+import {
+    SignInResponseSchema,
+    SignUpResponseSchema,
+} from "@/lib/api-types";
+
+export async function signInApi(
+    data: SignInRequest
+): Promise<SignInResponse> {
+    const res = await apiClient<unknown>("/auth/signin", {
+        method: "POST",
+        body: JSON.stringify(data),
+    });
+
+    const parsed = SignInResponseSchema.safeParse(res);
+    if (!parsed.success) {
+        throw new Error("Invalid sign-in response");
+    }
+
+    return parsed.data;
+}
+
+export async function signUpApi(
+    data: SignUpRequest
+): Promise<SignUpResponse> {
+    const res = await apiClient<unknown>("/auth/signup", {
+        method: "POST",
+        body: JSON.stringify(data),
+    });
+
+    const parsed = SignUpResponseSchema.safeParse(res);
+    if (!parsed.success) {
+        throw new Error("Invalid sign-up response");
+    }
+
+    return parsed.data;
+}
+
+export async function signOutApi(): Promise<void> {
+    await apiClient("/auth/signout", { method: "POST" });
+}
+```
+
+**Usage in Components:**
+
+```typescript
+// hooks/use-auth.ts
+import { signInApi, signUpApi } from "@/lib/api/auth-api";
+
+export function useSignIn() {
+    return useMutation({
+        mutationFn: signInApi,
+    });
+}
+```
+
+### 2. Health API — `lib/api/health-api.ts`
+
+```typescript
+import { apiClient } from "@/lib/api-client";
+import { HealthResponse } from "@/types";
+import { HealthResponseSchema } from "@/lib/api-types";
+
+export async function getRustApiHealth(): Promise<HealthResponse> {
+    const res = await apiClient<unknown>("/health/api");
+    const parsed = HealthResponseSchema.safeParse(res);
+    if (!parsed.success) throw new Error("Invalid health response");
+    return parsed.data;
+}
+
+export async function getIntelligenceApiHealth(): Promise<HealthResponse> {
+    const res = await apiClient<unknown>("/health/intelligence");
+    const parsed = HealthResponseSchema.safeParse(res);
+    if (!parsed.success) throw new Error("Invalid health response");
+    return parsed.data;
+}
+```
+
+**Usage in Components — CENTRALIZED:**
+
+```typescript
+// components/footer/content.tsx
+import { getRustApiHealth, getIntelligenceApiHealth } from "@/lib/api/health-api";
+import { useQuery } from "@/hooks/use-query";
+
+export function FooterContent() {
+    // ✅ Centralized - No inline apiClient calls
+    const RustApiHealth = useQuery<HealthResponse>({
+        queryKey: ["rust-api-health"],
+        queryFn: getRustApiHealth,
+    });
+
+    const PythonApiHealth = useQuery<HealthResponse>({
+        queryKey: ["python-api-health"],
+        queryFn: getIntelligenceApiHealth,
+    });
+
+    return (
+        <footer>
+            <StatusBadge 
+                status={RustApiHealth.data?.status} 
+                label="Rust API" 
+            />
+            <StatusBadge 
+                status={PythonApiHealth.data?.status} 
+                label="Intelligence API" 
+            />
+        </footer>
+    );
+}
+```
+
+### 3. Chat API — `lib/api/chat-api.ts`
+
+```typescript
+import { apiClient } from "@/lib/api-client";
+import {
+    ConversationSummary,
+    ConversationListResponse,
+    ConversationWithMessages,
+    SendMessageRequest,
+    MessageResponse,
+} from "@/types";
+
+export async function listConversations(
+    cursor?: string
+): Promise<ConversationListResponse> {
+    const params = new URLSearchParams();
+    if (cursor) params.append("cursor", cursor);
+
+    return apiClient(`/chat/conversations?${params}`);
+}
+
+export async function getConversation(
+    conversationId: string
+): Promise<ConversationWithMessages> {
+    return apiClient(`/chat/conversations/${conversationId}`);
+}
+
+export async function sendMessage(
+    conversationId: string,
+    request: SendMessageRequest
+): Promise<MessageResponse> {
+    return apiClient(`/chat/conversations/${conversationId}/messages`, {
+        method: "POST",
+        body: JSON.stringify(request),
+    });
+}
+
+export async function createConversation(
+    title?: string
+): Promise<ConversationSummary> {
+    return apiClient("/chat/conversations", {
+        method: "POST",
+        body: JSON.stringify({ title }),
+    });
+}
+```
+
+### 4. Admin API — `lib/api/admin-api.ts`
+
+```typescript
+import { apiClient } from "@/lib/api-client";
+import {
+    AdminStats,
+    UserListResponse,
+    ListResourcesResponse,
+} from "@/types";
+
+export async function getAdminStats(): Promise<AdminStats> {
+    return apiClient("/admin/stats");
+}
+
+export async function listUsers(
+    limit: number = 10,
+    offset: number = 0
+): Promise<UserListResponse> {
+    return apiClient(
+        `/admin/users?limit=${limit}&offset=${offset}`
+    );
+}
+
+export async function listResources(
+    cursor?: string
+): Promise<ListResourcesResponse> {
+    const params = new URLSearchParams();
+    if (cursor) params.append("cursor", cursor);
+
+    return apiClient(`/resources?${params}`);
+}
+
+export async function deleteResource(resourceId: string): Promise<void> {
+    await apiClient(`/resources/${resourceId}`, {
+        method: "DELETE",
+    });
+}
+```
+
+### 5. User API — `lib/api/user-api.ts`
+
+```typescript
+import { apiClient } from "@/lib/api-client";
+import {
+    UserResponse,
+    UpdateProfileRequest,
+    ChangePasswordRequest,
+    SessionListResponse,
+} from "@/types";
+
+export async function fetchCurrentUserApi(): Promise<UserResponse> {
+    const res = await apiClient<unknown>("/user/me");
+    const parsed = UserResponseSchema.safeParse(res);
+    if (!parsed.success) throw new Error("Invalid user response");
+    return parsed.data;
+}
+
+export async function updateProfileApi(
+    payload: UpdateProfileRequest
+): Promise<UserResponse> {
+    const res = await apiClient<unknown>("/user/update-profile", {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+    });
+    const parsed = UserResponseSchema.safeParse(res);
+    if (!parsed.success) throw new Error("Invalid response");
+    return parsed.data;
+}
+
+export async function changePasswordApi(
+    payload: ChangePasswordRequest
+): Promise<void> {
+    await apiClient("/user/change-password", {
+        method: "POST",
+        body: JSON.stringify(payload),
+    });
+}
+
+export async function listSessionsApi(): Promise<SessionListResponse> {
+    const res = await apiClient<unknown>("/user/list-sessions");
+    const parsed = SessionListResponseSchema.safeParse(res);
+    if (!parsed.success) throw new Error("Invalid sessions response");
+    return parsed.data;
+}
+```
+
+### 6. Contributor API — `lib/api/contributor-api.ts`
+
+```typescript
+import { apiClient } from "@/lib/api-client";
+import {
+    SubmitResourceRequest,
+    SubmissionItem,
+    ReviewRequest,
+    SubmitResourceResponse,
+} from "@/types";
+
+export async function getMySubmissions(
+    limit: number = 20
+): Promise<SubmissionItem[]> {
+    const res = await apiClient<unknown>(
+        `/resources/submissions/mine?limit=${limit}`
+    );
+    const parsed = QueueListResponseSchema.safeParse(res);
+    if (!parsed.success) throw new Error("Invalid submissions response");
+    return parsed.data.items;
+}
+
+export async function submitResource(
+    request: SubmitResourceRequest
+): Promise<SubmitResourceResponse> {
+    const res = await apiClient<unknown>("/resources/submissions", {
+        method: "POST",
+        body: JSON.stringify(request),
+    });
+    const parsed = SubmitResourceResponseSchema.safeParse(res);
+    if (!parsed.success) throw new Error("Invalid response");
+    return parsed.data;
+}
+
+export async function getSubmissionQueue(
+    status: string = "pending",
+    limit: number = 50
+): Promise<QueueListResponse> {
+    const res = await apiClient<unknown>(
+        `/resources/submissions?status=${status}&limit=${limit}`
+    );
+    const parsed = QueueListResponseSchema.safeParse(res);
+    if (!parsed.success) throw new Error("Invalid moderation queue");
+    return parsed.data;
+}
+
+export async function reviewSubmission(
+    submissionId: string,
+    request: ReviewRequest
+): Promise<ReviewResponse> {
+    const res = await apiClient<unknown>(
+        `/resources/submissions/${submissionId}/review`,
+        {
+            method: "POST",
+            body: JSON.stringify(request),
+        }
+    );
+    const parsed = ReviewResponseSchema.safeParse(res);
+    if (!parsed.success) throw new Error("Invalid review response");
+    return parsed.data;
+}
+```
+
+### 7. External API — `lib/api/external-api.ts`
+
+```typescript
+// External service integrations (not part of OpenTier backend)
+export async function fetchGithubStarsApi(repo: string): Promise<number> {
+    const response = await fetch(
+        `https://api.github.com/repos/${repo}`
+    );
+    if (!response.ok) {
+        throw new Error(`Failed to fetch GitHub stars (${response.status})`);
+    }
+
+    const data = await response.json();
+    return typeof data?.stargazers_count === "number"
+        ? data.stargazers_count
+        : 0;
+}
+```
 
 ## Next.js API Proxy
 
-`next.config.ts` rewrites `/api/*` requests to the Rust backend. All client-side API calls use relative URLs (`/api/...`) — no direct references to the backend host. This means:
+`next.config.ts` rewrites `/api/*` requests to the Rust backend:
 
-1. CORS is never an issue in production (same-origin from the browser's perspective)
-2. The backend URL is a server-side secret (not exposed to the browser)
-3. Next.js can add request headers or transform responses at the proxy layer
+```typescript
+// next.config.ts
+export default {
+    async rewrites() {
+        return {
+            beforeFiles: [
+                {
+                    source: "/api/:path*",
+                    destination: `${process.env.BACKEND_URL}/api/:path*`,
+                },
+            ],
+        };
+    },
+};
+```
+
+**Benefits:**
+- 🔒 CORS is never an issue (same-origin from browser's perspective)
+- 🔐 Backend URL is server-side only (not exposed to browser)
+- 🛡️ Next.js can inject request headers or transform responses
+- 📍 Relative URLs throughout the app
+
+## Error Handling
+
+**`lib/api/base.ts`**
+
+```typescript
+export interface ApiError extends Error {
+    status: number;
+    code?: string;
+    details?: Record<string, unknown>;
+}
+
+export async function parseApiError(response: Response): Promise<ApiError> {
+    let message = response.statusText;
+    let code: string | undefined;
+
+    try {
+        const body = await response.json();
+        message = body.message || body.error || message;
+        code = body.code;
+    } catch {
+        // Fallback to status text if body isn't JSON
+    }
+
+    const error = new Error(message) as ApiError;
+    error.status = response.status;
+    error.code = code;
+
+    return error;
+}
+```
+
+## Best Practices
+
+### ✅ DO
+
+1. **Centralize API calls** in domain modules
+   ```typescript
+   // ✅ Correct
+   import { getRustApiHealth } from "@/lib/api/health-api";
+   ```
+
+2. **Validate responses** with Zod schemas
+   ```typescript
+   const parsed = HealthResponseSchema.safeParse(response);
+   if (!parsed.success) throw new Error("...");
+   ```
+
+3. **Use type imports** for zero runtime cost
+   ```typescript
+   import type { HealthResponse } from "@/types";
+   ```
+
+4. **Handle 204 No Content** responses
+   ```typescript
+   if (res.status === 204) return undefined as T;
+   ```
+
+### ❌ DON'T
+
+1. **Make inline apiClient calls** in components
+   ```typescript
+   // ❌ Wrong - Inline in component
+   const data = await apiClient<HealthResponse>("/health/api");
+   // ✅ Correct - Use centralized function
+   const data = await getRustApiHealth();
+   ```
+
+2. **Duplicate API logic** across files
+   ```typescript
+   // ❌ Don't repeat auth endpoints in multiple files
+   ```
+
+3. **Skip validation** on API responses
+   ```typescript
+   // ❌ Wrong - No validation
+   return res.json() as HealthResponse;
+   // ✅ Correct - Always validate
+   return HealthResponseSchema.parse(res.json());
+   ```
+
+## Type Safety Flow
+
+```
+1. Component calls getRustApiHealth()
+   ↓
+2. apiClient() receives response
+   ↓
+3. Zod schema validates structure
+   ↓
+4. TypeScript infers HealthResponse type
+   ↓
+5. Component receives fully typed data ✅
+```
+
+## Folder Structure
+
+```
+lib/
+├── api/
+│   ├── base.ts            # URL resolution, error parsing
+│   ├── auth-api.ts        # Sign in, sign up, session
+│   ├── chat-api.ts        # Conversations, messages
+│   ├── health-api.ts      # Health checks (Rust & Intelligence)
+│   ├── admin-api.ts       # Admin stats, user management
+│   ├── contributor-api.ts # Submission + moderation queue operations
+│   ├── user-api.ts        # Profile, password, sessions
+│   ├── external-api.ts    # External APIs (GitHub, etc.)
+│   └── contact-api.ts     # Contact form submission
+├── api-client.ts          # Base apiClient<T>() wrapper
+├── api-types.ts           # Zod schemas + type re-exports
+└── ...
+```
 
 ## Zod Schema Validation
 

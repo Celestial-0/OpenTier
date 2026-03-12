@@ -59,7 +59,7 @@ interface UserPreferences {
 
 **Dashboard Persistence**: The `activeDashboardView` is stored in the user store and persisted via `user-storage`. This ensures that the selected tab (Overview, Admin, Settings, etc.) is remembered across page refreshes without requiring URL parameters.
 
-**Session management**: `fetchSessions()` loads all active sessions; `revokeSession(sessionId)` calls `DELETE /user/sessions/{sessionId}` and removes the entry from local state immediately (optimistic update).
+**Session management**: `fetchSessions()` loads all active sessions; `revokeSession(sessionId)` calls `DELETE /user/revoke-session/{sessionId}` and removes the entry from local state immediately (optimistic update).
 
 ## `useAdminStore`
 
@@ -104,8 +104,8 @@ The `AdminProvider` context is a thin wrapper over `useAdminStore`:
 ```typescript
 // context/admin-context.tsx
 const value: AdminContextValue = {
-  isAdmin: user?.role === 'admin' || user?.role === 'superadmin',
-  isLoading: adminStore.isLoading,
+  isAdmin: user?.role === 'admin',
+  isLoading,
   error: adminStore.error,
   fetchStats: adminStore.fetchStats,
   fetchUsers: adminStore.fetchUsers,
@@ -113,4 +113,4 @@ const value: AdminContextValue = {
 }
 ```
 
-This pattern keeps Zustand stores as the single source of truth while allowing the context to inject role-based guards (`isAdmin`) computed from `AuthContext`'s `user` object.
+This pattern keeps Zustand stores as the single source of truth while allowing context wrappers to inject role guards (`isAdmin`, `isContributor`) computed from the authenticated user.

@@ -18,6 +18,7 @@ import { GithubIcon } from "./github";
 import { BotMessageSquareIcon } from "./bot-message-square";
 import { UserRoundCheckIcon } from "./user-round-check";
 import { FingerprintIcon } from "./fingerprint";
+import {FolderPlusIcon } from "./folder-plus";
 
 export {
     ConstructionIcon,
@@ -40,4 +41,5 @@ export {
     BellIcon,
     UserRoundCheckIcon,
     FingerprintIcon,
+    FolderPlusIcon,
 }
