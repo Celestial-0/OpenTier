@@ -172,26 +172,27 @@ export function FooterContent() {
                 className="pt-6 flex flex-col items-center gap-6 text-center"
             >
                 <HoverCard>
-                    <Link
-                        href={DEVELOPER_PROFILE.portfolioUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                    <HoverCardTrigger
+                        render={
+                            <Link
+                                href={DEVELOPER_PROFILE.portfolioUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            />
+                        }
+                        className="
+                            text-xs text-muted-foreground transition-colors
+                            hover:text-foreground underline-offset-4
+                            text-center
+                            cursor-pointer
+                            
+                        "
                     >
-                        <HoverCardTrigger
-                            className="
-                                text-xs text-muted-foreground transition-colors
-                                hover:text-foreground underline-offset-4
-                                text-center
-                                cursor-pointer
-                                
-                            "
-                        >
-                            {FOOTER_TEXT.designedBy}{" "}
-                            <span className="underline">
-                                {DEVELOPER_PROFILE.name}
-                            </span>
-                        </HoverCardTrigger>
-                    </Link>
+                        {FOOTER_TEXT.designedBy}{" "}
+                        <span className="underline">
+                            {DEVELOPER_PROFILE.name}
+                        </span>
+                    </HoverCardTrigger>
 
                     <HoverCardContent className="w-[360px] border-foreground/10  backdrop-blur-xl p-0 overflow-hidden relative">
 

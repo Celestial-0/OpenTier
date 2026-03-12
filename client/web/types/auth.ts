@@ -25,7 +25,5 @@ export interface SignInResponse {
 export interface SignUpResponse {
     user_id: string;
     email: string;
-    session_token: string;
-    expires_at: string; // ISO String
     message: string;
 }

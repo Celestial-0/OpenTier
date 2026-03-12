@@ -38,8 +38,8 @@ export const Navbar = () => {
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md supports-[backdrop-filter]:bg-background/0 ">
-      <div className="container mx-auto px-0 gap-2">
-        <div className="flex h-16 items-center justify-between">
+      <div className="container mx-auto px-4 py-0 gap-2">
+        <div className="flex h-20 items-center justify-between">
           {/* Logo */}
           <button
             onClick={() => {

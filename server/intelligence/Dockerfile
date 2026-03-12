@@ -30,6 +30,14 @@ COPY --chown=appuser:appuser pyproject.toml uv.lock ./
 ARG UV_EXTRA_ARGS=""
 RUN uv sync ${UV_EXTRA_ARGS}
 
+# Install Playwright OS dependencies (requires root)
+USER root
+RUN uv run playwright install-deps chromium
+
+# Switch back to appuser and install Playwright browsers
+USER appuser
+RUN uv run playwright install chromium
+
 # Copy the rest of the application code
 COPY --chown=appuser:appuser . .
 

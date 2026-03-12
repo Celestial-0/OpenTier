@@ -125,7 +125,7 @@ export const useChatStore = create<ChatState>()(
 
                     set({ isLoadingConversations: true, error: null });
                     try {
-                        const cursor = reset ? undefined : get().nextCursor;
+                        const cursor = reset ? undefined : (get().nextCursor ?? undefined);
                         const data = await fetchConversationsApi(cursor);
                         const parsed = ConversationListResponseSchema.parse(data); // Zod validation
 
@@ -207,7 +207,7 @@ export const useChatStore = create<ChatState>()(
 
                     try {
                         const payload: CreateConversationRequest = { title: 'New Chat' };
-                        const newConv = await createConversationApi(payload.title || 'New Chat');
+                        const newConv = await createConversationApi(payload.title || 'New Chat') as any;
 
                         const summary: ConversationSummary = {
                             id: newConv.id,

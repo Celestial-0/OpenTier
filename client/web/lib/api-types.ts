@@ -112,8 +112,6 @@ export const SignUpRequestSchema = z.object({
 export const SignUpResponseSchema = z.object({
     user_id: z.uuid(),
     email: z.email(),
-    session_token: z.string(),
-    expires_at: z.string(),
     message: z.string(),
 });
 
