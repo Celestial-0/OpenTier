@@ -8,7 +8,12 @@ import { UserResponse, SignInRequest, SignUpRequest } from "@/lib/api-types";
 import { AuthView } from "@/components/core/auth/constants";
 import { setAuthToken, removeAuthToken } from "@/lib/auth-utils";
 import {
+    exchangeOAuthCodeApi,
     forgotPasswordApi,
+    getOAuthAuthorizeUrl,
+    getEnabledOAuthProvidersApi,
+    type OAuthCallbackPayload,
+    type OAuthProvider,
     resendVerificationApi,
     resetPasswordApi,
     signInApi,
@@ -30,6 +35,7 @@ interface AuthContextType {
     user: UserResponse | null;
     isLoading: boolean;
     isAuthenticated: boolean;
+    enabledProviders: OAuthProvider[];
     signIn: (data: SignInRequest) => Promise<void>;
     signUp: (data: SignUpRequest) => Promise<void>;
     logout: () => Promise<void>;
@@ -38,6 +44,8 @@ interface AuthContextType {
     verifyEmail: (email: string, otp: string, token?: string) => Promise<void>;
     forgotPassword: (email: string) => Promise<void>;
     resetPassword: (password: string, token: string) => Promise<void>;
+    startOAuthSignIn: (provider: OAuthProvider) => void;
+    completeOAuthSignIn: (payload: OAuthCallbackPayload) => Promise<void>;
     // Modal State
     isModalOpen: boolean;
     authView: AuthView;
@@ -74,6 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Local loading state for the initial check or auth actions
     const [isLoading, setIsLoading] = useState(true);
+    const [enabledProviders, setEnabledProviders] = useState<OAuthProvider[]>(['google', 'microsoft', 'github', 'discord', 'x']);
 
     // Modal State
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -109,8 +118,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
+    // Fetch enabled OAuth providers
+    const fetchEnabledProviders = async () => {
+        try {
+            const providers = await getEnabledOAuthProvidersApi();
+            setEnabledProviders(providers);
+        } catch (error) {
+            console.error("Failed to fetch enabled OAuth providers", error);
+            // Default to all providers (already set in state)
+        }
+    };
+
     useEffect(() => {
         checkAuth();
+        fetchEnabledProviders();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []); // Run once on mount
 
@@ -219,12 +240,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
+    const startOAuthSignIn = (provider: OAuthProvider) => {
+        const authUrl = getOAuthAuthorizeUrl(provider);
+        window.location.href = authUrl;
+    };
+
+    const completeOAuthSignIn = async (payload: OAuthCallbackPayload) => {
+        setIsLoading(true);
+        try {
+            const exchange = await exchangeOAuthCodeApi(payload.oauth_code);
+            setAuthToken(exchange.session_token);
+            await fetchUser();
+            setIsModalOpen(false);
+        } catch (error) {
+            removeAuthToken();
+            throw error;
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     return (
         <AuthContext.Provider
             value={{
                 user,
                 isLoading,
                 isAuthenticated: !!user,
+                enabledProviders,
                 signIn,
                 signUp,
                 logout,
@@ -233,6 +275,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 verifyEmail,
                 forgotPassword,
                 resetPassword,
+                startOAuthSignIn,
+                completeOAuthSignIn,
                 isModalOpen,
                 authView,
                 authError,

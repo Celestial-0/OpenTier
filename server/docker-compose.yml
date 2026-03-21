@@ -1,3 +1,4 @@
+name: opentier
 services:
   db:
     image: pgvector/pgvector:pg16
@@ -35,7 +36,7 @@ services:
       DB_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
     expose:
       - "50051"
-    restart: on-failure
+    restart: unless-stopped
     networks:
       - opentier
 
@@ -60,7 +61,7 @@ services:
       SERVER_HOST: 0.0.0.0
     ports:
       - "4000:4000"
-    restart: on-failure
+    restart: unless-stopped
     networks:
       - opentier
 

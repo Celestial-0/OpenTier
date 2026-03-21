@@ -32,10 +32,11 @@ pub async fn fetch_user_info(
 ) -> Result<GoogleUserInfo, Box<dyn std::error::Error>> {
     let client = reqwest::Client::new();
     let response = client
-        .get("https://www.googleapis.com/oauth2/v2/userinfo")
+        .get("https://openidconnect.googleapis.com/v1/userinfo")
         .bearer_auth(access_token)
         .send()
-        .await?;
+        .await?
+        .error_for_status()?;
 
     let user_info: GoogleUserInfo = response.json().await?;
     Ok(user_info)

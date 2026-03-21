@@ -1,6 +1,5 @@
 "use client"
 
-import { useState, useEffect } from "react"
 import { createPortal } from "react-dom"
 import { motion, AnimatePresence, type Variants } from "framer-motion"
 import { X } from "lucide-react"
@@ -17,22 +16,16 @@ export function AuthOverlay() {
         authView,
         authError,
         attemptedEmail,
+        enabledProviders,
         closeModal,
         setAuthView,
         signIn,
         signUp,
+        startOAuthSignIn,
         resendVerification,
         verifyEmail,
         forgotPassword
     } = useAuth()
-
-    const [mounted, setMounted] = useState(false)
-
-    // Cleanup on mount
-    useEffect(() => {
-        setMounted(true)
-        return () => setMounted(false)
-    }, [])
 
     const containerVariants: Variants = {
         hidden: { opacity: 0, scale: 0.95, y: 10 },
@@ -55,7 +48,7 @@ export function AuthOverlay() {
         }
     }
 
-    if (!mounted) return null
+    if (typeof document === "undefined") return null
 
     const modalContent = (
         <AnimatePresence>
@@ -93,7 +86,9 @@ export function AuthOverlay() {
                                     onNavigate={setAuthView}
                                     error={authError}
                                     onResend={resendVerification}
+                                    onOAuthSignIn={startOAuthSignIn}
                                     onSubmit={signIn}
+                                    enabledProviders={enabledProviders}
                                 />
                             )}
                             {authView === 'forgot-password' && (

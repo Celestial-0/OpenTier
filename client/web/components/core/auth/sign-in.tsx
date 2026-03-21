@@ -5,18 +5,40 @@ import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { signInSchema, type AuthView, socialButtons } from "./constants"
+import { signInSchema, type AuthView, getSocialButtons } from "./constants"
+import type { OAuthProvider } from "@/lib/api/auth-api"
+
+const firstFieldError = (error: unknown): string => {
+    if (typeof error === "string") {
+        return error
+    }
+
+    if (
+        typeof error === "object" &&
+        error !== null &&
+        "message" in error &&
+        typeof (error as { message?: unknown }).message === "string"
+    ) {
+        return (error as { message: string }).message
+    }
+
+    return "Invalid input"
+}
 
 export function SignInView({
     onNavigate,
     onSubmit,
     error,
-    onResend
+    onResend,
+    onOAuthSignIn,
+    enabledProviders = ['google', 'microsoft', 'github', 'discord', 'x'],
 }: {
     onNavigate: (view: AuthView) => void
     onSubmit: (data: z.infer<typeof signInSchema>) => void
     error?: string | null
     onResend?: (email: string) => void
+    onOAuthSignIn?: (provider: OAuthProvider) => void
+    enabledProviders?: OAuthProvider[]
 }) {
     const form = useForm({
         defaultValues: {
@@ -45,6 +67,9 @@ export function SignInView({
         hidden: { opacity: 0, y: 10 },
         show: { opacity: 1, y: 0 }
     }
+
+    const socialButtons = getSocialButtons(enabledProviders)
+    const hasSocialLogin = socialButtons.length > 0
 
     return (
         <motion.div
@@ -94,33 +119,49 @@ export function SignInView({
                 </div>
             )}
 
-            <motion.div variants={itemVariants} className="grid grid-cols-5 gap-3">
-                {socialButtons.map((btn, i) => (
-                    <motion.button
-                        key={i}
-                        whileHover={{ scale: 1.05, y: -2 }}
-                        whileTap={{ scale: 0.95 }}
-                        className={cn(
-                            "flex aspect-square items-center justify-center rounded-2xl border border-border bg-background transition-colors",
-                            btn.color
-                        )}
-                        aria-label={`Sign in with ${btn.label}`}
+            {hasSocialLogin && (
+                <>
+                    <motion.div
+                        variants={itemVariants}
+                        className="grid justify-center gap-3"
+                        style={{ gridTemplateColumns: `repeat(${socialButtons.length}, minmax(0, 5.25rem))` }}
                     >
-                        <btn.icon className="h-5 w-5" />
-                    </motion.button>
-                ))}
-            </motion.div>
+                        {socialButtons.map((btn, i) => (
+                            <motion.button
+                                key={i}
+                                whileHover={{ scale: 1.05, y: -2 }}
+                                whileTap={{ scale: 0.95 }}
+                                className={cn(
+                                    "flex aspect-square items-center justify-center rounded-2xl border border-border bg-background transition-colors",
+                                    btn.color,
+                                    !btn.provider && "cursor-not-allowed opacity-40"
+                                )}
+                                aria-label={`Sign in with ${btn.label}`}
+                                onClick={(e) => {
+                                    e.preventDefault()
+                                    if (btn.provider && onOAuthSignIn) {
+                                        onOAuthSignIn(btn.provider)
+                                    }
+                                }}
+                                disabled={!btn.provider}
+                            >
+                                <btn.icon className="h-5 w-5" />
+                            </motion.button>
+                        ))}
+                    </motion.div>
 
-            <motion.div variants={itemVariants} className="relative">
-                <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t border-border" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-background px-2 text-muted-foreground">
-                        Or continue with
-                    </span>
-                </div>
-            </motion.div>
+                    <motion.div variants={itemVariants} className="relative">
+                        <div className="absolute inset-0 flex items-center">
+                            <span className="w-full border-t border-border" />
+                        </div>
+                        <div className="relative flex justify-center text-xs uppercase">
+                            <span className="bg-background px-2 text-muted-foreground">
+                                Or continue with
+                            </span>
+                        </div>
+                    </motion.div>
+                </>
+            )}
 
             <motion.form
                 variants={itemVariants}
@@ -145,7 +186,7 @@ export function SignInView({
                                 />
                             </motion.div>
                             {field.state.meta.errors.length > 0 && (
-                                <p className="text-xs text-destructive">{(field.state.meta.errors[0] as any)?.message || (typeof field.state.meta.errors[0] === 'string' ? field.state.meta.errors[0] : "Invalid input")}</p>
+                                <p className="text-xs text-destructive">{firstFieldError(field.state.meta.errors[0])}</p>
                             )}
                         </div>
                     )}

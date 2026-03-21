@@ -4,7 +4,8 @@ use axum::{
 };
 
 use crate::auth::{
-    forgot_password, oauth::oauth_authorize, oauth::oauth_callback, recover_account, refresh,
+    forgot_password, oauth::oauth_authorize, oauth::oauth_callback, oauth::oauth_exchange,
+    oauth::oauth_get_providers, recover_account, refresh,
     resend_verification, reset_password, signin, signout, signup, verify_get, verify_post,
 };
 use crate::gateway::AppState;
@@ -15,6 +16,8 @@ pub fn routes() -> Router<AppState> {
     let oauth_routes = Router::new()
         .route("/oauth/{provider}/authorize", get(oauth_authorize))
         .route("/oauth/{provider}/callback", get(oauth_callback))
+        .route("/oauth/exchange", post(oauth_exchange))
+        .route("/oauth/providers", get(oauth_get_providers))
         .layer(auth_rate_limiter());
 
     // Standard auth routes (signin, signup, refresh, signout)

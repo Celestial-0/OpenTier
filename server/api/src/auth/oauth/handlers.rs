@@ -7,10 +7,19 @@ use axum::{
     response::{IntoResponse, Redirect},
 };
 use serde::{Deserialize, Serialize};
+use url::form_urlencoded::Serializer;
 
 use super::{Provider, service};
-use crate::auth::AuthError;
+use crate::auth::{AuthError, OAuthCodeExchangeRequest, OAuthCodeExchangeResponse};
 use crate::gateway::AppState;
+
+// ===== Types =====
+
+#[derive(Debug, Serialize)]
+pub struct OAuthProvidersResponse {
+    /// List of enabled OAuth providers
+    pub providers: Vec<String>,
+}
 
 // ===== OAuth Authorize =====
 
@@ -22,7 +31,21 @@ pub async fn oauth_authorize(
 ) -> Result<impl IntoResponse, StatusCode> {
     let provider = Provider::from_str(&provider_str).ok_or(StatusCode::BAD_REQUEST)?;
 
-    let auth_url = service::get_authorization_url(provider, &app_state.config.oauth)
+    // Check if provider is enabled
+    let is_enabled = match provider {
+        Provider::Google => app_state.config.oauth.google.enabled,
+        Provider::Microsoft => app_state.config.oauth.microsoft.enabled,
+        Provider::GitHub => app_state.config.oauth.github.enabled,
+        Provider::Discord => app_state.config.oauth.discord.enabled,
+        Provider::X => app_state.config.oauth.x.enabled,
+    };
+
+    if !is_enabled {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let auth_url = service::get_authorization_url(&app_state.db, provider, &app_state.config.oauth)
+        .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Redirect::temporary(&auth_url))
@@ -32,20 +55,11 @@ pub async fn oauth_authorize(
 
 #[derive(Debug, Deserialize)]
 pub struct OAuthCallbackQuery {
-    pub code: String,
+    pub code: Option<String>,
     /// OAuth state parameter for CSRF protection (reserved for future use)
-    #[allow(dead_code)]
     pub state: Option<String>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct OAuthCallbackResponse {
-    pub user_id: String,
-    pub email: String,
-    pub session_token: String,
-    pub expires_at: String,
-    pub is_new_user: bool,
-    pub message: String,
+    pub error: Option<String>,
+    pub error_description: Option<String>,
 }
 
 /// GET /auth/oauth/{provider}/callback
@@ -54,29 +68,112 @@ pub async fn oauth_callback(
     State(app_state): State<AppState>,
     Path(provider_str): Path<String>,
     Query(params): Query<OAuthCallbackQuery>,
-) -> Result<Json<OAuthCallbackResponse>, AuthError> {
-    let provider = Provider::from_str(&provider_str).ok_or(AuthError::Internal)?;
+) -> Result<impl IntoResponse, StatusCode> {
+    let provider = Provider::from_str(&provider_str).ok_or(StatusCode::BAD_REQUEST)?;
 
-    let result = service::handle_callback(
-        &app_state.db,
-        provider,
-        params.code,
-        &app_state.config.oauth,
-    )
-    .await?;
-
-    let message = if result.is_new_user {
-        "Account created and signed in successfully via OAuth"
-    } else {
-        "Signed in successfully via OAuth"
+    // Check if provider is enabled
+    let is_enabled = match provider {
+        Provider::Google => app_state.config.oauth.google.enabled,
+        Provider::Microsoft => app_state.config.oauth.microsoft.enabled,
+        Provider::GitHub => app_state.config.oauth.github.enabled,
+        Provider::Discord => app_state.config.oauth.discord.enabled,
+        Provider::X => app_state.config.oauth.x.enabled,
     };
 
-    Ok(Json(OAuthCallbackResponse {
-        user_id: result.user_id.to_string(),
-        email: result.email,
+    if !is_enabled {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    if let Some(provider_error) = params.error {
+        let mut serializer = Serializer::new(String::new());
+        serializer.append_pair("provider", provider.as_str());
+        serializer.append_pair("error", &provider_error);
+        if let Some(desc) = params.error_description {
+            serializer.append_pair("error_description", &desc);
+        }
+        let redirect_base = app_state.config.oauth.frontend_callback_url.trim_end_matches('/');
+        let redirect_url = format!("{}?{}", redirect_base, serializer.finish());
+        return Ok(Redirect::temporary(&redirect_url));
+    }
+
+    let code = params.code.ok_or(StatusCode::BAD_REQUEST)?;
+    let state = params.state.ok_or(StatusCode::BAD_REQUEST)?;
+
+    let callback_result = service::handle_callback(
+        &app_state.db,
+        provider,
+        code,
+        state,
+        &app_state.config.oauth,
+    )
+    .await;
+
+    let redirect_base = app_state.config.oauth.frontend_callback_url.trim_end_matches('/');
+
+    let redirect_url = match callback_result {
+        Ok(result) => {
+            let mut serializer = Serializer::new(String::new());
+            serializer.append_pair("provider", &result.provider);
+            serializer.append_pair("oauth_code", &result.oauth_code);
+
+            format!("{}?{}", redirect_base, serializer.finish())
+        }
+        Err(err) => {
+            tracing::error!(
+                "OAuth callback failed for provider {}: {}",
+                provider.as_str(),
+                err
+            );
+            let mut serializer = Serializer::new(String::new());
+            serializer.append_pair("provider", provider.as_str());
+            serializer.append_pair("error", "OAuth authentication failed");
+            serializer.append_pair("error_description", &err.to_string());
+            format!("{}?{}", redirect_base, serializer.finish())
+        }
+    };
+
+    Ok(Redirect::temporary(&redirect_url))
+}
+
+/// POST /auth/oauth/exchange
+/// Exchange one-time OAuth callback code for a session token.
+pub async fn oauth_exchange(
+    State(app_state): State<AppState>,
+    Json(payload): Json<OAuthCodeExchangeRequest>,
+) -> Result<Json<OAuthCodeExchangeResponse>, AuthError> {
+    let result = service::exchange_oauth_code(&app_state.db, payload.code).await?;
+
+    Ok(Json(OAuthCodeExchangeResponse {
+        provider: result.provider,
         session_token: result.session_token,
-        expires_at: result.expires_at.to_rfc3339(),
+        email: result.email,
         is_new_user: result.is_new_user,
-        message: message.to_string(),
+        message: result.message,
     }))
+}
+
+/// GET /auth/oauth/providers
+/// Return the list of enabled OAuth providers
+pub async fn oauth_get_providers(
+    State(app_state): State<AppState>,
+) -> Json<OAuthProvidersResponse> {
+    let mut providers = Vec::new();
+
+    if app_state.config.oauth.google.enabled {
+        providers.push("google".to_string());
+    }
+    if app_state.config.oauth.microsoft.enabled {
+        providers.push("microsoft".to_string());
+    }
+    if app_state.config.oauth.github.enabled {
+        providers.push("github".to_string());
+    }
+    if app_state.config.oauth.discord.enabled {
+        providers.push("discord".to_string());
+    }
+    if app_state.config.oauth.x.enabled {
+        providers.push("x".to_string());
+    }
+
+    Json(OAuthProvidersResponse { providers })
 }

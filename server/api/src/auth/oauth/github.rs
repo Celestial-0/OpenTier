@@ -46,7 +46,8 @@ pub async fn fetch_user_info(
         .bearer_auth(access_token)
         .header("User-Agent", "OpenTier-API")
         .send()
-        .await?;
+        .await?
+        .error_for_status()?;
 
     let user_info: GitHubUserInfo = response.json().await?;
     Ok(user_info)
@@ -62,7 +63,8 @@ pub async fn fetch_user_emails(
         .bearer_auth(access_token)
         .header("User-Agent", "OpenTier-API")
         .send()
-        .await?;
+        .await?
+        .error_for_status()?;
 
     let emails: Vec<GitHubEmail> = response.json().await?;
     Ok(emails)

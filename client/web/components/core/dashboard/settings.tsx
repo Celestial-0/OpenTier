@@ -44,9 +44,16 @@ export const Settings = () => {
     // Chat title generation setting
     const { useAiTitleGeneration, setUseAiTitleGeneration } = useChatStore();
 
+    const requiresCurrentPassword = user?.has_password ?? true;
+
     const handleChangePassword = async () => {
         setPasswordError(null);
         setPasswordSuccess(false);
+
+        if (requiresCurrentPassword && !currentPassword.trim()) {
+            setPasswordError("Current password is required");
+            return;
+        }
 
         if (newPassword !== confirmPassword) {
             setPasswordError("New passwords do not match");
@@ -60,7 +67,7 @@ export const Settings = () => {
 
         try {
             await changePassword({
-                current_password: currentPassword,
+                current_password: requiresCurrentPassword ? currentPassword : undefined,
                 new_password: newPassword
             });
             setPasswordSuccess(true);
@@ -129,16 +136,18 @@ export const Settings = () => {
                             <div className="space-y-1">
                                 <p className="text-sm font-medium">Password</p>
                                 <p className="text-sm text-muted-foreground">
-                                    Change your account password
+                                    {requiresCurrentPassword ? "Change your account password" : "Create a local password for email sign-in"}
                                 </p>
                             </div>
                             <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
-                                <DialogTrigger render={<Button variant="outline" size="sm">Change Password</Button>} />
+                                <DialogTrigger render={<Button variant="outline" size="sm">{requiresCurrentPassword ? "Change Password" : "Create Password"}</Button>} />
                                 <DialogContent>
                                     <DialogHeader>
-                                        <DialogTitle>Change Password</DialogTitle>
+                                        <DialogTitle>{requiresCurrentPassword ? "Change Password" : "Create Password"}</DialogTitle>
                                         <DialogDescription>
-                                            Enter your current password and choose a new one
+                                            {requiresCurrentPassword
+                                                ? "Enter your current password and choose a new one"
+                                                : "Set a password so you can sign in with email and password as well"}
                                         </DialogDescription>
                                     </DialogHeader>
                                     <div className="space-y-4 py-4">
@@ -149,18 +158,20 @@ export const Settings = () => {
                                         )}
                                         {passwordSuccess && (
                                             <div className="text-sm text-green-500 bg-green-50 p-2 rounded">
-                                                Password changed successfully!
+                                                {requiresCurrentPassword ? "Password changed successfully!" : "Password created successfully!"}
                                             </div>
                                         )}
-                                        <div className="space-y-2">
-                                            <Label htmlFor="currentPassword">Current Password</Label>
-                                            <Input
-                                                id="currentPassword"
-                                                type="password"
-                                                value={currentPassword}
-                                                onChange={(e) => setCurrentPassword(e.target.value)}
-                                            />
-                                        </div>
+                                        {requiresCurrentPassword && (
+                                            <div className="space-y-2">
+                                                <Label htmlFor="currentPassword">Current Password</Label>
+                                                <Input
+                                                    id="currentPassword"
+                                                    type="password"
+                                                    value={currentPassword}
+                                                    onChange={(e) => setCurrentPassword(e.target.value)}
+                                                />
+                                            </div>
+                                        )}
                                         <div className="space-y-2">
                                             <Label htmlFor="newPassword">New Password</Label>
                                             <Input
@@ -188,7 +199,7 @@ export const Settings = () => {
                                             Cancel
                                         </Button>
                                         <Button onClick={handleChangePassword} disabled={isLoading}>
-                                            {isLoading ? "Updating..." : "Update Password"}
+                                            {isLoading ? "Updating..." : requiresCurrentPassword ? "Update Password" : "Create Password"}
                                         </Button>
                                     </DialogFooter>
                                 </DialogContent>

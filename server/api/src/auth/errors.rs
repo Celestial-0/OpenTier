@@ -24,6 +24,12 @@ pub enum AuthError {
     #[error("Invalid token")]
     InvalidToken,
 
+    #[error("Invalid OAuth state")]
+    InvalidOAuthState,
+
+    #[error("OAuth provider did not return an email address")]
+    ProviderEmailMissing,
+
     #[error("Token expired")]
     TokenExpired,
 
@@ -61,6 +67,11 @@ impl IntoResponse for AuthError {
             AuthError::EmailAlreadyExists => (StatusCode::CONFLICT, "Email already exists"),
             AuthError::UserAlreadyExists => (StatusCode::CONFLICT, "User already exists"),
             AuthError::InvalidToken => (StatusCode::UNAUTHORIZED, "Invalid token"),
+            AuthError::InvalidOAuthState => (StatusCode::UNAUTHORIZED, "Invalid OAuth state"),
+            AuthError::ProviderEmailMissing => (
+                StatusCode::BAD_REQUEST,
+                "OAuth provider did not return an email address",
+            ),
             AuthError::TokenExpired => (StatusCode::UNAUTHORIZED, "Token expired"),
             AuthError::WeakPassword => (StatusCode::BAD_REQUEST, "Password too weak"),
             AuthError::EmailNotVerified => (StatusCode::FORBIDDEN, "Email not verified"),

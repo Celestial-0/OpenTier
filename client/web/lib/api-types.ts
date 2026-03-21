@@ -122,6 +122,7 @@ export const UserResponseSchema = z.object({
     id: z.uuid(),
     email: z.email(),
     email_verified: z.boolean(),
+    has_password: z.boolean(),
     name: z.string().nullable().optional(),
     username: z.string().nullable().optional(),
     avatar_url: z.string().nullable().optional(),
@@ -137,7 +138,7 @@ export const UpdateProfileRequestSchema = z.object({
 });
 
 export const ChangePasswordRequestSchema = z.object({
-    current_password: z.string().min(1),
+    current_password: z.string().min(1).optional(),
     new_password: z.string().min(8),
 });
 

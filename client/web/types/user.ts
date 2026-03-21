@@ -8,6 +8,7 @@ export interface UserResponse {
     id: string;
     email: string;
     email_verified: boolean;
+    has_password: boolean;
     name?: string | null;
     username?: string | null;
     avatar_url?: string | null;
@@ -23,6 +24,6 @@ export interface UpdateProfileRequest {
 }
 
 export interface ChangePasswordRequest {
-    current_password: string;
+    current_password?: string;
     new_password: string;
 }

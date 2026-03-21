@@ -20,6 +20,15 @@ pub enum UserError {
     #[error("Invalid current password")]
     InvalidCurrentPassword,
 
+    #[error("Current password is required")]
+    CurrentPasswordRequired,
+
+    #[error("New password is too weak")]
+    WeakPassword,
+
+    #[error("New password must be different from current password")]
+    PasswordReuse,
+
     #[error("Session not found")]
     SessionNotFound,
 
@@ -39,6 +48,14 @@ impl IntoResponse for UserError {
             UserError::InvalidCurrentPassword => {
                 (StatusCode::UNAUTHORIZED, "Invalid current password")
             }
+            UserError::CurrentPasswordRequired => {
+                (StatusCode::BAD_REQUEST, "Current password is required")
+            }
+            UserError::WeakPassword => (StatusCode::BAD_REQUEST, "New password is too weak"),
+            UserError::PasswordReuse => (
+                StatusCode::BAD_REQUEST,
+                "New password must be different from current password",
+            ),
             UserError::SessionNotFound => (StatusCode::NOT_FOUND, "Session not found"),
             UserError::Database(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Database error"),
             UserError::Internal => (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error"),

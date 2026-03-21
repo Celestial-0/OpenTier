@@ -9,6 +9,7 @@ pub struct UserResponse {
     pub id: Uuid,
     pub email: String,
     pub email_verified: bool,
+    pub has_password: bool,
     pub name: Option<String>,
     pub username: Option<String>,
     pub avatar_url: Option<String>,
@@ -28,7 +29,7 @@ pub struct UpdateProfileRequest {
 // ===== Change Password =====
 #[derive(Debug, Deserialize)]
 pub struct ChangePasswordRequest {
-    pub current_password: String,
+    pub current_password: Option<String>,
     pub new_password: String,
 }
 

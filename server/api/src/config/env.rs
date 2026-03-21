@@ -29,11 +29,24 @@ pub struct ServerConfig {
 #[derive(Debug, Clone)]
 pub struct OAuthConfig {
     pub google: GoogleOAuthConfig,
+    pub microsoft: MicrosoftOAuthConfig,
     pub github: GitHubOAuthConfig,
+    pub discord: DiscordOAuthConfig,
+    pub x: XOAuthConfig,
+    pub frontend_callback_url: String,
 }
 
 #[derive(Debug, Clone)]
 pub struct GoogleOAuthConfig {
+    pub enabled: bool,
+    pub client_id: String,
+    pub client_secret: String,
+    pub redirect_url: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct MicrosoftOAuthConfig {
+    pub enabled: bool,
     pub client_id: String,
     pub client_secret: String,
     pub redirect_url: String,
@@ -41,6 +54,23 @@ pub struct GoogleOAuthConfig {
 
 #[derive(Debug, Clone)]
 pub struct GitHubOAuthConfig {
+    pub enabled: bool,
+    pub client_id: String,
+    pub client_secret: String,
+    pub redirect_url: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct DiscordOAuthConfig {
+    pub enabled: bool,
+    pub client_id: String,
+    pub client_secret: String,
+    pub redirect_url: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct XOAuthConfig {
+    pub enabled: bool,
     pub client_id: String,
     pub client_secret: String,
     pub redirect_url: String,
@@ -118,7 +148,19 @@ impl OAuthConfig {
     pub fn from_env() -> Result<Self, Box<dyn std::error::Error>> {
         Ok(Self {
             google: GoogleOAuthConfig::from_env()?,
+            microsoft: MicrosoftOAuthConfig::from_env()?,
             github: GitHubOAuthConfig::from_env()?,
+            discord: DiscordOAuthConfig::from_env()?,
+            x: XOAuthConfig::from_env()?,
+            frontend_callback_url: env::var("OAUTH_FRONTEND_CALLBACK_URL")
+                .unwrap_or_else(|_| {
+                    format!(
+                        "{}/auth/callback",
+                        env::var("FRONTEND_URL")
+                            .unwrap_or_else(|_| "http://localhost:3000".to_string())
+                            .trim_end_matches('/')
+                    )
+                }),
         })
     }
 }
@@ -126,6 +168,9 @@ impl OAuthConfig {
 impl GoogleOAuthConfig {
     pub fn from_env() -> Result<Self, Box<dyn std::error::Error>> {
         Ok(Self {
+            enabled: env::var("GOOGLE_OAUTH_ENABLE")
+                .map(|v| v.to_lowercase() != "false")
+                .unwrap_or(true),
             client_id: env::var("GOOGLE_CLIENT_ID")?,
             client_secret: env::var("GOOGLE_CLIENT_SECRET")?,
             redirect_url: env::var("GOOGLE_REDIRECT_URL")
@@ -134,13 +179,58 @@ impl GoogleOAuthConfig {
     }
 }
 
+impl MicrosoftOAuthConfig {
+    pub fn from_env() -> Result<Self, Box<dyn std::error::Error>> {
+        Ok(Self {
+            enabled: env::var("MICROSOFT_OAUTH_ENABLE")
+                .map(|v| v.to_lowercase() != "false")
+                .unwrap_or(true),
+            client_id: env::var("MICROSOFT_CLIENT_ID")?,
+            client_secret: env::var("MICROSOFT_CLIENT_SECRET")?,
+            redirect_url: env::var("MICROSOFT_REDIRECT_URL")
+                .unwrap_or_else(|_| "http://localhost:4000/auth/oauth/microsoft/callback".to_string()),
+        })
+    }
+}
+
 impl GitHubOAuthConfig {
     pub fn from_env() -> Result<Self, Box<dyn std::error::Error>> {
         Ok(Self {
+            enabled: env::var("GITHUB_OAUTH_ENABLE")
+                .map(|v| v.to_lowercase() != "false")
+                .unwrap_or(true),
             client_id: env::var("GITHUB_CLIENT_ID")?,
             client_secret: env::var("GITHUB_CLIENT_SECRET")?,
             redirect_url: env::var("GITHUB_REDIRECT_URL")
                 .unwrap_or_else(|_| "http://localhost:4000/auth/oauth/github/callback".to_string()),
+        })
+    }
+}
+
+impl DiscordOAuthConfig {
+    pub fn from_env() -> Result<Self, Box<dyn std::error::Error>> {
+        Ok(Self {
+            enabled: env::var("DISCORD_OAUTH_ENABLE")
+                .map(|v| v.to_lowercase() != "false")
+                .unwrap_or(true),
+            client_id: env::var("DISCORD_CLIENT_ID")?,
+            client_secret: env::var("DISCORD_CLIENT_SECRET")?,
+            redirect_url: env::var("DISCORD_REDIRECT_URL")
+                .unwrap_or_else(|_| "http://localhost:4000/auth/oauth/discord/callback".to_string()),
+        })
+    }
+}
+
+impl XOAuthConfig {
+    pub fn from_env() -> Result<Self, Box<dyn std::error::Error>> {
+        Ok(Self {
+            enabled: env::var("X_OAUTH_ENABLE")
+                .map(|v| v.to_lowercase() != "false")
+                .unwrap_or(true),
+            client_id: env::var("X_CLIENT_ID")?,
+            client_secret: env::var("X_CLIENT_SECRET")?,
+            redirect_url: env::var("X_REDIRECT_URL")
+                .unwrap_or_else(|_| "http://localhost:4000/auth/oauth/x/callback".to_string()),
         })
     }
 }

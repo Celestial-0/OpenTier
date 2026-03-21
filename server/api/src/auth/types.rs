@@ -134,3 +134,21 @@ pub struct RecoverAccountResponse {
     pub expires_at: DateTime<Utc>,
     pub message: String,
 }
+
+// ============================================================================
+// OAUTH CODE EXCHANGE
+// ============================================================================
+
+#[derive(Debug, Deserialize)]
+pub struct OAuthCodeExchangeRequest {
+    pub code: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct OAuthCodeExchangeResponse {
+    pub provider: String,
+    pub session_token: String,
+    pub email: String,
+    pub is_new_user: bool,
+    pub message: String,
+}

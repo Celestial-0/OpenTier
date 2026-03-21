@@ -14,7 +14,7 @@ pub async fn get_user_by_id(db: &PgPool, user_id: Uuid) -> Result<UserResponse, 
     let user = sqlx::query_as!(
         UserResponse,
         r#"
-        SELECT id, email, email_verified, name, username, avatar_url, 
+         SELECT id, email, email_verified, (password_hash IS NOT NULL) as "has_password!", name, username, avatar_url, 
                role as "role: _", created_at
         FROM users
         WHERE id = $1 AND deleted_at IS NULL
@@ -161,29 +161,43 @@ pub async fn change_password(
     current_session_token: &str,
     req: ChangePasswordRequest,
 ) -> Result<ChangePasswordResponse, UserError> {
+    let ChangePasswordRequest {
+        current_password,
+        new_password,
+    } = req;
+
     // Get current password hash
     let user = sqlx::query!("SELECT password_hash FROM users WHERE id = $1", user_id)
         .fetch_one(db)
         .await?;
 
-    let current_hash = user
-        .password_hash
-        .ok_or(UserError::InvalidCurrentPassword)?;
+    let had_local_password = user.password_hash.is_some();
 
-    // Verify current password
-    let is_valid = password::verify_password(&req.current_password, &current_hash)
-        .map_err(|_| UserError::InvalidCurrentPassword)?;
+    if let Some(current_hash) = user.password_hash {
+        // Existing local-password account: current password is required.
+        let current_password = current_password.ok_or(UserError::CurrentPasswordRequired)?;
 
-    if !is_valid {
-        return Err(UserError::InvalidCurrentPassword);
+        let is_valid = password::verify_password(&current_password, &current_hash)
+            .map_err(|_| UserError::InvalidCurrentPassword)?;
+
+        if !is_valid {
+            return Err(UserError::InvalidCurrentPassword);
+        }
+
+        // Prevent setting the same password again.
+        let is_reused = password::verify_password(&new_password, &current_hash)
+            .map_err(|_| UserError::Internal)?;
+
+        if is_reused {
+            return Err(UserError::PasswordReuse);
+        }
     }
 
     // Validate new password strength
-    password::validate_password_strength(&req.new_password)
-        .map_err(|_| UserError::InvalidCurrentPassword)?; // Map to user error
+    password::validate_password_strength(&new_password).map_err(|_| UserError::WeakPassword)?;
 
     // Hash new password
-    let new_hash = password::hash_password(&req.new_password).map_err(|_| UserError::Internal)?;
+    let new_hash = password::hash_password(&new_password).map_err(|_| UserError::Internal)?;
 
     // Update password
     sqlx::query!(
@@ -200,8 +214,11 @@ pub async fn change_password(
         .map_err(|_| UserError::Internal)?;
 
     Ok(ChangePasswordResponse {
-        message: "Password changed successfully. All other sessions have been logged out."
-            .to_string(),
+        message: if had_local_password {
+            "Password changed successfully. All other sessions have been logged out.".to_string()
+        } else {
+            "Password created successfully. All other sessions have been logged out.".to_string()
+        },
     })
 }
 

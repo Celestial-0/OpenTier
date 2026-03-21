@@ -1,5 +1,7 @@
 import { z } from "zod"
-import { GoogleIcon, AppleIcon, MicrosoftIcon, GitHubIcon, TwitterIcon } from "./icons"
+import type { ComponentType } from "react"
+import { GoogleIcon, MicrosoftIcon, GitHubIcon, TwitterIcon, DiscordIcon } from "./icons"
+import type { OAuthProvider } from "@/lib/api/auth-api"
 
 export const signInSchema = z.object({
     email: z.email("Invalid email address"),
@@ -35,13 +37,57 @@ export const signupSchema = z.object({
 
 export type AuthView = 'signin' | 'signup' | 'forgot-password' | 'verify'
 
-export const socialButtons = [
-    { icon: GoogleIcon, label: "Google", color: "hover:bg-accent hover:text-accent-foreground" },
-    { icon: AppleIcon, label: "Apple", color: "hover:bg-accent hover:text-accent-foreground" },
-    { icon: MicrosoftIcon, label: "Microsoft", color: "hover:bg-accent hover:text-accent-foreground" },
-    { icon: GitHubIcon, label: "Github", color: "hover:bg-accent hover:text-accent-foreground" },
-    { icon: TwitterIcon, label: "Twitter", color: "hover:bg-accent hover:text-accent-foreground" },
+interface SocialButton {
+    icon: ComponentType<{ className?: string }>;
+    label: string;
+    color: string;
+    provider?: OAuthProvider;
+}
+
+const allSocialButtons: Array<SocialButton> = [
+    {
+        icon: GoogleIcon,
+        label: "Google",
+        color: "hover:bg-accent hover:text-accent-foreground",
+        provider: "google",
+    },
+    // { icon: AppleIcon, label: "Apple", color: "hover:bg-accent hover:text-accent-foreground" },
+    {   
+        icon: MicrosoftIcon, 
+        label: "Microsoft", 
+        color: "hover:bg-accent hover:text-accent-foreground",
+        provider: "microsoft"
+    },
+    {
+        icon: GitHubIcon,
+        label: "Github",
+        color: "hover:bg-accent hover:text-accent-foreground",
+        provider: "github",
+    },
+    {
+        icon: DiscordIcon,
+        label: "Discord",
+        color: "hover:bg-accent hover:text-accent-foreground",
+        provider: "discord",
+    },
+    {
+        icon: TwitterIcon,
+        label: "X",
+        color: "hover:bg-accent hover:text-accent-foreground",
+        provider: "x",
+    },
 ]
+
+/**
+ * Get filtered social buttons based on enabled providers
+ */
+export function getSocialButtons(enabledProviders: OAuthProvider[]): Array<SocialButton> {
+    return allSocialButtons.filter(btn => 
+        !btn.provider || enabledProviders.includes(btn.provider)
+    )
+}
+
+export const socialButtons = allSocialButtons
 
 export const TEAM_SIZE_OPTIONS = ["1-5", "5-20", "20-50", "50+"]
 export const ROLE_OPTIONS = ["Developer", "Designer", "Product Manager", "Founder", "Other"]
