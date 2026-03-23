@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -22,26 +22,13 @@ import { toast } from "sonner";
 import { useQuery } from "@/hooks/use-query";
 import { getIntelligenceApiHealth, getRustApiHealth } from "@/lib/api/health-api";
 import {
-    DashboardStats,
     DashboardHealth,
-    DashboardUser,
-    DashboardResource,
-    CreateResourceForm,
-    DashboardResourceConfig
+    CreateResourceForm
 } from "@/types/dashboard";
 import { useAdmin } from "@/context/admin-context";
 import { useAdminStore } from "@/store/admin-store";
 import { IngestionQueue } from "./ingestion-queue";
 import { Queue } from "./queue";
-
-// Mock data matching /admin/* API responses
-const formatDate = (timestamp: number) => {
-    return new Date(timestamp * 1000).toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-    });
-};
 
 const getStatusColor = (status: string) => {
     switch (status) {
@@ -63,6 +50,7 @@ export const Admin = () => {
         stats,
         users,
         resources,
+        jobs,
         isLoadingStats,
         isLoadingUsers,
         isLoadingResources,
@@ -125,6 +113,35 @@ export const Admin = () => {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isAdmin]); // Only re-fetch when isAdmin changes
+
+    const previousJobStatusesRef = useRef<Record<string, string>>({});
+
+    useEffect(() => {
+        const previousStatuses = previousJobStatusesRef.current;
+
+        for (const job of jobs) {
+            const previousStatus = previousStatuses[job.resource_id];
+            const isTransitionFromActive = previousStatus === "queued" || previousStatus === "processing";
+
+            if (isTransitionFromActive && job.status === "completed") {
+                toast.success("Resource added successfully");
+            }
+
+            if (isTransitionFromActive && job.status === "failed") {
+                toast.error(job.error || "Resource ingestion failed");
+            }
+
+            if (isTransitionFromActive && job.status === "partial") {
+                toast.warning("Resource ingested partially. Some content could not be processed.");
+            }
+        }
+
+        const nextStatuses: Record<string, string> = {};
+        for (const job of jobs) {
+            nextStatuses[job.resource_id] = job.status;
+        }
+        previousJobStatusesRef.current = nextStatuses;
+    }, [jobs]);
 
     // Handle search
     const handleSearch = (query: string) => {
@@ -217,8 +234,6 @@ export const Admin = () => {
                 config: resourceForm.config,
                 is_global: resourceForm.is_global,
             });
-
-            toast.success("Resource added successfully");
 
             // Reset form and close dialog
             setResourceForm({
@@ -1008,7 +1023,7 @@ export const Admin = () => {
 
                 {/* Admin Footer */}
                 <Card className="border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950 mt-8">
-                    <CardContent className="pt-6">
+                    <CardContent className="pt-0">
                         <div className="flex gap-3">
                             <Shield className="h-5 w-5 text-blue-600 dark:text-blue-500 shrink-0 mt-0.5" />
                             <div className="space-y-1">
