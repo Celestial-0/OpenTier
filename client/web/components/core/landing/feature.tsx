@@ -6,36 +6,34 @@ import { QuickStart } from "@/components/core/landing/features/quick-start";
 import { BackgroundRippleEffect } from "@/components/ui/background-ripple-effect";
 
 export const Feature = () => {
-    return (
-        <section className="relative pt-32 pb-20 overflow-hidden" id="features">
-            {/* Top gradient overlay for smooth transition from hero */}
-            <div className="absolute top-0 left-0 right-0 h-32 bg-linear-to-b from-background to-transparent z-5 pointer-events-none" />
+  return (
+    <section className="relative pt-32 pb-20 overflow-hidden" id="features">
+      {/* Top gradient overlay for smooth transition from hero */}
+      <div className="absolute top-0 left-0 right-0 h-32 bg-linear-to-b from-background to-transparent z-5 pointer-events-none" />
 
-            {/* Background gradient */}
-            <BackgroundRippleEffect 
-                rows={10}
-            />
+      {/* Background gradient */}
+      <BackgroundRippleEffect rows={10} />
 
+      <div className="container mx-auto px-4 relative z-10">
+        {/* Header */}
+        <div className="text-center max-w-5xl mx-auto mb-16">
+          <h2 className="text-4xl md:text-6xl font-bold mb-4 bg-linear-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+            Scalable Intelligence
+          </h2>
+          <p className="text-lg text-muted-foreground max-w-4xl mx-auto">
+            OpenTier combines the performance of Rust with the intelligence of
+            Python,
+            <br />
+            creating a production-ready platform that scales with your needs.
+          </p>
+        </div>
 
-            <div className="container mx-auto px-4 relative z-10">
-                {/* Header */}
-                <div className="text-center max-w-5xl mx-auto mb-16">
-                    <h2 className="text-4xl md:text-6xl font-bold mb-4 bg-linear-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
-                        Scalable Intelligence
-                    </h2>
-                    <p className="text-lg text-muted-foreground max-w-4xl mx-auto">
-                        OpenTier combines the performance of Rust with the intelligence of Python,
-                        <br />
-                        creating a production-ready platform that scales with your needs.
-                    </p>
-                </div>
-
-                <ArchitectureDiagram />
-                <ArchitectureExplanation />
-                <FeatureGrid />
-                <FeatureTechStack />
-                <QuickStart />
-            </div>
-        </section>
-    );
+        <ArchitectureDiagram />
+        <ArchitectureExplanation />
+        <FeatureGrid />
+        <FeatureTechStack />
+        <QuickStart />
+      </div>
+    </section>
+  );
 };
