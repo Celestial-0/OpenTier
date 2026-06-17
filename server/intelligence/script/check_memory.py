@@ -3,10 +3,11 @@ import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load .env
-load_dotenv()
+# Load .env from server root (script/ -> intelligence/ -> server/)
+_server_env = Path(__file__).resolve().parent.parent.parent / ".env"
+load_dotenv(_server_env if _server_env.exists() else None)
 
-# Add project root to sys.path
+# Add intelligence root to sys.path
 project_root = Path(__file__).parent.parent.absolute()
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))

@@ -1,11 +1,19 @@
 """Configuration management for the intelligence engine."""
 
+from pathlib import Path
 from datetime import timezone, timedelta
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Indian Standard Time (UTC+5:30)
 IST = timezone(timedelta(hours=5, minutes=30), name="IST")
+
+# Resolve path to the root server .env (two levels up from this file:
+#   core/config.py -> core/ -> intelligence/ -> server/)
+_THIS_DIR = Path(__file__).resolve().parent        # intelligence/core/
+_SERVER_ENV = _THIS_DIR.parent.parent / ".env"     # server/.env
+_ENV_FILE = str(_SERVER_ENV) if _SERVER_ENV.exists() else ".env"
+
 
 
 class DatabaseConfig(BaseSettings):
@@ -154,7 +162,7 @@ class Config(BaseSettings):
         return v
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_ENV_FILE,
         env_file_encoding="utf-8",
         env_nested_delimiter="__",
         extra="ignore",

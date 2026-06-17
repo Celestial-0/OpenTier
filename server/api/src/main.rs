@@ -12,10 +12,20 @@ mod resource;
 mod user;
 
 use std::net::SocketAddr;
+use std::path::PathBuf;
 
 #[tokio::main]
 async fn main() {
-    dotenvy::dotenv().ok();
+    // Load .env from the server root (one level up from the api crate).
+    // Supports: cargo run from server/api/, or binary run from server/.
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let server_env = manifest_dir.parent().unwrap_or(&manifest_dir).join(".env");
+    if server_env.exists() {
+        dotenvy::from_path(&server_env).ok();
+    } else {
+        // Fallback: try CWD-relative paths (Docker / production)
+        dotenvy::dotenv().ok();
+    }
 
     // ---- Configuration ----
     let config = config::env::Config::from_env()

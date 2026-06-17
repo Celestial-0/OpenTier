@@ -1,10 +1,12 @@
 import asyncio
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables
-root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-load_dotenv(os.path.join(root_dir, ".env"))
+# Load .env from server root (test/ -> intelligence/ -> server/)
+_server_env = Path(__file__).resolve().parent.parent.parent / ".env"
+load_dotenv(_server_env if _server_env.exists() else None)
+
 
 from core.lifecycle import startup, shutdown
 

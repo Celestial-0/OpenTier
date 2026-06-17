@@ -236,7 +236,7 @@ pub async fn handle_callback(
     .fetch_optional(db)
     .await?;
 
-    let (user_id, is_new_user) = if let Some(account) = existing_account {
+    let (user_id, is_new_user): (uuid::Uuid, bool) = if let Some(account) = existing_account {
         // Existing OAuth account - ensure account is active before sign-in
         let linked_user = sqlx::query!(
             r#"

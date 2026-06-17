@@ -3,10 +3,18 @@ import asyncio
 import logging
 import signal
 import grpc
+from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables first
-load_dotenv()
+# Load .env from the server root (one level up from the intelligence directory).
+# Supports: running locally from server/intelligence/, or from server/ root.
+_here = Path(__file__).resolve().parent          # server/intelligence/
+_server_env = _here.parent / ".env"              # server/.env
+if _server_env.exists():
+    load_dotenv(_server_env)
+else:
+    load_dotenv()  # fallback: CWD or Docker-injected env
+
 
 from interfaces.health import HealthService
 from interfaces.chat import ChatService

@@ -2,14 +2,16 @@ import asyncio
 import sys
 import uuid
 import time
+from pathlib import Path
 
 # Ensure we can import from the intelligence directory
 sys.path.append(".")
 
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Load .env from server root (script/ -> intelligence/ -> server/)
+_server_env = Path(__file__).resolve().parent.parent.parent / ".env"
+load_dotenv(_server_env if _server_env.exists() else None)
 
 from core.lifecycle import startup, shutdown
 from engine import IntelligenceEngine
