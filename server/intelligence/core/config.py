@@ -186,9 +186,13 @@ def validate_config() -> None:
     config = get_config()
 
     # Check database URL format
-    if not config.database.url.startswith(("postgresql://", "postgresql+asyncpg://")):
+    if not (
+        config.database.url.startswith("postgresql://")
+        or config.database.url.startswith("postgresql+asyncpg://")
+        or config.database.url.startswith("postgres://")
+    ):
         raise ValueError(
-            "Database URL must start with postgresql:// or postgresql+asyncpg://"
+            "Database URL must start with postgresql://, postgres:// or postgresql+asyncpg://"
         )
 
     # Warn if using default password in production

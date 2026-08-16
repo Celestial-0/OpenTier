@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT \n            id, email as \"email!\", name as \"full_name?\", role::text as \"role!\", email_verified as \"is_verified!\", created_at as \"created_at!\", updated_at as \"updated_at!\", is_disabled as \"is_disabled!\", message_limit as \"message_limit!\", messages_used as \"messages_used!\"\n        FROM users\n        WHERE id = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "email!",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "full_name?",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "role!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "is_verified!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "updated_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "is_disabled!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 8,
+        "name": "message_limit!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 9,
+        "name": "messages_used!",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      null,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "bfffe65d82b3f9950a447cd93297db4221c67a7f4692797a30b7d508a126ba23"
+}

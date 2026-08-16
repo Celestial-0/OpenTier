@@ -1,0 +1,47 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE users\n        SET message_limit = $2, updated_at = NOW()\n        WHERE id = $1\n        RETURNING id, email as \"email!\", is_disabled, message_limit, messages_used\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "email!",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "is_disabled",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 3,
+        "name": "message_limit",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "messages_used",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "b11fd820bac5f0ba78b914a847625a0d26a92acd8268dda966347c826fbde421"
+}

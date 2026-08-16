@@ -25,7 +25,7 @@ async def test_health_check(health_client):
 
     assert response.status == "healthy"
     assert response.version != ""
-    assert response.version == "0.1.0"
+    assert "1.0.0" in response.version
     assert response.uptime_seconds >= 0
 
 
@@ -103,7 +103,7 @@ async def test_health_check_multiple_calls(health_client):
     # All should succeed
     assert len(responses) == 10
     assert all(r.status == "healthy" for r in responses)
-    assert all(r.version == "0.1.0" for r in responses)
+    assert all("1.0.0" in r.version for r in responses)
 
 
 @pytest.mark.asyncio

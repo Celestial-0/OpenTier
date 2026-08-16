@@ -1,27 +1,67 @@
 # syntax=docker/dockerfile:1
-FROM rust:slim-bookworm
 
-# Install system dependencies required for building
-RUN apt-get update && apt-get install -y \
+# ── Stage 1: Builder ──────────────────────────────────────────────────
+FROM rust:slim-bookworm AS builder
+
+# Install build dependencies required for compiling protobuf and SSL
+RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     libssl-dev \
     protobuf-compiler \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /usr/src/app
+WORKDIR /workspace
 
-# install sqlx-cli
-RUN cargo install sqlx-cli --no-default-features --features postgres
+# Copy proto definitions, database migrations (for compile-time embedding), and api source
+COPY proto/ ./proto/
+COPY db/ ./db/
+COPY api/ ./api/
 
-# Copy the source code for api
-COPY . .
-# Copy proto from the additional context
-COPY --from=proto . ../proto/
-# Copy migrations from db
-COPY --from=db ./migrations ../db/migrations/
+WORKDIR /workspace/api
 
-# Expose the port the app runs on
+# Enable offline mode for SQLx compile-time query verification using .sqlx cache
+ENV SQLX_OFFLINE=true
+
+# Build release binary (migrations are embedded via sqlx::migrate!) and strip debug symbols
+RUN cargo build --release --bin api && \
+    strip target/release/api
+
+# ── Stage 2: Production Runner ────────────────────────────────────────
+FROM debian:bookworm-slim AS runner
+
+# Install runtime dependencies: SSL root certificates, OpenSSL library, and curl for healthcheck
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    libssl3 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create dedicated unprivileged user and group (UID 10001)
+RUN groupadd -g 10001 opentier && \
+    useradd -u 10001 -g opentier -s /bin/bash -m opentier
+
+WORKDIR /app
+
+# Copy compiled binary and public assets
+COPY --from=builder /workspace/api/target/release/api /app/api
+COPY --from=builder /workspace/api/public /app/public
+
+# Set ownership to unprivileged user
+RUN chown -R opentier:opentier /app
+
+# Run as non-root user
+USER opentier:opentier
+
+# Default internal port
 EXPOSE 4000
 
-# Migrate the database, prepare the sql migrations using sqlx, and run
-CMD ["sh", "-c", "sqlx migrate run --source ../db/migrations --database-url $DATABASE_URL && cargo sqlx prepare --database-url $DATABASE_URL && cargo run --release"]
+ENV SERVER_HOST=0.0.0.0 \
+    SERVER_PORT=4000 \
+    RUST_LOG=api=info,tower_http=info
+
+# Healthcheck checking API health endpoint
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:4000/health/api || exit 1
+
+CMD ["/app/api"]

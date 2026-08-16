@@ -1,0 +1,102 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            ks.id,\n            ks.contributor_id,\n            u.email as contributor_email,\n            u.name as contributor_name,\n            ks.title,\n            ks.content,\n            ks.resource_type,\n            ks.metadata,\n            ks.status,\n            ks.admin_feedback,\n            ks.reviewed_by,\n            ks.reviewed_at,\n            ks.created_at,\n            ks.updated_at\n        FROM knowledge_submissions ks\n        JOIN users u ON u.id = ks.contributor_id\n        WHERE ks.status = $1\n        ORDER BY ks.created_at DESC\n        LIMIT $2 OFFSET $3\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "contributor_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "contributor_email",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "contributor_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "title",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "content",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "resource_type",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "metadata",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 8,
+        "name": "status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "admin_feedback",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "reviewed_by",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 11,
+        "name": "reviewed_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 12,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 13,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "30126885239c8f9957d14670c6ae7c62fef8c15cbe6697146d53fdb9374253ca"
+}

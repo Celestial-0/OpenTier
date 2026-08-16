@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO ip_usage (ip_address, messages_used, first_seen, last_seen)\n        VALUES ($1, 0, NOW(), NOW())\n        ON CONFLICT (ip_address) DO UPDATE\n            SET last_seen = NOW()\n        RETURNING messages_used\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "messages_used",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Varchar"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d4d67810c063a6f72b85b45de56729675e86c4c3649bf33f1dd118e66fc559fc"
+}

@@ -1,6 +1,6 @@
 [package]
 name = "api"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 
 [dependencies]
@@ -34,7 +34,8 @@ sqlx = { version = "0.8.3", features = [
   "uuid",
   "chrono",
   "macros",
-  "ipnetwork"
+  "ipnetwork",
+  "migrate"
 ] }
 
 dotenvy = "0.15.7"

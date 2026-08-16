@@ -1,0 +1,16 @@
+# Docker Compose override file for local development / building from source.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+
+services:
+  intelligence:
+    build:
+      context: ./intelligence
+      dockerfile: Dockerfile
+      args:
+        BASE_IMAGE: ${INTELLIGENCE_BASE_IMAGE:-debian:bookworm-slim}
+        UV_EXTRA_ARGS: ${INTELLIGENCE_UV_ARGS:---extra cpu}
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile

@@ -38,5 +38,3 @@ Thumbs.db
 .env.*
 !.env.example
 /migrations/_old_backup/*
-
-.sqlx

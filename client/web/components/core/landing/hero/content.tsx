@@ -76,7 +76,7 @@ export const HeroContent = () => {
                         New
                     </Badge>
                     <AnimatedShinyText shimmerWidth={200}>
-                        OpenTier v0.1.0-beta is now available
+                        OpenTier v1.0.0 is now available
                     </AnimatedShinyText>
                     <ChevronRight className="h-3 w-3 sm:h-4 sm:w-4" />
                     <BorderBeam />

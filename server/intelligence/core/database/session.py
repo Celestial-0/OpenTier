@@ -29,9 +29,11 @@ def get_engine() -> AsyncEngine:
     if _engine is None:
         config = get_config()
 
-        # Convert postgresql:// to postgresql+asyncpg://
+        # Convert postgresql:// or postgres:// to postgresql+asyncpg://
         url = config.database.url
-        if url.startswith("postgresql://"):
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+        elif url.startswith("postgresql://") and not url.startswith("postgresql+asyncpg://"):
             url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
         # Choose pool class based on environment
@@ -88,6 +90,8 @@ async def init_db() -> None:
     try:
         engine = get_engine()
         async with engine.begin() as conn:
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";"))
             await conn.run_sync(Base.metadata.create_all)
         logger.info("Database schema initialized successfully")
     except Exception as e:

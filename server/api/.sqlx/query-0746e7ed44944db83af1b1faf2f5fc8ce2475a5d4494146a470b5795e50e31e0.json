@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            trim(to_char(date_trunc('month', created_at), 'Month')) as \"label!\",\n            count(*) as \"value!\"\n        FROM users\n        WHERE created_at > NOW() - INTERVAL '6 months'\n        GROUP BY 1, date_trunc('month', created_at)\n        ORDER BY date_trunc('month', created_at)\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "label!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "value!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "0746e7ed44944db83af1b1faf2f5fc8ce2475a5d4494146a470b5795e50e31e0"
+}

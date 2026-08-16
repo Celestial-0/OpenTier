@@ -1,30 +1,36 @@
-# Rust
-target/
-**/*.rs.bk
-
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-env/
-venv/
-.env
-.venv/
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Environment
-.env
-.env.local
-.env.*.local
-
-# Git
-.git
+# Version control
+.git/
 .gitignore
 
-# Docker
-docker-compose.yml
-Dockerfile
-.dockerignore
+# Rust build artifacts
+target/
+api/target/
+**/target/
+**/*.rs.bk
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+intelligence/.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Node / Turborepo
+node_modules/
+.next/
+.turbo/
+
+# Environment & Secrets (preserve examples)
+.env
+.env.*
+!.env.example
+api/.env
+intelligence/.env
+
+# OS / Temporary
+.DS_Store
+Thumbs.db
+*.log
+*.tmp

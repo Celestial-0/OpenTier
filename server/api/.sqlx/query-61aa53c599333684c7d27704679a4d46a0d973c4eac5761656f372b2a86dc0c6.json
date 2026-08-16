@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            to_char(date_trunc('day', created_at), 'Dy') as \"label!\",\n            count(*) as \"value!\"\n        FROM chat_messages\n        WHERE created_at > NOW() - INTERVAL '7 days'\n        GROUP BY 1, date_trunc('day', created_at)\n        ORDER BY date_trunc('day', created_at)\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "label!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "value!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "61aa53c599333684c7d27704679a4d46a0d973c4eac5761656f372b2a86dc0c6"
+}

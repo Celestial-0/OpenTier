@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT messages_used, message_limit FROM users WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "messages_used",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "message_limit",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "5d3fd6f12d7599b6f4150e4d12917c32d07bb048700de8578aaef2675efae8b5"
+}

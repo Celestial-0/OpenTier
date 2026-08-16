@@ -21,7 +21,7 @@ pub fn routes() -> Router<AppState> {
 pub async fn api_health(State(state): State<AppState>) -> Json<HealthResponse> {
     Json(HealthResponse {
         status: "healthy".to_string(),
-        version: "v0.1.0".to_string(),
+        version: "v1.0.0".to_string(),
         uptime_seconds: state.start_time.elapsed().as_secs(),
     })
 }
