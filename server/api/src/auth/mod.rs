@@ -1,4 +1,3 @@
-pub mod authorization;
 pub mod background;
 pub mod errors;
 pub mod handlers;
@@ -7,6 +6,7 @@ pub mod password;
 pub mod role;
 pub mod service;
 pub mod session;
+pub mod session_cache;
 pub mod tokens;
 pub mod types;
 

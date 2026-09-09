@@ -2,196 +2,154 @@
 
 ## Protocol Layers
 
-
 <Mermaid chart={`
 graph TD
-    Browser["Browser"]
-    NextJS["Next.js — Bun/Node"]
-    Rust["Rust API (Axum)"]
-    Python["Python Intelligence (grpcio)"]
-    DB["PostgreSQL"]
-    LLM["LLM Provider"]
+    Browser["Browser (Next.js 16)"]
+    NextJS["Next.js SSR Proxy"]
+    Rust["Rust API Gateway (Axum 0.8)"]
+    Python["Python Intelligence (gRPC server)"]
+    Worker["Background Workers (worker.py)"]
+    Redis["Redis 8 Streams (Event Bus)"]
+    Qdrant["Qdrant Vector DB (HTTP/gRPC)"]
+    DB["PostgreSQL 18 (ACID Store)"]
+    LLM["LLM Providers (Gemini / OpenAI / Ollama)"]
 
-    Browser -- HTTPS REST + SSE --> NextJS
-    NextJS -- HTTP REST + SSE --> Rust
-    Rust -- HTTP/2 gRPC Protobuf --> Python
-    Rust -- TCP sqlx --> DB
-    Python -- TCP asyncpg --> DB
-    Python -- HTTPS REST --> LLM
+    Browser -- "HTTPS REST + SSE" --> NextJS
+    NextJS -- "HTTP REST + SSE" --> Rust
+    Rust -- "HTTP/2 gRPC Protobuf" --> Python
+    Rust -- "TCP sqlx" --> DB
+    Python -- "asyncpg / SQLAlchemy" --> DB
+    Python -- "qdrant-client" --> Qdrant
+    Python -- "HTTPS REST" --> LLM
+    Python -- "Redis Streams XADD" --> Redis
+    Redis -- "Consumer Groups XREADGROUP" --> Worker
+    Worker -- "upsert chunks" --> Qdrant
+    Worker -- "ledger writes / memory" --> DB
 `} />
 
+---
 
-## REST API (Browser ↔ Rust)
+## REST API (Browser ↔ Rust Gateway)
 
-All REST communication uses JSON. The Next.js proxy adds no transformation — it is a transparent passthrough to the Rust backend.
-
-**Request format**:
+All REST communication uses standard JSON with bearer session authentication:
 - `Content-Type: application/json`
-- `Authorization: Bearer <64-char session token>`
+- `Authorization: Bearer <64-character session token>`
 
-**Response format**: JSON body with appropriate HTTP status codes. Errors follow:
+Standardized error envelopes:
 ```json
-{ "message": "Human-readable error description" }
+{
+  "message": "Human-readable error description",
+  "code": "ERROR_CODE_OPTIONAL"
+}
 ```
 
-**Streaming endpoint** (`POST /chat/conversations/{id}/stream`):
-- Response `Content-Type: text/event-stream`
-- Each SSE event: `data: <JSON ChatStreamChunk>\n\n`
-- Terminal event: `data: {"is_final":true,...}\n\n`
+### Server-Sent Events (SSE) Chat Streaming
+- Endpoint: `POST /chat/conversations/{id}/stream`
+- Response header: `Content-Type: text/event-stream`
+- Keep-alive heartbeat: Axum sends comment ping `:` every 15 seconds to prevent intermediate proxy timeout.
+- Token delta format:
+  ```
+  data: {"conversation_id":"...","message_id":"...","token":{"delta":"Hello "},"is_final":false}
+  ```
+- Terminal event includes sources citation array and token usage metrics:
+  ```
+  data: {"conversation_id":"...","message_id":"...","sources":{...},"metrics":{...},"is_final":true}
+  ```
+
+---
 
 ## gRPC Contract (Rust ↔ Python)
 
-**Package**: `opentier.intelligence.v1`  
-**Transport**: HTTP/2 clear-text (development); TLS-capable via tonic feature flags  
-**Message size limit**: 100 MB (both directions)  
-**Keepalive**: 60 seconds
-
-### Core Message Types
+- **Package**: `opentier.intelligence.v1`
+- **Transport**: HTTP/2 with Protobuf v3
+- **Message Limit**: 100 MB max payload size
+- **Keepalive**: 60 seconds ping intervals
 
 ```protobuf
-// Chat flow
-message ChatRequest {
-    string user_id = 1;
-    string conversation_id = 2;
-    string message = 3;
-    optional ChatConfig config = 4;
-    map<string, string> metadata = 5;
+// Core chat service
+service Chat {
+    rpc SendMessage(ChatRequest) returns (ChatResponse);
+    rpc StreamChat(ChatRequest) returns (stream ChatStreamChunk);
+    rpc GetConversation(GetConversationRequest) returns (ConversationResponse);
+    rpc DeleteConversation(DeleteConversationRequest) returns (DeleteConversationResponse);
+    rpc GenerateTitle(GenerateTitleRequest) returns (GenerateTitleResponse);
 }
 
-message ChatConfig {
-    optional float temperature = 1;
-    optional int32 max_tokens = 2;
-    optional bool use_rag = 3;
-    optional string model = 4;
-    optional int32 context_limit = 5;
-}
-
-message ChatResponse {
-    string conversation_id = 1;
-    string message_id = 2;
-    string response = 3;
-    repeated ContextChunk sources = 4;
-    optional ChatMetrics metrics = 5;
-    string created_at = 6;  // ISO 8601
-}
-
-message ChatStreamChunk {
-    string conversation_id = 1;
-    string message_id = 2;
-    oneof chunk_type {
-        TokenChunk token = 3;
-        SourcesChunk sources = 4;
-        MetricsChunk metrics = 5;
-        ErrorChunk error = 6;
-    }
-    bool is_final = 7;
-}
-
-// Resource ingestion
-message AddResourceRequest {
-    string user_id = 1;
-    string resource_id = 2;
-    oneof content {
-        string text = 3;
-        string url = 4;
-        bytes file_content = 5;
-    }
-    ResourceType type = 6;
-    optional string title = 7;
-    map<string, string> metadata = 8;
-    optional IngestionConfig config = 9;
-    bool is_global = 10;
+// Asynchronous resource ingestion
+service ResourceService {
+    rpc AddResource(AddResourceRequest) returns (AddResourceResponse);
+    rpc ChunkedUpload(stream FileChunk) returns (ChunkedUploadResponse);
+    rpc GetResourceStatus(GetResourceStatusRequest) returns (ResourceStatusResponse);
+    rpc ListResources(ListResourcesRequest) returns (ListResourcesResponse);
+    rpc DeleteResource(DeleteResourceRequest) returns (DeleteResourceResponse);
 }
 ```
 
-## Sync vs Async Communication
+---
 
+## Redis Streams Event Envelope (`core.events.EventEnvelope`)
+
+Decoupled inter-service and background communication uses typed envelopes:
+
+```python
+@dataclass(frozen=True)
+class EventEnvelope:
+    event_id: str              # Unique event UUID
+    event_type: str            # e.g., 'ingestion.job.enqueued.v1', 'chat.completed.v1'
+    correlation_id: str        # Distributed trace correlation ID
+    timestamp: str             # ISO 8601 UTC timestamp
+    payload: dict[str, Any]    # JSON-serializable event payload
+```
+
+### Active Streams
+
+| Stream Name | Producers | Consumers / Groups | Purpose |
+|---|---|---|---|
+| `opentier:intel:ingestion_jobs` | `ResourceService` | `workers` | Web scraping, chunking, and Qdrant upserts. |
+| `opentier:intel:chat_events` | `ChatService` | `metering` | Deducts tokens from user credit balances. |
+| `opentier:intel:chat_events` | `ChatService` | `memory` | Asynchronously extracts user facts and updates `user_memories`. |
+| `opentier:ops:heartbeat` | `WorkerRuntime` | `workers` | Heartbeat roundtrips and consumer liveness tracking. |
+
+---
+
+## Sync vs Async Communication Workflows
 
 <Mermaid chart={`
 sequenceDiagram
     participant Browser
-    participant Rust
-    participant Python
+    participant Rust as Rust Gateway
+    participant Python as Python Intelligence
+    participant Redis as Redis 8 Streams
+    participant Worker as Background Worker
 
-    Note over Browser,Rust: Synchronous REST (blocks until response)
+    Note over Browser,Rust: 1. Synchronous REST
     Browser->>Rust: GET /user/me
-    Rust->>Rust: DB query (synchronous within async task)
-    Rust-->>Browser: 200 UserResponse
+    Rust-->>Browser: 200 UserProfile
 
-    Note over Browser,Python: Async streaming (non-blocking, token-by-token)
-    Browser->>Rust: POST /chat/stream (SSE)
-    Rust->>Python: gRPC StreamChat (server-streaming)
-    loop Token arrives
-        Python-->>Rust: ChatStreamChunk
-        Rust-->>Browser: SSE data event
+    Note over Browser,Python: 2. Async Streaming (SSE + gRPC stream)
+    Browser->>Rust: POST /chat/.../stream
+    Rust->>Python: StreamChat(ChatRequest)
+    loop Tokens
+        Python-->>Rust: ChatStreamChunk (token)
+        Rust-->>Browser: SSE data: token
     end
-    Python-->>Rust: is_final=true
+    Python-->>Rust: ChatStreamChunk (is_final=true)
     Rust-->>Browser: SSE close
 
-    Note over Rust,Python: Async resource ingestion (fire-and-track)
-    Rust->>Python: gRPC AddResource
-    Python-->>Rust: job_id + status queued
-    Note over Python: Background processing continues
-    Rust->>Python: gRPC GetResourceStatus polling
-    Python-->>Rust: status processing, progress 45pct
+    Note over Python,Worker: 3. Async Background Event Pipeline
+    Python->>Redis: XADD chat_events (chat.completed.v1)
+    par Metering
+        Worker->>Redis: read group=metering
+        Worker->>Worker: Calculate token cost & deduct credits
+    and Memory
+        Worker->>Redis: read group=memory
+        Worker->>Worker: LLM memory extraction & update user_memories
+    end
 `} />
 
+---
 
-## Error Propagation Chain
+## Error Propagation & Dead-Letter Queues (DLQ)
 
-
-<Mermaid chart={`
-flowchart LR
-    PythonException["Python Exception\ne.g. ModelUnavailableError"]
-    GrpcStatus["gRPC Status Code\nUNAVAILABLE"]
-    RustMapping["Rust Error Mapping\n503 Service Unavailable"]
-    ClientError["Client: HTTP 503\nthrows Error('service unavailable')"]
-    ZustandError["Zustand store set error state"]
-    UINotification["UI: Sonner toast\nerror notification"]
-
-    PythonException --> GrpcStatus --> RustMapping --> ClientError --> ZustandError --> UINotification
-`} />
-
-
-**Error transparency**: Python exception details are **not** propagated to the browser. The gRPC status code is mapped to an HTTP status, and the Rust layer generates a generic error message. This prevents internal stack traces from leaking to clients.
-
-## Proto Versioning Policy
-
-| Rule | Detail |
-|------|--------|
-| Breaking changes | Require new package version: `v1` → `v2` |
-| Migration window | 6 months both versions supported simultaneously |
-| Reserved fields | 1000–1999 (internal), 2000–2999 (extensions) |
-| Wire compatibility | Fields added with `optional` or `repeated` are backward compatible |
-| Removal | Fields must be `reserved` for 1+ version before removal |
-
-New fields should always be `optional` to maintain forward compatibility with older Rust clients that don't yet know how to populate them.
-
-## SSE Bridging Pattern
-
-The Rust `stream_chat` handler converts a gRPC server-streaming RPC into an HTTP SSE stream:
-
-```rust
-// Simplified
-async fn stream_chat(State(state): State<AppState>, ...) -> Sse<impl Stream<Item=Result<Event>>> {
-    let mut grpc_stream = state.intelligence_client
-        .stream_chat(grpc_request)
-        .await?;
-
-    let sse_stream = async_stream::stream! {
-        while let Some(chunk) = grpc_stream.message().await.transpose() {
-            match chunk {
-                Ok(c) => yield Ok(Event::default().data(serde_json::to_string(&c).unwrap())),
-                Err(e) => {
-                    yield Ok(Event::default().event("error").data(e.to_string()));
-                    break;
-                }
-            }
-        }
-    };
-
-    Sse::new(sse_stream).keep_alive(KeepAlive::default())
-}
-```
-
-**Keepalive**: Axum's SSE `KeepAlive::default()` sends empty `:` comment lines every 15 seconds to prevent proxy timeouts during long-running LLM generation.
+- **gRPC Error Mapping**: Python exceptions are mapped in `shared/grpc/errors.py` to canonical gRPC status codes (`NOT_FOUND`, `RESOURCE_EXHAUSTED`, `DEADLINE_EXCEEDED`, `UNAVAILABLE`) and then translated by Axum into standard HTTP status codes (404, 429, 504, 503).
+- **Worker DLQ Routing**: If a background consumer fails to process an event after `max_retries = 3` attempts, it automatically diverts the envelope to `{stream}:dlq` and acknowledges the original message, preventing poison-pill blocking of the consumer group.

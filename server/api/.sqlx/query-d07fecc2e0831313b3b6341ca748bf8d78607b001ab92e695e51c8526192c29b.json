@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE knowledge_submissions\n        SET status = 'rejected', reviewed_by = $1, reviewed_at = NOW(), admin_feedback = $2, updated_at = NOW()\n        WHERE id = $3\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d07fecc2e0831313b3b6341ca748bf8d78607b001ab92e695e51c8526192c29b"
+}

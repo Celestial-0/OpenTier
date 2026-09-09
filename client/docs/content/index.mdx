@@ -13,9 +13,11 @@ This boundary is not a convention — it is enforced at the process level. No Py
 | Frontend | Next.js 16 (App Router), React 19, Zustand, Zod | V8 (Bun/Node) |
 | API Gateway | Rust / Axum 0.8, Tokio 1.49, SQLx 0.8 | Native |
 | Intelligence Engine | Python 3.14, gRPC / grpcio, SQLAlchemy 2.0 | CPython |
-| Vector Database | PostgreSQL + pgvector extension | Postgres |
-| Embeddings | `sentence-transformers/all-MiniLM-L6-v2` (384 dims) | CPU/CUDA |
-| LLM | OpenAI-compatible (default: `gpt-4o`) / Google GenAI | Remote API |
+| Vector Database | Qdrant (dense 3072d cosine + sparse BM25) | Docker |
+| Relational DB | PostgreSQL 18 (ACID system of record) | Docker |
+| Embeddings | `text-embedding-3-large` (3072 dims) | Remote API |
+| LLM | Google Gemini, OpenAI-compatible, Ollama | Remote / Local |
+| Event Bus | Redis 8 Streams (consumer groups, DLQ) | Docker |
 | IPC | gRPC over HTTP/2, Protobuf v3 | OS network |
 | Auth | Session tokens (64-char random), OAuth2 (Google, GitHub) | — |
 | Streaming | SSE (browser ↔ Rust), gRPC server-streaming (Rust ↔ Python) | — |
@@ -29,32 +31,32 @@ flowchart TB
     Browser(["Browser\nNext.js App Router"])
     NextProxy["Next.js\n/api/* proxy"]
     Auth["Auth Middleware\nsession lookup"]
-    Router["Request Router\nREST + SSE"]
-    Chat["ChatService\nRAG + streaming"]
-    Ingest["DocumentProcessor\ningestion pipeline"]
-    Embed["EmbeddingModel\nall-MiniLM-L6-v2 · 384d"]
-    PgMain[("PostgreSQL\nidentity · sessions · chat")]
-    PgVec[("PostgreSQL + pgvector\ndocuments · embeddings")]
-    LLM["LLM Provider\nOpenAI · Google GenAI"]
-    Scraper["Web Scraper\nPlaywright · httpx"]
+    Router["Rust Gateway\nREST + SSE + rate limits"]
+    Intel["Python Intelligence\ngRPC server :50051"]
+    Worker["Background Workers\ningestion · metering · memory"]
+    Redis[("Redis 8 Streams\nevent bus · DLQ")]
+    Qdrant[("Qdrant Vector DB\ndense 3072d + sparse BM25")]
+    PgMain[("PostgreSQL 18\nidentity · sessions · chat · metadata")]
+    LLM["LLM Provider\nGemini · OpenAI · Ollama"]
 
     Browser -->|"HTTPS + SSE"| NextProxy
     NextProxy -->|"HTTP + SSE"| Auth
     Auth --> Router
     Router -->|"sqlx"| PgMain
-    Router -->|"gRPC tonic"| Chat
-    Router -->|"gRPC tonic"| Ingest
-    Chat --> Embed
-    Ingest --> Embed
-    Embed -->|"asyncpg"| PgVec
-    Chat -->|"OpenAI API"| LLM
-    Ingest -->|"scrape"| Scraper
+    Router -->|"gRPC tonic"| Intel
+    Intel -->|"qdrant-client"| Qdrant
+    Intel -->|"asyncpg"| PgMain
+    Intel -->|"Google GenAI / OpenAI"| LLM
+    Router -->|"publish job"| Redis
+    Redis -->|"consume"| Worker
+    Worker -->|"upsert chunks"| Qdrant
+    Worker -->|"write metadata"| PgMain
 `} />
 
 
 ## Guiding Design Decisions
 
-1. **Single shared PostgreSQL instance** — the `conversations` table is written by Rust and read by Python. The `chat_messages` table is written exclusively by Python; Rust reads it via `get_conversation`. All schema migrations are centralized in `server/db/migrations/` and applied automatically by the `api` container during Docker Compose startup via `sqlx migrate run`, ensuring both services always operate against a consistent schema without requiring a separate migration orchestration service.
+1. **Single shared PostgreSQL instance** — the `conversations` table is written by Rust and read by Python. The `chat_messages` table is written exclusively by Python; Rust reads it via `get_conversation`. All schema migrations are centralized in `server/api/migrations/` and applied automatically by the `api` container during Docker Compose startup via `sqlx migrate run`, ensuring both services always operate against a consistent schema without requiring a separate migration orchestration service.
 
 2. **No token service** — auth uses opaque session tokens stored in PostgreSQL. There is no JWT or token signing infrastructure. This simplifies revocation (DELETE row) at the cost of a DB lookup on every authenticated request.
 

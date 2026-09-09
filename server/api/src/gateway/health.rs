@@ -5,15 +5,27 @@ use tracing::error;
 
 use crate::gateway::AppState;
 
-#[derive(Serialize)]
+#[derive(Serialize, utoipa::ToSchema)]
 pub struct HealthResponse {
     status: String,
     version: String,
     uptime_seconds: u64,
 }
 
+/// Documented variant of `api_health` for OpenAPI path registration.
+#[utoipa::path(get, path = "/health/api", responses((status = 200, body = HealthResponse)))]
+#[allow(dead_code)]
+pub async fn api_health_docs() -> Json<HealthResponse> {
+    Json(HealthResponse {
+        status: "healthy".into(),
+        version: env!("CARGO_PKG_VERSION").into(),
+        uptime_seconds: 0,
+    })
+}
+
 pub fn routes() -> Router<AppState> {
     Router::new()
+        .route("/", get(api_health))
         .route("/api", get(api_health))
         .route("/intelligence", get(intelligence_health))
 }
@@ -21,7 +33,7 @@ pub fn routes() -> Router<AppState> {
 pub async fn api_health(State(state): State<AppState>) -> Json<HealthResponse> {
     Json(HealthResponse {
         status: "healthy".to_string(),
-        version: "v1.0.0".to_string(),
+        version: format!("v{}", env!("CARGO_PKG_VERSION")),
         uptime_seconds: state.start_time.elapsed().as_secs(),
     })
 }

@@ -165,26 +165,26 @@ export const SourceChunkSchema = z.object({
     document_id: z.string(),
     content: z.string(),
     relevance_score: z.number(),
-    document_title: z.string().optional(),
-    source_url: z.string().optional(),
+    document_title: z.string().nullable().optional(),
+    source_url: z.string().nullable().optional(),
 });
 
 export const ChatMessageSchema = z.object({
-    id: z.uuid(),
+    id: z.string(),
     role: MessageRoleSchema,
     content: z.string(),
     sources: z.array(SourceChunkSchema).optional().default([]),
-    created_at: z.number(),
+    created_at: z.union([z.string(), z.number()]),
     parent_id: z.string().optional(),
 });
 
 export const ConversationSummarySchema = z.object({
-    id: z.uuid(),
+    id: z.string(),
     title: z.string().nullable().optional(),
     message_count: z.number(),
     last_message_preview: z.string().nullable().optional(),
-    created_at: z.number(),
-    updated_at: z.number(),
+    created_at: z.union([z.string(), z.number()]),
+    updated_at: z.union([z.string(), z.number()]),
 });
 
 export const ConversationListResponseSchema = z.object({
@@ -217,21 +217,21 @@ export const ChatMetricsSchema = z.object({
 });
 
 export const MessageResponseSchema = z.object({
-    message_id: z.uuid(),
-    conversation_id: z.uuid(),
+    message_id: z.string(),
+    conversation_id: z.string(),
     role: MessageRoleSchema,
     content: z.string(),
     sources: z.array(SourceChunkSchema),
     metrics: ChatMetricsSchema.optional(),
-    created_at: z.number(),
+    created_at: z.union([z.string(), z.number()]),
 });
 
 export const ConversationWithMessagesSchema = z.object({
-    id: z.uuid(),
+    id: z.string(),
     title: z.string().nullable().optional(),
     messages: z.array(ChatMessageSchema),
-    created_at: z.number(),
-    updated_at: z.number(),
+    created_at: z.union([z.string(), z.number()]),
+    updated_at: z.union([z.string(), z.number()]),
 });
 
 // ADMIN SCHEMAS
@@ -260,6 +260,8 @@ export const UserAdminViewSchema = z.object({
     is_disabled: z.boolean().optional(),
     message_limit: z.number().optional(),
     messages_used: z.number().optional(),
+    credit_balance: z.number().optional(),
+    credit_held: z.number().optional(),
 });
 
 export const UserListResponseSchema = z.object({
@@ -363,4 +365,103 @@ export const ReviewResponseSchema = z.object({
     resource_id: z.string().nullable().optional(),
     job_id: z.string().nullable().optional(),
 });
+
+// MODELS & PROVIDERS SCHEMAS
+export const ChatModelResponseSchema = z.object({
+    id: z.string(),
+    slug: z.string(),
+    display_name: z.string(),
+    provider_slug: z.string(),
+    provider_display_name: z.string(),
+    context_window: z.number(),
+    max_output_tokens: z.number().nullable(),
+    input_cost_per_mtok: z.number(),
+    output_cost_per_mtok: z.number(),
+    capabilities: z.record(z.string(), z.boolean()).default({}),
+    is_default: z.boolean(),
+    priority: z.number(),
+});
+export type ChatModelResponse = z.infer<typeof ChatModelResponseSchema>;
+
+export const ProviderResponseSchema = z.object({
+    id: z.string(),
+    slug: z.string(),
+    display_name: z.string(),
+    base_url: z.string(),
+    enabled: z.boolean(),
+    has_api_key: z.boolean(),
+    created_at: z.union([z.string(), z.number()]),
+    updated_at: z.union([z.string(), z.number()]),
+});
+export type ProviderResponse = z.infer<typeof ProviderResponseSchema>;
+
+export const CatalogModelResponseSchema = z.object({
+    id: z.string(),
+    slug: z.string(),
+    display_name: z.string(),
+    provider_id: z.string(),
+    provider_slug: z.string(),
+    provider_display_name: z.string(),
+    kind: z.enum(['chat', 'embedding']),
+    context_window: z.number(),
+    max_output_tokens: z.number().nullable(),
+    dimensions: z.number().nullable(),
+    input_cost_per_mtok: z.number(),
+    output_cost_per_mtok: z.number(),
+    capabilities: z.record(z.string(), z.boolean()).default({}),
+    fallback_model_id: z.string().nullable(),
+    fallback_slug: z.string().nullable(),
+    priority: z.number(),
+    enabled: z.boolean(),
+    is_default: z.boolean(),
+    created_at: z.union([z.string(), z.number()]),
+    updated_at: z.union([z.string(), z.number()]),
+});
+export type CatalogModelResponse = z.infer<typeof CatalogModelResponseSchema>;
+
+export interface CreateProviderRequest {
+    slug: string;
+    display_name: string;
+    base_url: string;
+    api_key?: string;
+    enabled?: boolean;
+}
+
+export interface UpdateProviderRequest {
+    display_name?: string;
+    base_url?: string;
+    api_key?: string;
+    enabled?: boolean;
+}
+
+export interface CreateModelRequest {
+    provider_id: string;
+    slug: string;
+    display_name: string;
+    kind: 'chat' | 'embedding';
+    context_window?: number;
+    max_output_tokens?: number;
+    dimensions?: number;
+    input_cost_per_mtok?: number;
+    output_cost_per_mtok?: number;
+    capabilities?: Record<string, boolean>;
+    fallback_model_id?: string;
+    priority?: number;
+    enabled?: boolean;
+    is_default?: boolean;
+}
+
+export interface UpdateModelRequest {
+    display_name?: string;
+    context_window?: number;
+    max_output_tokens?: number;
+    dimensions?: number;
+    input_cost_per_mtok?: number;
+    output_cost_per_mtok?: number;
+    capabilities?: Record<string, boolean>;
+    fallback_model_id?: string | null;
+    priority?: number;
+    enabled?: boolean;
+    is_default?: boolean;
+}
 

@@ -1,15 +1,17 @@
-mod admin;
 mod auth;
+mod catalog;
 mod chat;
 mod common;
 mod config;
 mod email;
 mod gateway;
 mod grpc;
+mod infra;
+mod metrics;
 mod middleware;
 mod observability;
-mod resource;
-mod user;
+mod resources;
+mod users;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -43,6 +45,17 @@ async fn main() {
 
     // ---- Background Tasks ----
     auth::background::start_session_cleanup_task(db.clone());
+
+    // Outbox relay (R3.1): drains transactional events into Redis Streams.
+    if let Some(url) = &config.redis.url {
+        match crate::infra::redis::RedisHandle::connect(url).await {
+            Ok(handle) => {
+                tokio::spawn(crate::infra::outbox_relay::run_relay(db.clone(), handle));
+                tracing::info!("✅ Outbox relay started");
+            }
+            Err(e) => tracing::warn!("⚠️ Outbox relay disabled (Redis unreachable: {})", e),
+        }
+    }
 
     // ---- gRPC Client ----
     let intelligence_url = std::env::var("INTELLIGENCE_SERVICE_URL")
@@ -88,7 +101,7 @@ async fn main() {
         };
 
     // ---- Router ----
-    let app = gateway::router(db.clone(), config.clone(), intelligence_client);
+    let app = gateway::router(db.clone(), config.clone(), intelligence_client).await;
 
     // ---- Listener ----
     let addr = config::server::addr(&config.server.host, config.server.port);

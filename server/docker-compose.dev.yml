@@ -3,14 +3,27 @@
 
 services:
   intelligence:
+    # Local-only tag: GHCR is only used by docker-compose.yml (deploy/pull)
+    image: opentier-intelligence:dev
     build:
       context: ./intelligence
       dockerfile: Dockerfile
       args:
         BASE_IMAGE: ${INTELLIGENCE_BASE_IMAGE:-debian:bookworm-slim}
-        UV_EXTRA_ARGS: ${INTELLIGENCE_UV_ARGS:---extra cpu}
+        UV_EXTRA_ARGS: ${INTELLIGENCE_UV_ARGS:-}
+
+  worker:
+    # Same local image as intelligence (shared build cache, different command)
+    image: opentier-intelligence:dev
+    build:
+      context: ./intelligence
+      dockerfile: Dockerfile
+      args:
+        BASE_IMAGE: ${INTELLIGENCE_BASE_IMAGE:-debian:bookworm-slim}
+        UV_EXTRA_ARGS: ${INTELLIGENCE_UV_ARGS:-}
 
   api:
+    image: opentier-api:dev
     build:
       context: .
       dockerfile: api/Dockerfile

@@ -1,8 +1,5 @@
 "use client";
 
-import type { FileUIPart, SourceDocumentUIPart } from "ai";
-import type { ComponentProps, HTMLAttributes, ReactNode } from "react";
-
 import { Button } from "@/components/ui/button";
 import {
   HoverCard,
@@ -10,7 +7,7 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import { cn } from "@/lib/utils";
-import Image from "next/image";
+import type { FileUIPart, SourceDocumentUIPart } from "ai";
 import {
   FileTextIcon,
   GlobeIcon,
@@ -20,6 +17,7 @@ import {
   VideoIcon,
   XIcon,
 } from "lucide-react";
+import type { ComponentProps, HTMLAttributes, ReactNode } from "react";
 import { createContext, useCallback, useContext, useMemo } from "react";
 
 // ============================================================================
@@ -93,7 +91,7 @@ const renderAttachmentImage = (
   isGrid: boolean
 ) =>
   isGrid ? (
-    <Image
+    <img
       alt={filename || "Image"}
       className="size-full object-cover"
       height={96}
@@ -101,7 +99,7 @@ const renderAttachmentImage = (
       width={96}
     />
   ) : (
-    <Image
+    <img
       alt={filename || "Image"}
       className="size-full rounded object-cover"
       height={20}
@@ -373,8 +371,12 @@ export const AttachmentRemove = ({
 
 export type AttachmentHoverCardProps = ComponentProps<typeof HoverCard>;
 
-export const AttachmentHoverCard = (props: AttachmentHoverCardProps) => (
-  <HoverCard {...props} />
+export const AttachmentHoverCard = ({
+  openDelay = 0,
+  closeDelay = 0,
+  ...props
+}: AttachmentHoverCardProps) => (
+  <HoverCard closeDelay={closeDelay} openDelay={openDelay} {...props} />
 );
 
 export type AttachmentHoverCardTriggerProps = ComponentProps<

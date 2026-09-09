@@ -10,7 +10,12 @@ use axum::{
 };
 
 use crate::auth::{AuthError, Role, session};
+use crate::common::problem::ApiProblem;
 use crate::gateway::AppState;
+
+fn rid() -> String {
+    uuid::Uuid::new_v4().to_string()
+}
 
 // ===== Authentication Middleware =====
 
@@ -21,35 +26,55 @@ use crate::gateway::AppState;
 /// This eliminates the need for additional DB queries in authorization middleware.
 ///
 /// # Errors
-/// Returns `UNAUTHORIZED` if:
-/// - Authorization header is missing
-/// - Bearer token is invalid
-/// - Session is not found or expired
+/// Returns problem+json `unauthorized` / `internal_error`.
 pub async fn auth_middleware(
     State(app_state): State<AppState>,
     mut request: Request,
     next: Next,
-) -> Result<Response, StatusCode> {
+) -> Result<Response, ApiProblem> {
     // Extract Authorization header
     let auth_header = request
         .headers()
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+        .ok_or_else(|| {
+            ApiProblem::new(
+                StatusCode::UNAUTHORIZED,
+                "unauthorized",
+                "Missing bearer token",
+            )
+            .with_request_id(rid())
+        })?;
 
     // Extract Bearer token
-    let session_token = auth_header
-        .strip_prefix("Bearer ")
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+    let session_token = auth_header.strip_prefix("Bearer ").ok_or_else(|| {
+        ApiProblem::new(
+            StatusCode::UNAUTHORIZED,
+            "unauthorized",
+            "Invalid authorization scheme",
+        )
+        .with_request_id(rid())
+    })?;
 
-    // Validate session and get user_id AND role (single DB query)
-    let (user_id, role) = session::get_user_from_session(&app_state.db, session_token)
-        .await
-        .map_err(|e| match e {
-            AuthError::SessionNotFound => StatusCode::UNAUTHORIZED,
-            AuthError::TokenExpired => StatusCode::UNAUTHORIZED,
-            _ => StatusCode::INTERNAL_SERVER_ERROR,
-        })?;
+    // Validate session and get user_id AND role (cache first, DB fallback)
+    let (user_id, role) = match &app_state.session_cache {
+        Some(cache) => cache.resolve(&app_state.db, session_token).await,
+        None => session::get_user_from_session(&app_state.db, session_token).await,
+    }
+    .map_err(|e| match e {
+        AuthError::SessionNotFound | AuthError::TokenExpired => ApiProblem::new(
+            StatusCode::UNAUTHORIZED,
+            "unauthorized",
+            "Invalid or expired session",
+        )
+        .with_request_id(rid()),
+        _ => ApiProblem::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "internal_error",
+            "An internal error occurred",
+        )
+        .with_request_id(rid()),
+    })?;
 
     // Inject both user_id and role into request extensions
     request.extensions_mut().insert(user_id);
@@ -74,18 +99,26 @@ pub async fn require_admin(
     State(_app_state): State<AppState>,
     request: Request,
     next: Next,
-) -> Result<Response, StatusCode> {
+) -> Result<Response, ApiProblem> {
     // Get role from extensions (set by auth middleware)
     // No database query needed!
-    let role = request
-        .extensions()
-        .get::<Role>()
-        .copied()
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+    let role = request.extensions().get::<Role>().copied().ok_or_else(|| {
+        ApiProblem::new(
+            StatusCode::UNAUTHORIZED,
+            "unauthorized",
+            "Missing authentication",
+        )
+        .with_request_id(rid())
+    })?;
 
     // Check if user is admin
     if !role.is_admin() {
-        return Err(StatusCode::FORBIDDEN);
+        return Err(ApiProblem::new(
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            "Administrator privileges required",
+        )
+        .with_request_id(rid()));
     }
 
     Ok(next.run(request).await)
@@ -107,15 +140,23 @@ pub async fn require_contributor_or_admin(
     State(_app_state): State<AppState>,
     request: Request,
     next: Next,
-) -> Result<Response, StatusCode> {
-    let role = request
-        .extensions()
-        .get::<Role>()
-        .copied()
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+) -> Result<Response, ApiProblem> {
+    let role = request.extensions().get::<Role>().copied().ok_or_else(|| {
+        ApiProblem::new(
+            StatusCode::UNAUTHORIZED,
+            "unauthorized",
+            "Missing authentication",
+        )
+        .with_request_id(rid())
+    })?;
 
     if !role.can_submit_resources() {
-        return Err(StatusCode::FORBIDDEN);
+        return Err(ApiProblem::new(
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            "Contributor or administrator privileges required",
+        )
+        .with_request_id(rid()));
     }
 
     Ok(next.run(request).await)

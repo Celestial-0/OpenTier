@@ -29,6 +29,7 @@ export type DashboardAddResourceRequest = AddResourceRequest;
 
 export type DashboardView =
     | "overview"
+    | "credits"
     | "conversations"
     | "sessions"
     | "notifications"

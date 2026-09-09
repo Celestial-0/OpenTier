@@ -1,35 +1,18 @@
-# Version control
-.git/
-.gitignore
-
-# Rust build artifacts
-target/
-api/target/
+# Build artifacts
 **/target/
-**/*.rs.bk
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/
+**/.ruff_cache/
+**/.mypy_cache/
 
-# Python artifacts
-__pycache__/
-*.py[cod]
-*$py.class
-.venv/
-intelligence/.venv/
-.pytest_cache/
-.ruff_cache/
-
-# Node / Turborepo
-node_modules/
-.next/
-.turbo/
-
-# Environment & Secrets (preserve examples)
+# Environment files & secrets
 .env
 .env.*
 !.env.example
-api/.env
-intelligence/.env
 
-# OS / Temporary
+# Version control & OS
+.git/
 .DS_Store
 Thumbs.db
 *.log

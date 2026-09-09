@@ -1,3 +1,5 @@
+use std::sync::LazyLock;
+
 use chrono::{Duration, Utc};
 use sqlx::PgPool;
 
@@ -10,6 +12,21 @@ use super::{
 };
 use crate::email::EmailService;
 use sqlx::types::ipnetwork::IpNetwork;
+
+/// Token lifetimes from configuration (previously hardcoded despite the
+/// settings existing in env).
+static VERIFICATION_TOKEN_EXPIRY_SECS: LazyLock<i64> = LazyLock::new(|| {
+    std::env::var("VERIFICATION_TOKEN_EXPIRY_SECONDS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(86_400)
+});
+static PASSWORD_RESET_TOKEN_EXPIRY_SECS: LazyLock<i64> = LazyLock::new(|| {
+    std::env::var("PASSWORD_RESET_TOKEN_EXPIRY_SECONDS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(3_600)
+});
 
 // ===== Email/Password Authentication =====
 
@@ -31,11 +48,7 @@ pub async fn signup(
     let password_hash = password::hash_password(&req.password)?;
 
     // Check if email already exists
-    let existing_user = sqlx::query!("SELECT id FROM users WHERE email = $1", req.email)
-        .fetch_optional(db)
-        .await?;
-
-    if existing_user.is_some() {
+    if crate::infra::postgres::auth_repo::email_exists(db, &req.email).await? {
         return Err(AuthError::EmailAlreadyExists);
     }
 
@@ -46,37 +59,28 @@ pub async fn signup(
     };
 
     // Create user
-    let user = sqlx::query!(
-        r#"
-        INSERT INTO users (email, password_hash, name, username, email_verified, role)
-        VALUES ($1, $2, $3, $4, FALSE, $5::text::user_role)
-        RETURNING id
-        "#,
-        req.email,
-        password_hash,
+    let user_id = crate::infra::postgres::auth_repo::create_user(
+        db,
+        &req.email,
+        &password_hash,
         req.name,
         req.username,
-        requested_role.to_string(),
+        &requested_role.to_string(),
     )
-    .fetch_one(db)
     .await?;
 
     // Generate verification token and OTP
     let verification_token = tokens::generate_token();
     let otp = tokens::generate_otp();
-    let expires_at = Utc::now() + Duration::hours(24);
+    let expires_at = Utc::now() + Duration::seconds(*VERIFICATION_TOKEN_EXPIRY_SECS);
 
-    sqlx::query!(
-        r#"
-        INSERT INTO verification_tokens (user_id, token, otp, expires_at)
-        VALUES ($1, $2, $3, $4)
-        "#,
-        user.id,
-        verification_token,
-        otp,
-        expires_at
+    crate::infra::postgres::auth_repo::insert_verification_token(
+        db,
+        user_id,
+        &verification_token,
+        &otp,
+        expires_at,
     )
-    .execute(db)
     .await?;
 
     // Send verification email
@@ -90,7 +94,7 @@ pub async fn signup(
     }
 
     Ok(SignUpResponse {
-        user_id: user.id,
+        user_id,
         email: req.email,
         message: "Verification email sent. Please check your inbox.".to_string(),
     })
@@ -108,17 +112,9 @@ pub async fn signin(
     user_agent: Option<String>,
 ) -> Result<SignInResponse, AuthError> {
     // Find user by email
-    let user = sqlx::query!(
-        r#"
-        SELECT id, email, password_hash, email_verified, role as "role: crate::auth::Role"
-        FROM users
-        WHERE email = $1 AND deleted_at IS NULL
-        "#,
-        req.email
-    )
-    .fetch_optional(db)
-    .await?
-    .ok_or(AuthError::InvalidCredentials)?;
+    let user = crate::infra::postgres::auth_repo::find_for_signin(db, &req.email)
+        .await?
+        .ok_or(AuthError::InvalidCredentials)?;
 
     // Verify password
     let password_hash = user.password_hash.ok_or(AuthError::InvalidCredentials)?;
@@ -147,7 +143,7 @@ pub async fn signin(
 
 /// Sign out a user by invalidating their session
 pub async fn signout(db: &PgPool, session_token: &str) -> Result<(), AuthError> {
-    session::invalidate_session(db, session_token).await
+    session::invalidate_session_by_raw_token(db, session_token).await
 }
 
 /// Refresh a session token (extend expiration)
@@ -161,7 +157,7 @@ pub async fn refresh_session(
     let (user_id, role) = session::get_user_from_session(db, &req.session_token).await?;
 
     // Invalidate old session
-    session::invalidate_session(db, &req.session_token).await?;
+    session::invalidate_session_by_raw_token(db, &req.session_token).await?;
 
     // Create new session with same role
     let (new_token, expires_at) =
@@ -175,11 +171,6 @@ pub async fn refresh_session(
 
 // ===== Email Verification =====
 
-struct VerificationTokenRow {
-    user_id: uuid::Uuid,
-    expires_at: chrono::DateTime<Utc>,
-}
-
 /// Verify email address with token or OTP
 pub async fn verify_email(
     db: &PgPool,
@@ -187,42 +178,13 @@ pub async fn verify_email(
 ) -> Result<VerifyEmailResponse, AuthError> {
     // Find verification token record
     let token_record = if let Some(token) = req.token {
-        sqlx::query!(
-            r#"
-            SELECT user_id, expires_at
-            FROM verification_tokens
-            WHERE token = $1
-            "#,
-            token
-        )
-        .fetch_optional(db)
-        .await?
-        .map(|r| VerificationTokenRow {
-            user_id: r.user_id,
-            expires_at: r.expires_at,
-        })
+        crate::infra::postgres::auth_repo::find_verification_by_token(db, &token).await?
     } else if let (Some(email), Some(otp)) = (req.email, req.otp) {
         // Find user first
-        let user = sqlx::query!("SELECT id FROM users WHERE email = $1", email)
-            .fetch_optional(db)
-            .await?;
-
-        if let Some(user) = user {
-            sqlx::query!(
-                r#"
-                SELECT user_id, expires_at
-                FROM verification_tokens
-                WHERE user_id = $1 AND otp = $2
-                "#,
-                user.id,
-                otp
-            )
-            .fetch_optional(db)
-            .await?
-            .map(|r| VerificationTokenRow {
-                user_id: r.user_id,
-                expires_at: r.expires_at,
-            })
+        if let Some(user_id) = crate::infra::postgres::auth_repo::find_active_id(db, &email).await?
+        {
+            crate::infra::postgres::auth_repo::find_verification_by_user_otp(db, user_id, &otp)
+                .await?
         } else {
             None
         }
@@ -240,24 +202,10 @@ pub async fn verify_email(
     }
 
     // Mark email as verified
-    sqlx::query!(
-        r#"
-        UPDATE users
-        SET email_verified = TRUE
-        WHERE id = $1
-        "#,
-        token_record.user_id
-    )
-    .execute(db)
-    .await?;
+    crate::infra::postgres::auth_repo::mark_email_verified(db, token_record.user_id).await?;
 
     // Delete verification tokens for this user
-    sqlx::query!(
-        "DELETE FROM verification_tokens WHERE user_id = $1",
-        token_record.user_id
-    )
-    .execute(db)
-    .await?;
+    crate::infra::postgres::auth_repo::delete_verification_tokens(db, token_record.user_id).await?;
 
     Ok(VerifyEmailResponse {
         message: "Email verified successfully!".to_string(),
@@ -274,38 +222,24 @@ pub async fn forgot_password(
     email_config: &crate::config::env::EmailConfig,
 ) -> Result<ForgotPasswordResponse, AuthError> {
     // Find user by email
-    let user = sqlx::query!(
-        "SELECT id FROM users WHERE email = $1 AND deleted_at IS NULL",
-        req.email
-    )
-    .fetch_optional(db)
-    .await?;
+    let user_id = crate::infra::postgres::auth_repo::find_active_id(db, &req.email).await?;
 
     // Always return success (don't reveal if email exists)
-    if let Some(user) = user {
+    if let Some(user_id) = user_id {
         // Generate reset token
         let reset_token = tokens::generate_token();
-        let expires_at = Utc::now() + Duration::hours(1); // 1 hour expiry
+        let expires_at = Utc::now() + Duration::seconds(*PASSWORD_RESET_TOKEN_EXPIRY_SECS);
 
         // Delete any existing reset tokens for this user
-        sqlx::query!(
-            "DELETE FROM password_reset_tokens WHERE user_id = $1",
-            user.id
-        )
-        .execute(db)
-        .await?;
+        crate::infra::postgres::auth_repo::delete_reset_tokens(db, user_id).await?;
 
         // Create new reset token
-        sqlx::query!(
-            r#"
-            INSERT INTO password_reset_tokens (user_id, token, expires_at)
-            VALUES ($1, $2, $3)
-            "#,
-            user.id,
-            reset_token,
-            expires_at
+        crate::infra::postgres::auth_repo::insert_reset_token(
+            db,
+            user_id,
+            &reset_token,
+            expires_at,
         )
-        .execute(db)
         .await?;
 
         // Send reset email
@@ -329,22 +263,15 @@ pub async fn forgot_password(
 pub async fn reset_password(
     db: &PgPool,
     req: ResetPasswordRequest,
+    session_cache: Option<&crate::auth::session_cache::SessionCache>,
 ) -> Result<ResetPasswordResponse, AuthError> {
     // Validate password strength
     password::validate_password_strength(&req.new_password)?;
 
     // Find reset token
-    let token_record = sqlx::query!(
-        r#"
-        SELECT user_id, expires_at
-        FROM password_reset_tokens
-        WHERE token = $1
-        "#,
-        req.token
-    )
-    .fetch_optional(db)
-    .await?
-    .ok_or(AuthError::InvalidToken)?;
+    let token_record = crate::infra::postgres::auth_repo::find_reset_token(db, &req.token)
+        .await?
+        .ok_or(AuthError::InvalidToken)?;
 
     // Check if expired
     if token_record.expires_at < Utc::now() {
@@ -355,28 +282,19 @@ pub async fn reset_password(
     let password_hash = password::hash_password(&req.new_password)?;
 
     // Update password
-    sqlx::query!(
-        r#"
-        UPDATE users
-        SET password_hash = $1
-        WHERE id = $2
-        "#,
-        password_hash,
-        token_record.user_id
-    )
-    .execute(db)
-    .await?;
+    crate::infra::postgres::auth_repo::set_password_hash(db, &password_hash, token_record.user_id)
+        .await?;
 
     // Delete reset token
-    sqlx::query!(
-        "DELETE FROM password_reset_tokens WHERE token = $1",
-        req.token
-    )
-    .execute(db)
-    .await?;
+    crate::infra::postgres::auth_repo::delete_reset_token(db, &req.token).await?;
 
     // Invalidate all sessions for security
     session::invalidate_all_user_sessions(db, token_record.user_id).await?;
+
+    // C4 fix: sweep the session cache so stolen tokens die immediately
+    if let Some(cache) = session_cache {
+        cache.evict_user_all(token_record.user_id).await;
+    }
 
     Ok(ResetPasswordResponse {
         message: "Password reset successfully. Please sign in with your new password.".to_string(),
@@ -392,16 +310,7 @@ pub async fn resend_verification_email(
     email_config: &crate::config::env::EmailConfig,
 ) -> Result<ResendVerificationResponse, AuthError> {
     // Find user by email
-    let user = sqlx::query!(
-        r#"
-        SELECT id, email, email_verified
-        FROM users
-        WHERE email = $1 AND deleted_at IS NULL
-        "#,
-        req.email
-    )
-    .fetch_optional(db)
-    .await?;
+    let user = crate::infra::postgres::auth_repo::find_active_brief(db, &req.email).await?;
 
     // Always return success (don't reveal if email exists)
     if let Some(user) = user {
@@ -413,29 +322,20 @@ pub async fn resend_verification_email(
         }
 
         // Delete old verification tokens
-        sqlx::query!(
-            "DELETE FROM verification_tokens WHERE user_id = $1",
-            user.id
-        )
-        .execute(db)
-        .await?;
+        crate::infra::postgres::auth_repo::delete_verification_tokens(db, user.id).await?;
 
         // Generate new verification token and OTP
         let verification_token = tokens::generate_token();
         let otp = tokens::generate_otp();
-        let expires_at = Utc::now() + Duration::hours(24);
+        let expires_at = Utc::now() + Duration::seconds(*VERIFICATION_TOKEN_EXPIRY_SECS);
 
-        sqlx::query!(
-            r#"
-            INSERT INTO verification_tokens (user_id, token, otp, expires_at)
-            VALUES ($1, $2, $3, $4)
-            "#,
+        crate::infra::postgres::auth_repo::insert_verification_token(
+            db,
             user.id,
-            verification_token,
-            otp,
-            expires_at
+            &verification_token,
+            &otp,
+            expires_at,
         )
-        .execute(db)
         .await?;
 
         // Send verification email
@@ -465,17 +365,9 @@ pub async fn recover_account(
     user_agent: Option<String>,
 ) -> Result<RecoverAccountResponse, AuthError> {
     // Find soft-deleted user by email
-    let user = sqlx::query!(
-        r#"
-        SELECT id, email, password_hash, deleted_at, role as "role: crate::auth::Role"
-        FROM users
-        WHERE email = $1 AND deleted_at IS NOT NULL
-        "#,
-        req.email
-    )
-    .fetch_optional(db)
-    .await?
-    .ok_or(AuthError::InvalidCredentials)?;
+    let user = crate::infra::postgres::auth_repo::find_deleted_by_email(db, &req.email)
+        .await?
+        .ok_or(AuthError::InvalidCredentials)?;
 
     // Verify password
     let password_hash = user.password_hash.ok_or(AuthError::InvalidCredentials)?;
@@ -494,16 +386,7 @@ pub async fn recover_account(
     }
 
     // Restore account
-    sqlx::query!(
-        r#"
-        UPDATE users
-        SET deleted_at = NULL
-        WHERE id = $1
-        "#,
-        user.id
-    )
-    .execute(db)
-    .await?;
+    crate::infra::postgres::auth_repo::restore_user(db, user.id).await?;
 
     // Create new session with user's role
     let (session_token, expires_at) =

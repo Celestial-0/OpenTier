@@ -1,9 +1,7 @@
 use axum::{
-    Json,
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use serde_json::json;
 use thiserror::Error;
 
 /// Chat-specific errors
@@ -172,12 +170,8 @@ impl IntoResponse for ChatError {
             }
         };
 
-        let body = Json(json!({
-            "error": error_code,
-            "message": message,
-        }));
-
-        (status, body).into_response()
+        let problem = crate::common::problem::ApiProblem::new(status, error_code, message);
+        problem.into_response()
     }
 }
 

@@ -19,12 +19,13 @@ import {
     deleteConversationApi,
     fetchConversationDetailApi,
     fetchConversationsApi,
-    fetchChatQuotaApi,
     generateConversationTitleApi,
     sendConversationMessageApi,
     streamConversationMessageApi,
     updateConversationTitleApi,
 } from '@/lib/api/chat-api';
+import { fetchAvailableModelsApi } from '@/lib/api/models-api';
+import type { ChatModelResponse } from '@/lib/api-types';
 
 // --- Store State ---
 
@@ -37,8 +38,10 @@ interface ChatState {
     nextCursor: string | null; // For pagination of conversations
     totalConversationsCount: number; // Total count from server
 
-    // Local State for Unauthenticated Users
-    freeMessageCount: number;
+    // Model Selection
+    selectedModel: string | null; // slug of selected model
+    availableModels: ChatModelResponse[];
+    isLoadingModels: boolean;
 
     // Title Generation Config
     useAiTitleGeneration: boolean; // Toggle for AI vs simple title generation
@@ -52,7 +55,6 @@ interface ChatState {
     abortController: AbortController | null;
 
     // Actions
-    fetchQuota: () => Promise<void>;
     fetchConversations: (reset?: boolean) => Promise<void>;
     selectConversation: (conversationId: string) => Promise<void>;
     createNewConversation: (title?: string) => Promise<string>; // Returns new ID
@@ -65,14 +67,14 @@ interface ChatState {
     updateConversationTitle: (conversationId: string, title: string) => Promise<void>;
     generateTitleWithAI: (conversationId: string, userMessage: string, assistantMessage: string) => Promise<string | null>;
     setUseAiTitleGeneration: (value: boolean) => void;
+    setSelectedModel: (slug: string | null) => void;
+    fetchAvailableModels: () => Promise<void>;
     switchBranch: (messageId: string) => void; // Switch the active branch
     clearError: () => void;
     reset: () => void;
 }
 
 // --- Store Implementation ---
-
-export const FREE_MESSAGE_LIMIT = 5;
 
 export const useChatStore = create<ChatState>()(
     devtools(
@@ -84,8 +86,11 @@ export const useChatStore = create<ChatState>()(
                 activeMessageId: {},
                 nextCursor: null,
                 totalConversationsCount: 0,
-                freeMessageCount: 0,
                 useAiTitleGeneration: false, // Default to simple title generation
+
+                selectedModel: null,
+                availableModels: [],
+                isLoadingModels: false,
 
                 isLoadingConversations: false,
                 isLoadingMessages: false,
@@ -93,6 +98,20 @@ export const useChatStore = create<ChatState>()(
                 isTyping: false,
                 error: null,
                 abortController: null,
+
+                setSelectedModel: (slug) => {
+                    set({ selectedModel: slug });
+                },
+
+                fetchAvailableModels: async () => {
+                    set({ isLoadingModels: true });
+                    try {
+                        const models = await fetchAvailableModelsApi();
+                        set({ availableModels: models, isLoadingModels: false });
+                    } catch (err) {
+                        set({ error: (err as Error).message, isLoadingModels: false });
+                    }
+                },
 
                 switchBranch: (messageId) => {
                     const { activeConversationId } = get();
@@ -106,19 +125,7 @@ export const useChatStore = create<ChatState>()(
                     }));
                 },
 
-                fetchQuota: async () => {
-                    try {
-                        const data = await fetchChatQuotaApi();
-                        set({ freeMessageCount: data.messages_used });
-                    } catch (err) {
-                        console.error('Failed to fetch quota', err);
-                    }
-                },
-
                 fetchConversations: async (reset = false) => {
-                    // Always try to sync quota on load
-                    void get().fetchQuota();
-
                     if (get().isLoadingConversations) return;
                     const token = getAuthToken();
                     if (!token) return;
@@ -241,24 +248,9 @@ export const useChatStore = create<ChatState>()(
 
                 sendMessage: async (content, useStream = true) => {
                     let { activeConversationId } = get();
-                    const { freeMessageCount } = get();
 
                     if (!activeConversationId) {
                         activeConversationId = await get().createNewConversation();
-                    }
-
-                    const token = getAuthToken();
-
-                    // Check Limits for Unauth
-                    if (!token) {
-                        if (freeMessageCount >= FREE_MESSAGE_LIMIT) {
-                            set({ error: "Free message limit reached. Please sign in to continue." });
-                            // Optionally trigger Auth Modal via event or specialized error
-                            // throwing might be better to catch in UI
-                            return;
-                        }
-                        // Increment
-                        set({ freeMessageCount: freeMessageCount + 1 });
                     }
 
 
@@ -344,9 +336,6 @@ export const useChatStore = create<ChatState>()(
                                 let errMsg = 'Failed to start stream';
                                 try {
                                     const errObj = await response.json();
-                                    if (errObj.messages_used !== undefined) {
-                                        set({ freeMessageCount: errObj.messages_used });
-                                    }
                                     errMsg = errObj.error || errMsg;
                                 } catch { }
                                 throw new Error(errMsg);
@@ -448,9 +437,6 @@ export const useChatStore = create<ChatState>()(
                                 let errMsg = 'Failed to send message';
                                 try {
                                     const errObj = await response.json();
-                                    if (errObj.messages_used !== undefined) {
-                                        set({ freeMessageCount: errObj.messages_used });
-                                    }
                                     errMsg = errObj.error || errMsg;
                                 } catch { }
                                 throw new Error(errMsg);
@@ -617,9 +603,6 @@ export const useChatStore = create<ChatState>()(
                             let errMsg = 'Failed to start stream';
                             try {
                                 const errObj = await response.json();
-                                if (errObj.messages_used !== undefined) {
-                                    set({ freeMessageCount: errObj.messages_used });
-                                }
                                 errMsg = errObj.error || errMsg;
                             } catch { }
                             throw new Error(errMsg);
@@ -963,10 +946,10 @@ export const useChatStore = create<ChatState>()(
             {
                 name: 'ChatStore',
                 partialize: (state) => ({
-                    freeMessageCount: state.freeMessageCount,
                     // Optionally persist conversations for unauth experience continuity if needed
                     conversations: state.conversations,
-                    messages: state.messages
+                    messages: state.messages,
+                    selectedModel: state.selectedModel,
                 }),
             }
         )

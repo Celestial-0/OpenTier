@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id, stream, event_type, correlation_id, payload\n        FROM event_outbox\n        WHERE id = ANY($1)\n        ORDER BY created_at\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "stream",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "event_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "correlation_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "payload",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "b0d06481ab2da703c443b9f86aa0fd0d0fa8ee308c2bab2f4ddf8f1a77554c11"
+}

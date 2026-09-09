@@ -1,136 +1,99 @@
 "use client";
 
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import React, { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
+import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
+import { DashboardSidebar } from "./dashboard-sidebar";
+import { DashboardHeader } from "./dashboard-header";
+import { DashboardCommandDialog } from "./dashboard-command-dialog";
 import { Overview } from "./overview";
+import { CreditsTab } from "./credits";
 import { Conversations } from "./conversations";
 import { Sessions } from "./sessions";
 import { Profile } from "./profile";
 import { Settings } from "./settings";
 import { Contributor } from "./contributor";
 import { Admin } from "./admin";
-import {
-  LayoutDashboard,
-  MessageSquare,
-  Shield,
-  User,
-  Settings as SettingsIcon,
-  ShieldCheck,
-  BookOpen,
-} from "lucide-react";
 import { useAuth } from "@/context/auth-context";
 import { useUi } from "@/context/ui-context";
+import { useAdminStore } from "@/store/admin-store";
 import { DashboardView } from "@/types/dashboard";
 
 export const DashboardUI = () => {
   const { user } = useAuth();
   const { activeDashboardView, setActiveDashboardView } = useUi();
+  const { setActiveTab: setAdminActiveTab } = useAdminStore();
+  const [isCommandOpen, setIsCommandOpen] = useState(false);
+  const searchParams = useSearchParams();
+
+  // One-time deep-link sync on initial mount: reads query params if present,
+  // sets in-memory state, and quietly clears the URL query string without router reload.
+  useEffect(() => {
+    const viewParam = searchParams.get("view") as DashboardView | null;
+    const tabParam = searchParams.get("tab");
+
+    const validViews: DashboardView[] = [
+      "overview",
+      "credits",
+      "conversations",
+      "sessions",
+      "profile",
+      "settings",
+      "contributor",
+      "admin",
+    ];
+
+    let hasQuery = false;
+
+    if (viewParam && validViews.includes(viewParam)) {
+      setActiveDashboardView(viewParam);
+      hasQuery = true;
+    }
+
+    if (tabParam) {
+      setAdminActiveTab(tabParam);
+      hasQuery = true;
+    }
+
+    if (hasQuery && typeof window !== "undefined") {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, [searchParams, setActiveDashboardView, setAdminActiveTab]);
 
   return (
-    <div className="container mx-auto px-3 sm:px-6 py-4 max-w-7xl">
-      <div className="space-y-4 sm:space-y-6">
-        
-        {/* Header */}
-        <div className="pt-2 sm:pt-4">
-          <h1 className="text-2xl sm:text-4xl font-bold tracking-tight">
-            Dashboard
-          </h1>
-          <p className="text-muted-foreground text-sm sm:text-lg">
-            Manage your account, conversations, and settings
-          </p>
-        </div>
+    <SidebarProvider defaultOpen>
+      {/* Collapsible Left Navigation Sidebar matching Wireframe */}
+      <DashboardSidebar onSearchClick={() => setIsCommandOpen(true)} />
 
-        <Tabs
-          value={activeDashboardView}
-          onValueChange={(v) => setActiveDashboardView(v as DashboardView)}
-          className="space-y-3"
-        >
-          
-          {/* 🔥 Mobile-first Tabs */}
-          <div className="sticky top-0 z-10 bg-background pb-2">
-            <TabsList
-              className="
-                flex w-full gap-2 overflow-x-auto no-scrollbar
-                sm:grid sm:overflow-visible
-                sm:grid-cols-5
-                lg:grid-cols-6
-              "
-            >
-              {/* Tab Item */}
-              <TabsTrigger value="overview" className="shrink-0">
-                <LayoutDashboard className="h-4 w-4" />
-                <span className="hidden md:inline ml-2">Overview</span>
-              </TabsTrigger>
+      {/* Main Content Inset with Header and Dynamic View Area */}
+      <SidebarInset className="min-h-screen flex flex-col bg-background">
+        <DashboardHeader />
 
-              <TabsTrigger value="conversations" className="shrink-0">
-                <MessageSquare className="h-4 w-4" />
-                <span className="hidden md:inline ml-2">Conversations</span>
-              </TabsTrigger>
-
-              <TabsTrigger value="sessions" className="shrink-0">
-                <Shield className="h-4 w-4" />
-                <span className="hidden md:inline ml-2">Sessions</span>
-              </TabsTrigger>
-
-              <TabsTrigger value="profile" className="shrink-0">
-                <User className="h-4 w-4" />
-                <span className="hidden md:inline ml-2">Profile</span>
-              </TabsTrigger>
-
-              <TabsTrigger value="settings" className="shrink-0">
-                <SettingsIcon className="h-4 w-4" />
-                <span className="hidden md:inline ml-2">Settings</span>
-              </TabsTrigger>
-
-              {user?.role === "contributor" && (
-                <TabsTrigger value="contributor" className="shrink-0">
-                  <BookOpen className="h-4 w-4 text-blue-400" />
-                  <span className="hidden md:inline ml-2">Contribute</span>
-                </TabsTrigger>
-              )}
-
-              {user?.role === "admin" && (
-                <TabsTrigger value="admin" className="shrink-0">
-                  <ShieldCheck className="h-4 w-4 text-red-500" />
-                  <span className="hidden md:inline ml-2">Admin</span>
-                </TabsTrigger>
-              )}
-            </TabsList>
-          </div>
-
-          {/* Content */}
-          <TabsContent value="overview">
-            <Overview />
-          </TabsContent>
-
-          <TabsContent value="conversations">
-            <Conversations />
-          </TabsContent>
-
-          <TabsContent value="sessions">
-            <Sessions />
-          </TabsContent>
-
-          <TabsContent value="profile">
-            <Profile />
-          </TabsContent>
-
-          <TabsContent value="settings">
-            <Settings />
-          </TabsContent>
-
-          {user?.role === "admin" && (
-            <TabsContent value="admin">
-              <Admin />
-            </TabsContent>
-          )}
-
-          {user?.role === "contributor" && (
-            <TabsContent value="contributor">
+        <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          {activeDashboardView === "overview" && <Overview />}
+          {activeDashboardView === "credits" && <CreditsTab />}
+          {activeDashboardView === "conversations" && <Conversations />}
+          {activeDashboardView === "sessions" && <Sessions />}
+          {activeDashboardView === "profile" && <Profile />}
+          {activeDashboardView === "settings" && <Settings />}
+          {activeDashboardView === "contributor" && (
+            user?.role === "contributor" || user?.role === "admin" ? (
               <Contributor />
-            </TabsContent>
+            ) : (
+              <Overview />
+            )
           )}
-        </Tabs>
-      </div>
-    </div>
+          {activeDashboardView === "admin" && (
+            user?.role === "admin" ? <Admin /> : <Overview />
+          )}
+        </main>
+      </SidebarInset>
+
+      {/* Global Cmd+K Command Palette */}
+      <DashboardCommandDialog
+        open={isCommandOpen}
+        onOpenChange={setIsCommandOpen}
+      />
+    </SidebarProvider>
   );
 };

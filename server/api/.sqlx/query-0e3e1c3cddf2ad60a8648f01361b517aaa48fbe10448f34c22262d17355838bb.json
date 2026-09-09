@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE user_credit_balances\n        SET balance = balance + LEAST(held, $1::float8),\n            held = held - LEAST(held, $1::float8),\n            version = version + 1\n        WHERE user_id = $2\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Float8",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0e3e1c3cddf2ad60a8648f01361b517aaa48fbe10448f34c22262d17355838bb"
+}

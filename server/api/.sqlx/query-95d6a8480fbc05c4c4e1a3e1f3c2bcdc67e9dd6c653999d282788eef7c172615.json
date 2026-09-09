@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO user_credit_balances (user_id, balance, held)\n        VALUES ($1, 10.0000, 0.0000)\n        ON CONFLICT (user_id) DO NOTHING\n        RETURNING user_id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "95d6a8480fbc05c4c4e1a3e1f3c2bcdc67e9dd6c653999d282788eef7c172615"
+}

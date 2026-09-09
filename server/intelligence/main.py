@@ -7,7 +7,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 # Load .env from the server root (one level up from the intelligence directory).
-# Supports: running locally from server/intelligence/, or from server/ root.
 _here = Path(__file__).resolve().parent          # server/intelligence/
 _server_env = _here.parent / ".env"              # server/.env
 if _server_env.exists():
@@ -15,22 +14,25 @@ if _server_env.exists():
 else:
     load_dotenv()  # fallback: CWD or Docker-injected env
 
-
-from interfaces.health import HealthService
-from interfaces.chat import ChatService
-from interfaces.resource import ResourceService
+# Ensure generated directory is in sys.path for protoc imports
+_generated_dir = str(_here / "generated")
+if _generated_dir not in sys.path:
+    sys.path.insert(0, _generated_dir)
 
 from generated import intelligence_pb2_grpc as pb_grpc
 from core.lifecycle import startup, shutdown
 from core.config import get_config
-from engine import IntelligenceEngine
+
+from features.health import HealthService
+from features.knowledge import KnowledgeService, ResourceService
+from features.chat import ChatService, ChatServicer, QueryPipeline, _build_llm_client
+
 
 logger = logging.getLogger(__name__)
 
 
 async def serve() -> None:
-    """Start the gRPC server."""
-    # Initialize services
+    """Start the gRPC server with feature-based services."""
     await startup()
 
     config = get_config()
@@ -40,21 +42,33 @@ async def serve() -> None:
             ("grpc.max_send_message_length", 100 * 1024 * 1024),  # 100MB
             ("grpc.keepalive_time_ms", 60000),  # 60 seconds
             ("grpc.keepalive_timeout_ms", 20000),  # 20 seconds
+            ("grpc.http2.min_ping_interval_without_data_ms", 5000),
+            ("grpc.http2.min_time_between_pings_ms", 5000),
+            ("grpc.http2.max_ping_strikes", 0),  # Unlimited pings allowed
+            ("grpc.keepalive_permit_without_calls", 1),
         ]
+
     )
 
-    # Initialize Engine (The Brain)
-    engine = IntelligenceEngine()
+    # Initialize feature services
+    health_service = HealthService()
+    knowledge_service = KnowledgeService()
+    resource_servicer = ResourceService(knowledge_service)
 
-    # Register all services
-    pb_grpc.add_HealthServicer_to_server(HealthService(), server)
-    pb_grpc.add_ChatServicer_to_server(ChatService(engine), server)
-    pb_grpc.add_ResourceServiceServicer_to_server(ResourceService(engine), server)
+    llm_client = _build_llm_client()
+    query_pipeline = QueryPipeline(llm_client=llm_client)
+    chat_service = ChatService(query_pipeline)
+    chat_servicer = ChatServicer(chat_service)
+
+    # Register all servicers
+    pb_grpc.add_HealthServicer_to_server(health_service, server)
+    pb_grpc.add_ChatServicer_to_server(chat_servicer, server)
+    pb_grpc.add_ResourceServiceServicer_to_server(resource_servicer, server)
 
     server.add_insecure_port(f"[::]:{config.grpc_port}")
 
     logger.info(f"Intelligence gRPC server listening on port {config.grpc_port}")
-    logger.info("Services: Health, Chat, Ingestion, Embedding, RAG, Scraping, Resource")
+    logger.info("Feature slices: Health, Knowledge, Chat, Billing")
 
     # Setup signal handlers for graceful shutdown
     stop_event = asyncio.Event()
@@ -73,17 +87,13 @@ async def serve() -> None:
     try:
         await server.start()
         logger.info("Server started successfully")
-
-        # Wait for shutdown signal
         await stop_event.wait()
-
     except asyncio.CancelledError:
         logger.info("Server cancelled, stopping...")
     except Exception as e:
         logger.error(f"Server error: {e}", exc_info=True)
         raise
     finally:
-        # Graceful shutdown
         logger.info("Stopping server...")
         await server.stop(grace=30)
         logger.info("Server stopped")
@@ -94,7 +104,7 @@ if __name__ == "__main__":
     try:
         asyncio.run(serve())
     except KeyboardInterrupt:
-        logger.info("Received keyboard interrupt")
+        logger.info("Process interrupted by user")
     except Exception as e:
-        logger.error(f"Fatal error: {e}", exc_info=True)
-        raise
+        logger.critical(f"Fatal startup error: {e}", exc_info=True)
+        sys.exit(1)

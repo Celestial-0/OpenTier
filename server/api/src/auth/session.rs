@@ -1,9 +1,43 @@
+//! Session domain operations (SQL delegated to session_repo).
+//!
+//! This module owns token generation/hashing and role mapping; every
+//! persistence statement lives in `infra::postgres::session_repo`.
+
+use std::sync::LazyLock;
+
 use chrono::{DateTime, Duration, Utc};
 use sqlx::PgPool;
 use uuid::Uuid;
 
 use super::{AuthError, Role, tokens};
 use sqlx::types::ipnetwork::IpNetwork;
+
+/// Session lifetime from configuration (`SESSION_EXPIRY_SECONDS`).
+/// Resolved lazily after dotenv has run; replaces the previous hardcoded
+/// 7-day expiry that ignored the setting.
+static SESSION_EXPIRY_SECS: LazyLock<i64> = LazyLock::new(|| {
+    std::env::var("SESSION_EXPIRY_SECONDS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(2_592_000)
+});
+
+fn role_label(role: Role) -> String {
+    match role {
+        Role::User => "user".into(),
+        Role::Contributor => "contributor".into(),
+        Role::Admin => "admin".into(),
+    }
+}
+
+fn role_from_label(label: &str) -> Option<Role> {
+    match label {
+        "user" => Some(Role::User),
+        "contributor" => Some(Role::Contributor),
+        "admin" => Some(Role::Admin),
+        _ => None,
+    }
+}
 
 /// Create a new session for a user with their role
 /// Returns (session_token, expires_at)
@@ -15,85 +49,71 @@ pub async fn create_session(
     user_agent: Option<String>,
 ) -> Result<(String, DateTime<Utc>), AuthError> {
     let session_token = tokens::generate_session_token();
-    let expires_at = Utc::now() + Duration::hours(168); // 7 days
+    let token_hash = tokens::hash_token(&session_token);
+    let expires_at = Utc::now() + Duration::seconds((*SESSION_EXPIRY_SECS).max(60));
 
-    sqlx::query!(
-        r#"
-        INSERT INTO sessions (user_id, session_token, expires_at, role, ip_address, user_agent)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        "#,
-        user_id,
-        session_token,
-        expires_at,
-        role as Role,
-        ip_address,
-        user_agent
+    crate::infra::postgres::session_repo::insert(
+        db,
+        crate::infra::postgres::session_repo::NewSession {
+            user_id,
+            raw_token: &session_token,
+            token_hash: &token_hash,
+            expires_at,
+            role_label: &role_label(role),
+            ip_address,
+            user_agent,
+        },
     )
-    .execute(db)
-    .await?;
+    .await
+    .map_err(AuthError::from)?;
 
     Ok((session_token, expires_at))
 }
 
-/// Get user ID and role from session token
+/// Get user ID and role from a raw session token
 /// Returns (user_id, role) if session is valid
-/// This eliminates the need for a separate DB query to fetch the role
+///
+/// Resolution is by token hash only, so plaintext lookups are no longer needed.
 pub async fn get_user_from_session(
     db: &PgPool,
     session_token: &str,
 ) -> Result<(Uuid, Role), AuthError> {
-    let result = sqlx::query!(
-        r#"
-        SELECT user_id, expires_at, role as "role: Role"
-        FROM sessions
-        WHERE session_token = $1
-        "#,
-        session_token
-    )
-    .fetch_optional(db)
-    .await?;
+    let token_hash = tokens::hash_token(session_token);
 
-    match result {
+    let row = crate::infra::postgres::session_repo::find_auth_by_hash(db, &token_hash)
+        .await
+        .map_err(AuthError::from)?;
+
+    match row {
         Some(session) => {
-            // Check if expired
             if session.expires_at < Utc::now() {
-                // Delete expired session
-                invalidate_session(db, session_token).await?;
+                invalidate_session_by_raw_token(db, session_token).await?;
                 return Err(AuthError::TokenExpired);
             }
-            Ok((session.user_id, session.role))
+            let role = role_from_label(&session.role_label).ok_or(AuthError::Internal)?;
+            Ok((session.user_id, role))
         }
         None => Err(AuthError::SessionNotFound),
     }
 }
 
-/// Invalidate a session
-pub async fn invalidate_session(db: &PgPool, session_token: &str) -> Result<(), AuthError> {
-    sqlx::query!(
-        r#"
-        DELETE FROM sessions
-        WHERE session_token = $1
-        "#,
-        session_token
-    )
-    .execute(db)
-    .await?;
-
+/// Invalidate a session given the raw token presented by the client
+pub async fn invalidate_session_by_raw_token(
+    db: &PgPool,
+    session_token: &str,
+) -> Result<(), AuthError> {
+    let token_hash = tokens::hash_token(session_token);
+    crate::infra::postgres::session_repo::delete_by_hash_or_raw(db, &token_hash, session_token)
+        .await
+        .map_err(AuthError::from)?;
     Ok(())
 }
 
 /// Invalidate all sessions for a user
 pub async fn invalidate_all_user_sessions(db: &PgPool, user_id: Uuid) -> Result<(), AuthError> {
-    sqlx::query!(
-        r#"
-        DELETE FROM sessions
-        WHERE user_id = $1
-        "#,
-        user_id
-    )
-    .execute(db)
-    .await?;
-
+    crate::infra::postgres::session_repo::delete_all_for_user(db, user_id)
+        .await
+        .map_err(AuthError::from)?;
     Ok(())
 }
 
@@ -103,30 +123,14 @@ pub async fn invalidate_all_sessions_except(
     user_id: Uuid,
     current_session_token: &str,
 ) -> Result<(), AuthError> {
-    sqlx::query!(
-        r#"
-        DELETE FROM sessions
-        WHERE user_id = $1 AND session_token != $2
-        "#,
-        user_id,
-        current_session_token
-    )
-    .execute(db)
-    .await?;
-
+    let current_hash = tokens::hash_token(current_session_token);
+    crate::infra::postgres::session_repo::delete_all_except(db, user_id, &current_hash)
+        .await
+        .map_err(AuthError::from)?;
     Ok(())
 }
 
 /// Cleanup expired sessions (should be run periodically)
 pub async fn cleanup_expired_sessions(db: &PgPool) -> Result<u64, sqlx::Error> {
-    let result = sqlx::query!(
-        r#"
-        DELETE FROM sessions
-        WHERE expires_at < NOW()
-        "#
-    )
-    .execute(db)
-    .await?;
-
-    Ok(result.rows_affected())
+    crate::infra::postgres::session_repo::delete_expired(db).await
 }

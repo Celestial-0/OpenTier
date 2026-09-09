@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 ARG BASE_IMAGE=debian:bookworm-slim
-ARG UV_EXTRA_ARGS="--extra cpu"
+ARG UV_EXTRA_ARGS=""
 
 # ── Stage 1: Builder ──────────────────────────────────────────────────
 FROM ${BASE_IMAGE} AS builder
@@ -13,8 +13,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv from Astral
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+# Install uv from Astral (curl-based so local builds don't need GHCR auth)
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    mv /root/.local/bin/uv /usr/local/bin/uv && \
+    mv /root/.local/bin/uvx /usr/local/bin/uvx
 
 WORKDIR /app
 
@@ -27,7 +29,7 @@ ENV UV_COMPILE_BYTECODE=1 \
 # Copy project specification
 COPY pyproject.toml uv.lock* .python-version* ./
 
-ARG UV_EXTRA_ARGS="--extra cpu"
+ARG UV_EXTRA_ARGS=""
 # Sync dependencies and download managed Python into /opt/uv/python
 RUN uv sync --frozen --no-dev --no-install-project ${UV_EXTRA_ARGS} || \
     uv sync --no-dev --no-install-project ${UV_EXTRA_ARGS}
@@ -42,14 +44,19 @@ RUN uv run playwright install chromium
 # ── Stage 2: Production Runner ────────────────────────────────────────
 FROM ${BASE_IMAGE} AS runner
 
-# Install uv from Astral in runner
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+# Create dedicated unprivileged user and group (UID 10001)
+RUN groupadd -g 10001 appuser && \
+    useradd -u 10001 -g appuser -s /bin/bash -m appuser
+
+# Reuse uv binary from builder (no GHCR dependency for local builds)
+COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
+COPY --from=builder /usr/local/bin/uvx /usr/local/bin/uvx
 
 WORKDIR /app
 
-# Copy managed Python runtime from /opt/uv and application from builder
-COPY --from=builder /opt/uv /opt/uv
-COPY --from=builder /app /app
+# Copy managed Python runtime and application with unprivileged user ownership
+COPY --from=builder --chown=appuser:appuser /opt/uv /opt/uv
+COPY --from=builder --chown=appuser:appuser /app /app
 
 # Install runtime utilities and Playwright OS dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -58,16 +65,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && uv run --project /app playwright install-deps chromium \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user and group (UID 10001) and grant full read/execute permissions
-RUN groupadd -g 10001 appuser && \
-    useradd -u 10001 -g appuser -s /bin/bash -m appuser && \
-    chown -R appuser:appuser /app /opt/uv /home/appuser && \
-    chmod -R 775 /app /opt/uv /home/appuser
 
 WORKDIR /app
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONPATH="/app:/app/generated" \
     UV_PYTHON_INSTALL_DIR=/opt/uv/python \
     UV_PROJECT_ENVIRONMENT=/app/.venv \
     PATH="/app/.venv/bin:/opt/uv/python/bin:$PATH" \

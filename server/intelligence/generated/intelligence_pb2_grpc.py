@@ -30,23 +30,33 @@ class HealthStub(object):
     PROTO VERSIONING STRATEGY
     =============================================================================
 
-    Version: 1.0.0 (2026-01-29)
+    Version: 1.1.0 (2026-08)
+
+    CHANGELOG 1.1.0:
+    - REMOVED dead RPCs (no production caller ⇒ removed):
+    Chat.GetConversation / Chat.DeleteConversation   (API owns conversations)
+    ResourceService.ChunkedUpload                     (no HTTP exposure;
+    FileChunk / ChunkMetadata / ChunkedUploadResponse removed with it,
+    resolving the chunk_index comment/behavior contradiction)
+    ResourceService.CancelIngestion                   (no route)
+    ResourceService.SyncResourceMetadata              (stub that reported no
+    conflicts; Sync* messages/enums removed with it)
+    Health.Ready                                      (unused by gateway)
+    - ADDED (additive): StreamErrorCode enum + StreamError message; populated in
+    ChatStreamChunk.typed_error alongside legacy string error field.
+    - DOCUMENTED: ChatStreamChunk state machine + is_final semantics.
 
     VERSIONING RULES:
     1. Package versioning: opentier.intelligence.v1, v2, etc. for breaking changes
     2. Field numbering: Reserve 1-15 for frequently used fields (1-byte encoding)
     3. Deprecation: Use [deprecated = true] annotation, maintain for 2 minor versions
-    4. Reserved fields: When removing fields, mark them as reserved
+    4. Reserved fields: When removing fields inside a surviving message, mark them reserved
     5. Backward compatibility: Only add optional fields, never remove required ones
 
     BREAKING CHANGE POLICY:
     - Major version bump (v1 → v2): Breaking changes allowed
-    - Minor version: New messages/fields only, no removals
-    - Both old and new versions supported for 6 months during migration
-
-    FIELD RESERVATION:
-    reserved 1000 to 1999; // Reserved for internal use
-    reserved 2000 to 2999; // Reserved for extensions
+    - Minor version: New messages/fields only; RPC removals require zero
+    production callers (verified) and are recorded in this changelog
     =============================================================================
 
     ============================================================================
@@ -66,11 +76,6 @@ class HealthStub(object):
                 request_serializer=intelligence__pb2.HealthCheckRequest.SerializeToString,
                 response_deserializer=intelligence__pb2.HealthCheckResponse.FromString,
                 _registered_method=True)
-        self.Ready = channel.unary_unary(
-                '/opentier.intelligence.v1.Health/Ready',
-                request_serializer=intelligence__pb2.ReadyCheckRequest.SerializeToString,
-                response_deserializer=intelligence__pb2.ReadyCheckResponse.FromString,
-                _registered_method=True)
 
 
 class HealthServicer(object):
@@ -78,23 +83,33 @@ class HealthServicer(object):
     PROTO VERSIONING STRATEGY
     =============================================================================
 
-    Version: 1.0.0 (2026-01-29)
+    Version: 1.1.0 (2026-08)
+
+    CHANGELOG 1.1.0:
+    - REMOVED dead RPCs (no production caller ⇒ removed):
+    Chat.GetConversation / Chat.DeleteConversation   (API owns conversations)
+    ResourceService.ChunkedUpload                     (no HTTP exposure;
+    FileChunk / ChunkMetadata / ChunkedUploadResponse removed with it,
+    resolving the chunk_index comment/behavior contradiction)
+    ResourceService.CancelIngestion                   (no route)
+    ResourceService.SyncResourceMetadata              (stub that reported no
+    conflicts; Sync* messages/enums removed with it)
+    Health.Ready                                      (unused by gateway)
+    - ADDED (additive): StreamErrorCode enum + StreamError message; populated in
+    ChatStreamChunk.typed_error alongside legacy string error field.
+    - DOCUMENTED: ChatStreamChunk state machine + is_final semantics.
 
     VERSIONING RULES:
     1. Package versioning: opentier.intelligence.v1, v2, etc. for breaking changes
     2. Field numbering: Reserve 1-15 for frequently used fields (1-byte encoding)
     3. Deprecation: Use [deprecated = true] annotation, maintain for 2 minor versions
-    4. Reserved fields: When removing fields, mark them as reserved
+    4. Reserved fields: When removing fields inside a surviving message, mark them reserved
     5. Backward compatibility: Only add optional fields, never remove required ones
 
     BREAKING CHANGE POLICY:
     - Major version bump (v1 → v2): Breaking changes allowed
-    - Minor version: New messages/fields only, no removals
-    - Both old and new versions supported for 6 months during migration
-
-    FIELD RESERVATION:
-    reserved 1000 to 1999; // Reserved for internal use
-    reserved 2000 to 2999; // Reserved for extensions
+    - Minor version: New messages/fields only; RPC removals require zero
+    production callers (verified) and are recorded in this changelog
     =============================================================================
 
     ============================================================================
@@ -104,13 +119,8 @@ class HealthServicer(object):
     """
 
     def Check(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def Ready(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """Liveness/basic reachability probe used by the gateway health endpoint.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -122,11 +132,6 @@ def add_HealthServicer_to_server(servicer, server):
                     servicer.Check,
                     request_deserializer=intelligence__pb2.HealthCheckRequest.FromString,
                     response_serializer=intelligence__pb2.HealthCheckResponse.SerializeToString,
-            ),
-            'Ready': grpc.unary_unary_rpc_method_handler(
-                    servicer.Ready,
-                    request_deserializer=intelligence__pb2.ReadyCheckRequest.FromString,
-                    response_serializer=intelligence__pb2.ReadyCheckResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -141,23 +146,33 @@ class Health(object):
     PROTO VERSIONING STRATEGY
     =============================================================================
 
-    Version: 1.0.0 (2026-01-29)
+    Version: 1.1.0 (2026-08)
+
+    CHANGELOG 1.1.0:
+    - REMOVED dead RPCs (no production caller ⇒ removed):
+    Chat.GetConversation / Chat.DeleteConversation   (API owns conversations)
+    ResourceService.ChunkedUpload                     (no HTTP exposure;
+    FileChunk / ChunkMetadata / ChunkedUploadResponse removed with it,
+    resolving the chunk_index comment/behavior contradiction)
+    ResourceService.CancelIngestion                   (no route)
+    ResourceService.SyncResourceMetadata              (stub that reported no
+    conflicts; Sync* messages/enums removed with it)
+    Health.Ready                                      (unused by gateway)
+    - ADDED (additive): StreamErrorCode enum + StreamError message; populated in
+    ChatStreamChunk.typed_error alongside legacy string error field.
+    - DOCUMENTED: ChatStreamChunk state machine + is_final semantics.
 
     VERSIONING RULES:
     1. Package versioning: opentier.intelligence.v1, v2, etc. for breaking changes
     2. Field numbering: Reserve 1-15 for frequently used fields (1-byte encoding)
     3. Deprecation: Use [deprecated = true] annotation, maintain for 2 minor versions
-    4. Reserved fields: When removing fields, mark them as reserved
+    4. Reserved fields: When removing fields inside a surviving message, mark them reserved
     5. Backward compatibility: Only add optional fields, never remove required ones
 
     BREAKING CHANGE POLICY:
     - Major version bump (v1 → v2): Breaking changes allowed
-    - Minor version: New messages/fields only, no removals
-    - Both old and new versions supported for 6 months during migration
-
-    FIELD RESERVATION:
-    reserved 1000 to 1999; // Reserved for internal use
-    reserved 2000 to 2999; // Reserved for extensions
+    - Minor version: New messages/fields only; RPC removals require zero
+    production callers (verified) and are recorded in this changelog
     =============================================================================
 
     ============================================================================
@@ -193,33 +208,6 @@ class Health(object):
             metadata,
             _registered_method=True)
 
-    @staticmethod
-    def Ready(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/opentier.intelligence.v1.Health/Ready',
-            intelligence__pb2.ReadyCheckRequest.SerializeToString,
-            intelligence__pb2.ReadyCheckResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
 
 class ChatStub(object):
     """============================================================================
@@ -244,16 +232,6 @@ class ChatStub(object):
                 request_serializer=intelligence__pb2.ChatRequest.SerializeToString,
                 response_deserializer=intelligence__pb2.ChatStreamChunk.FromString,
                 _registered_method=True)
-        self.GetConversation = channel.unary_unary(
-                '/opentier.intelligence.v1.Chat/GetConversation',
-                request_serializer=intelligence__pb2.GetConversationRequest.SerializeToString,
-                response_deserializer=intelligence__pb2.ConversationResponse.FromString,
-                _registered_method=True)
-        self.DeleteConversation = channel.unary_unary(
-                '/opentier.intelligence.v1.Chat/DeleteConversation',
-                request_serializer=intelligence__pb2.DeleteConversationRequest.SerializeToString,
-                response_deserializer=intelligence__pb2.DeleteConversationResponse.FromString,
-                _registered_method=True)
         self.GenerateTitle = channel.unary_unary(
                 '/opentier.intelligence.v1.Chat/GenerateTitle',
                 request_serializer=intelligence__pb2.GenerateTitleRequest.SerializeToString,
@@ -269,36 +247,21 @@ class ChatServicer(object):
     """
 
     def SendMessage(self, request, context):
-        """Send a message and get complete response
+        """Send a message and get complete response.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def StreamChat(self, request, context):
-        """Stream chat response in real-time
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def GetConversation(self, request, context):
-        """Retrieve conversation history (Persisted in API, but this RPC allows Intel to wrap it if needed, 
-        though API usually handles this directly. include for completeness if Architecture shifts)
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def DeleteConversation(self, request, context):
-        """Delete conversation
+        """Stream chat response in real-time.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def GenerateTitle(self, request, context):
-        """Generate conversation title using AI
+        """Generate conversation title using AI.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -316,16 +279,6 @@ def add_ChatServicer_to_server(servicer, server):
                     servicer.StreamChat,
                     request_deserializer=intelligence__pb2.ChatRequest.FromString,
                     response_serializer=intelligence__pb2.ChatStreamChunk.SerializeToString,
-            ),
-            'GetConversation': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetConversation,
-                    request_deserializer=intelligence__pb2.GetConversationRequest.FromString,
-                    response_serializer=intelligence__pb2.ConversationResponse.SerializeToString,
-            ),
-            'DeleteConversation': grpc.unary_unary_rpc_method_handler(
-                    servicer.DeleteConversation,
-                    request_deserializer=intelligence__pb2.DeleteConversationRequest.FromString,
-                    response_serializer=intelligence__pb2.DeleteConversationResponse.SerializeToString,
             ),
             'GenerateTitle': grpc.unary_unary_rpc_method_handler(
                     servicer.GenerateTitle,
@@ -402,60 +355,6 @@ class Chat(object):
             _registered_method=True)
 
     @staticmethod
-    def GetConversation(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/opentier.intelligence.v1.Chat/GetConversation',
-            intelligence__pb2.GetConversationRequest.SerializeToString,
-            intelligence__pb2.ConversationResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def DeleteConversation(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/opentier.intelligence.v1.Chat/DeleteConversation',
-            intelligence__pb2.DeleteConversationRequest.SerializeToString,
-            intelligence__pb2.DeleteConversationResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
     def GenerateTitle(request,
             target,
             options=(),
@@ -501,11 +400,6 @@ class ResourceServiceStub(object):
                 request_serializer=intelligence__pb2.AddResourceRequest.SerializeToString,
                 response_deserializer=intelligence__pb2.AddResourceResponse.FromString,
                 _registered_method=True)
-        self.ChunkedUpload = channel.stream_unary(
-                '/opentier.intelligence.v1.ResourceService/ChunkedUpload',
-                request_serializer=intelligence__pb2.FileChunk.SerializeToString,
-                response_deserializer=intelligence__pb2.ChunkedUploadResponse.FromString,
-                _registered_method=True)
         self.GetResourceStatus = channel.unary_unary(
                 '/opentier.intelligence.v1.ResourceService/GetResourceStatus',
                 request_serializer=intelligence__pb2.GetResourceStatusRequest.SerializeToString,
@@ -521,15 +415,10 @@ class ResourceServiceStub(object):
                 request_serializer=intelligence__pb2.DeleteResourceRequest.SerializeToString,
                 response_deserializer=intelligence__pb2.DeleteResourceResponse.FromString,
                 _registered_method=True)
-        self.CancelIngestion = channel.unary_unary(
-                '/opentier.intelligence.v1.ResourceService/CancelIngestion',
-                request_serializer=intelligence__pb2.CancelIngestionRequest.SerializeToString,
-                response_deserializer=intelligence__pb2.CancelIngestionResponse.FromString,
-                _registered_method=True)
-        self.SyncResourceMetadata = channel.unary_unary(
-                '/opentier.intelligence.v1.ResourceService/SyncResourceMetadata',
-                request_serializer=intelligence__pb2.SyncMetadataRequest.SerializeToString,
-                response_deserializer=intelligence__pb2.SyncMetadataResponse.FromString,
+        self.ReembedAll = channel.unary_unary(
+                '/opentier.intelligence.v1.ResourceService/ReembedAll',
+                request_serializer=intelligence__pb2.ReembedAllRequest.SerializeToString,
+                response_deserializer=intelligence__pb2.ReembedAllResponse.FromString,
                 _registered_method=True)
 
 
@@ -541,16 +430,7 @@ class ResourceServiceServicer(object):
     """
 
     def AddResource(self, request, context):
-        """Standard resource addition (for files < 100MB)
-        """
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def ChunkedUpload(self, request_iterator, context):
-        """Chunked upload for large files (> 100MB)
-        Client streams file chunks, server responds with final status
-        """
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -573,15 +453,8 @@ class ResourceServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def CancelIngestion(self, request, context):
+    def ReembedAll(self, request, context):
         """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def SyncResourceMetadata(self, request, context):
-        """Database synchronization - allows API layer to sync state with Intelligence
-        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -593,11 +466,6 @@ def add_ResourceServiceServicer_to_server(servicer, server):
                     servicer.AddResource,
                     request_deserializer=intelligence__pb2.AddResourceRequest.FromString,
                     response_serializer=intelligence__pb2.AddResourceResponse.SerializeToString,
-            ),
-            'ChunkedUpload': grpc.stream_unary_rpc_method_handler(
-                    servicer.ChunkedUpload,
-                    request_deserializer=intelligence__pb2.FileChunk.FromString,
-                    response_serializer=intelligence__pb2.ChunkedUploadResponse.SerializeToString,
             ),
             'GetResourceStatus': grpc.unary_unary_rpc_method_handler(
                     servicer.GetResourceStatus,
@@ -614,15 +482,10 @@ def add_ResourceServiceServicer_to_server(servicer, server):
                     request_deserializer=intelligence__pb2.DeleteResourceRequest.FromString,
                     response_serializer=intelligence__pb2.DeleteResourceResponse.SerializeToString,
             ),
-            'CancelIngestion': grpc.unary_unary_rpc_method_handler(
-                    servicer.CancelIngestion,
-                    request_deserializer=intelligence__pb2.CancelIngestionRequest.FromString,
-                    response_serializer=intelligence__pb2.CancelIngestionResponse.SerializeToString,
-            ),
-            'SyncResourceMetadata': grpc.unary_unary_rpc_method_handler(
-                    servicer.SyncResourceMetadata,
-                    request_deserializer=intelligence__pb2.SyncMetadataRequest.FromString,
-                    response_serializer=intelligence__pb2.SyncMetadataResponse.SerializeToString,
+            'ReembedAll': grpc.unary_unary_rpc_method_handler(
+                    servicer.ReembedAll,
+                    request_deserializer=intelligence__pb2.ReembedAllRequest.FromString,
+                    response_serializer=intelligence__pb2.ReembedAllResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -656,33 +519,6 @@ class ResourceService(object):
             '/opentier.intelligence.v1.ResourceService/AddResource',
             intelligence__pb2.AddResourceRequest.SerializeToString,
             intelligence__pb2.AddResourceResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def ChunkedUpload(request_iterator,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.stream_unary(
-            request_iterator,
-            target,
-            '/opentier.intelligence.v1.ResourceService/ChunkedUpload',
-            intelligence__pb2.FileChunk.SerializeToString,
-            intelligence__pb2.ChunkedUploadResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -775,7 +611,7 @@ class ResourceService(object):
             _registered_method=True)
 
     @staticmethod
-    def CancelIngestion(request,
+    def ReembedAll(request,
             target,
             options=(),
             channel_credentials=None,
@@ -788,36 +624,9 @@ class ResourceService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/opentier.intelligence.v1.ResourceService/CancelIngestion',
-            intelligence__pb2.CancelIngestionRequest.SerializeToString,
-            intelligence__pb2.CancelIngestionResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def SyncResourceMetadata(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/opentier.intelligence.v1.ResourceService/SyncResourceMetadata',
-            intelligence__pb2.SyncMetadataRequest.SerializeToString,
-            intelligence__pb2.SyncMetadataResponse.FromString,
+            '/opentier.intelligence.v1.ResourceService/ReembedAll',
+            intelligence__pb2.ReembedAllRequest.SerializeToString,
+            intelligence__pb2.ReembedAllResponse.FromString,
             options,
             channel_credentials,
             insecure,

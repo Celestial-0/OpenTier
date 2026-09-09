@@ -2,7 +2,6 @@
 
 import logging
 import sys
-from typing import Any
 
 
 class StructuredFormatter(logging.Formatter):

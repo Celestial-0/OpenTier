@@ -1,167 +1,160 @@
-# Engine Architecture
+# Intelligence Engine Architecture
 
-## `IntelligenceEngine` — Composition Root
+## Two Runtimes
 
-```python
-class IntelligenceEngine:
-    def __init__(self):
-        self.llm_client = LLMClient()
-        self.query_pipeline = QueryPipeline(llm_client=self.llm_client)
-        self.chat_service = ChatService(self.query_pipeline)
+The intelligence service ships two independent Python entry points that share the same Docker image:
+
+| Entry Point | Command | Purpose |
+|-------------|---------|---------|
+| `main.py` | `uv run python main.py` | gRPC server — handles synchronous chat + resource API calls |
+| `worker.py` | `uv run python worker.py` | Redis Streams consumer — runs durable background tasks |
+
+This separation means the gRPC server and background workers scale and fail independently.
+
+---
+
+## Module Layout (`server/intelligence/`)
+
+```
+server/intelligence/
+├── main.py                    ← gRPC server entry point
+├── worker.py                  ← Worker runtime entry point
+├── core/
+│   ├── config.py              ← Pydantic-settings configuration
+│   ├── events.py              ← EventEnvelope + Streams constants
+│   ├── lifecycle.py           ← Startup / shutdown hooks
+│   └── logging.py             ← Structured logging setup
+├── features/
+│   ├── chat/
+│   │   ├── grpc_servicer.py   ← ChatServicer (gRPC handler)
+│   │   ├── service.py         ← ChatService orchestration
+│   │   ├── graph.py           ← LangGraph chat pipeline
+│   │   ├── pipeline.py        ← Query pipeline (RAG flow)
+│   │   ├── memory.py          ← Memory extraction worker handler
+│   │   └── repository.py     ← chat_messages DB queries
+│   ├── knowledge/
+│   │   ├── grpc_servicer.py   ← ResourceServiceServicer (gRPC handler)
+│   │   ├── service.py         ← KnowledgeService orchestration
+│   │   ├── queue.py           ← Publish ingestion jobs to Redis
+│   │   ├── repository.py      ← documents DB queries
+│   │   ├── worker.py          ← Ingestion job consumer handler
+│   │   └── pipeline/
+│   │       ├── processor.py   ← DocumentProcessor (chunk + embed + upsert)
+│   │       ├── chunker.py     ← Token-aware text chunker
+│   │       ├── crawler.py     ← Web crawler
+│   │       ├── retry.py       ← tenacity retry decorators
+│   │       └── scrapers/      ← Browser + web + GitHub scrapers
+│   ├── billing/
+│   │   ├── consumer.py        ← Metering event consumer handler
+│   │   ├── ledger.py          ← Credit transaction ledger
+│   │   ├── calculator.py      ← Token cost calculator
+│   │   └── publisher.py       ← Publish chat events to Redis
+│   └── health/
+│       ├── grpc_servicer.py   ← HealthServicer
+│       └── service.py         ← Dependency health checks
+├── shared/
+│   ├── database/              ← SQLAlchemy session, models
+│   ├── llm/                   ← LLMGateway, ModelCatalog, embeddings
+│   ├── qdrant/                ← QdrantVectorStore, QdrantHybridRetriever
+│   ├── redis/                 ← EventBus, ConsumerGroupRunner, WorkerRuntime
+│   ├── grpc/                  ← gRPC context helpers, error mapping
+│   └── crypto/                ← AES-256-GCM secrets (ENCRYPTION_MASTER_KEY)
+├── generated/                 ← protoc-generated stubs
+├── prompts/                   ← chat_system.md + loader.py
+└── scripts/                   ← backfill_qdrant.py, dlq.py, smoke_qdrant.py, etc.
 ```
 
+---
+
+## gRPC Server (`main.py`)
+
+Registers 3 servicers against a shared `grpc.aio.server`:
+
+```python
+# features/health/grpc_servicer.py
+health_pb2_grpc.add_HealthServicer_to_server(HealthServicer(), server)
+
+# features/chat/grpc_servicer.py
+intelligence_pb2_grpc.add_ChatServicer_to_server(ChatServicer(catalog, retriever), server)
+
+# features/knowledge/grpc_servicer.py
+intelligence_pb2_grpc.add_ResourceServiceServicer_to_server(ResourceServicer(svc), server)
+```
+
+Startup sequence in `main.py`:
+1. Load `core/config.py` (Pydantic-settings, validates all env vars)
+2. Initialize DB pool (`shared/database/session.py`)
+3. Connect to Qdrant, ensure `knowledge_chunks` collection exists
+4. Connect to Redis
+5. Build `ModelCatalog`, `CloudEmbeddingGateway`, `QdrantHybridRetriever`
+6. Register gRPC servicers and start server on `0.0.0.0:50051`
+
+---
+
+## Worker Runtime (`worker.py`)
+
+Consumes Redis Streams events. Controlled by `WORKER_ROLE` env var:
+
+| `WORKER_ROLE` | Stream | Group | Handler |
+|--------------|--------|-------|---------|
+| `ingestion` | `ot:intel:ingestion_jobs` | `workers` | `features/knowledge/worker.py::handle_ingestion_job` |
+| `metering` | `ot:intel:chat_events` | `metering` | `features/billing/consumer.py::handle_chat_completed` |
+| `memory` | `ot:intel:chat_events` | `memory` | `features/chat/memory.py::handle_memory_extraction` |
+| `heartbeat` | `ot:intel:heartbeat` | `workers` | log + ack |
+| `all` *(default)* | all of the above | — | all handlers |
+
+**Startup sweep**: on boot, the worker calls `sweep_stuck_jobs()` to re-enqueue any ingestion jobs left in `processing` state by a previously crashed worker. A periodic sweep runs every 5 minutes.
+
+**Stream metrics**: every 60 seconds, logs `length`, `pending`, and `dlq_depth` for each stream.
+
+**DLQ**: after `max_retries=3` failed handler attempts, the message is written to `{stream}:dlq` and acknowledged from the original stream.
+
+---
+
+## Architecture Diagram
 
 <Mermaid chart={`
 flowchart TB
-    Engine["IntelligenceEngine\nengine/__init__.py"]
-
-    subgraph CHAT["Chat Layer"];
-        direction TB;
-        ChatSvc["ChatService\nengine/chat/service.py"]
-        ConvStorage["ConversationStorage\nengine/chat/storage.py"]
-        MemStorage["MemoryStorage\nengine/chat/storage.py"]
+    subgraph gRPC["gRPC Server (main.py :50051)"]
+        ChatSvc["features/chat/\ngrpc_servicer.py"]
+        KnowSvc["features/knowledge/\ngrpc_servicer.py"]
+        HealthSvc["features/health/\ngrpc_servicer.py"]
     end
 
-    subgraph QUERY["Query Layer"];
-        direction LR;
-        QueryPipe["QueryPipeline\nengine/query/pipeline.py"]
-        LLMClient["LLMClient\nengine/query/llm/"]
-        HybridSearch["HybridSearchEngine\nengine/query/retrieval/"]
-        EmbModel["EmbeddingModel\nengine/embedding/models.py"]
-        QueryPipe --> LLMClient
-        QueryPipe --> HybridSearch
-        HybridSearch --> EmbModel
+    subgraph Workers["Worker Runtime (worker.py)"]
+        IngW["ingestion consumer\nfeatures/knowledge/worker.py"]
+        MeterW["metering consumer\nfeatures/billing/consumer.py"]
+        MemW["memory consumer\nfeatures/chat/memory.py"]
+        HBW["heartbeat consumer"]
     end
 
-    subgraph INGEST["Ingestion Layer"];
-        direction LR;
-        DocProcessor["DocumentProcessor\nengine/ingestion/processor.py"]
-        DocStorage["DocumentStorage\nengine/ingestion/storage.py"]
-        EmbStorage["EmbeddingStorage\nengine/embedding/storage.py"]
-        JobStorage["JobStorage\nengine/ingestion/storage.py"]
-        DocProcessor --> DocStorage
-        DocProcessor --> EmbStorage
-        DocProcessor --> JobStorage
+    subgraph Shared["shared/"]
+        Catalog["llm/catalog.py\nModelCatalog"]
+        Gateway["llm/gateway.py\nLLMGateway"]
+        Embed["llm/embeddings.py\nCloudEmbeddingGateway"]
+        QStore["qdrant/client.py\nQdrantVectorStore"]
+        RBus["redis/bus.py\nEventBus"]
     end
 
-    DB[("PostgreSQL\npgvector")]
+    Redis[("Redis 8 Streams")]
+    Qdrant[("Qdrant\nknowledge_chunks")]
+    PgMain[("PostgreSQL 18\nconversations · metadata")]
+    LLM["LLM Provider\nGemini · OpenAI · Ollama"]
 
-    Engine --> CHAT
-    Engine --> INGEST
-    ChatSvc --> QueryPipe
-    ChatSvc --> ConvStorage
-    ChatSvc --> MemStorage
-    ConvStorage --> DB
-    MemStorage --> DB
-    HybridSearch --> DB
-    DocStorage --> DB
-    EmbStorage --> DB
-    JobStorage --> DB
+    ChatSvc --> Catalog
+    ChatSvc --> Gateway
+    ChatSvc --> QStore
+    KnowSvc --> RBus
+    RBus --> Redis
+    Redis --> IngW
+    Redis --> MeterW
+    Redis --> MemW
+    IngW --> Embed
+    IngW --> QStore
+    IngW --> PgMain
+    QStore --> Qdrant
+    Embed --> LLM
+    Gateway --> LLM
+    ChatSvc --> PgMain
+    KnowSvc --> PgMain
 `} />
-
-
-## `ChatService` (`engine/chat/service.py`)
-
-Orchestrates a full chat turn:
-
-```python
-async def send_message(
-    user_id: str,
-    conversation_id: str,
-    message: str,
-    metadata: dict = {},
-    config: ChatConfig = None
-) -> ChatResponse:
-    conversation = await ConversationStorage.get_or_create(conversation_id, user_id)
-    await ConversationStorage.save_message(role="user", content=message, parent_id=config.parent_id)
-    memory = await MemoryStorage.get_user_memory(user_id)
-    response: QueryResponse = await self.query_pipeline.run(
-        query=message,
-        user_id=user_id,
-        conversation_id=conversation_id,
-        memory=memory,
-        config=config
-    )
-    await ConversationStorage.save_message(role="assistant", content=response.response, sources=response.sources)
-    return ChatResponse(response=response.response, sources=response.sources, metrics=response.metrics)
-```
-
-`stream_chat` is the same flow but returns an `AsyncGenerator[ChatStreamChunk]` — the LLM call is replaced with a streaming call, and each token is immediately yielded.
-
-## Stream Error Code Mapping
-
-The `ChatService` maps Python exceptions to gRPC stream error chunk types:
-
-| Exception | `ChatStreamChunk.error_code` |
-|-----------|------------------------------|
-| `TimeoutError` | `TIMEOUT` |
-| `RateLimitError` | `RATE_LIMITED` |
-| `ContextTooLongError` | `CONTEXT_TOO_LONG` |
-| `ModelUnavailableError` | `MODEL_UNAVAILABLE` |
-| `ValidationError` | `INVALID_REQUEST` |
-| All others | `INTERNAL_ERROR` |
-
-Error chunks are sent as a terminal `ChatStreamChunk` with `is_final=True` before the stream closes.
-
-## `QueryPipeline` (`engine/query/pipeline.py`)
-
-```python
-class QueryPipeline:
-    def __init__(
-        self,
-        llm_client: LLMClient,
-        top_k: int = 5,
-        max_context_length: int = 2000,
-        vector_weight: float = 0.7,
-        keyword_weight: float = 0.3,
-    )
-
-    async def run(query, user_id, conversation_id, memory, config) -> QueryResponse:
-        context: QueryContext = await self.retrieve_context(query, user_id)
-        optimized_context = self._optimize_context(context, max_context_length)
-        response = await self.llm_client.generate(
-            query=query,
-            context=optimized_context,
-            memory=memory,
-            config=config
-        )
-        return QueryResponse(response=response, context=context, sources=context.chunks)
-```
-
-`QueryContext`:
-```python
-@dataclass
-class QueryContext:
-    chunks: List[SearchResult]     # top_k results from hybrid search
-    context_text: str              # concatenated chunk content
-    total_chunks: int
-    avg_similarity: float
-```
-
-`QueryResponse`:
-```python
-@dataclass
-class QueryResponse:
-    response: str
-    context: QueryContext
-    sources: List[SearchResult]
-    metrics: Optional[ChatMetrics]
-```
-
-## Internal Data Flow — Non-Streaming
-
-
-<Mermaid chart={`
-flowchart TD
-    RPC["gRPC: ChatRequest arrives"]
-    SaveUser["ConversationStorage\nsave user message to chat_messages"]
-    GetMemory["MemoryStorage\nget user_memories WHERE user_id"]
-    HSearch["HybridSearchEngine\nhybrid_search() SQL function\nvector + keyword RRF"]
-    BuildPrompt["QueryPipeline\nbuild prompt:\nmemory + context chunks + conversation history + message"]
-    LLMGen["LLMClient.generate()\nOpenAI-compatible API call"]
-    SaveAssist["ConversationStorage\nsave assistant message + sources"]
-    Return["Return ChatResponse"]
-
-    RPC --> SaveUser --> GetMemory --> HSearch --> BuildPrompt --> LLMGen --> SaveAssist --> Return
-`} />
-

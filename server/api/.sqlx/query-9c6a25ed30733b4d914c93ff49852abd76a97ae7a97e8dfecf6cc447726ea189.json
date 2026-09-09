@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT amount::float8 AS \"amount\" FROM credit_holds\n        WHERE idempotency_key = $1 AND user_id = $2 AND status = 'open'\n        FOR UPDATE\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "amount",
+        "type_info": "Float8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "9c6a25ed30733b4d914c93ff49852abd76a97ae7a97e8dfecf6cc447726ea189"
+}

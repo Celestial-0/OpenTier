@@ -1,133 +1,148 @@
 # Hybrid Retrieval
 
-## Retrieval Architecture
+## Overview
 
-OpenTier uses Reciprocal Rank Fusion (RRF) combining two complementary search strategies:
+v1.1.0 replaces the PostgreSQL `hybrid_search()` SQL function with **Qdrant server-side Reciprocal Rank Fusion (RRF)** over two vector legs:
 
-| Strategy | Index | Strength | Weakness |
-|----------|-------|----------|---------|
-| Vector search | HNSW (cosine distance) | Semantic similarity, handles synonyms | Misses exact keywords, opaque |
-| Keyword search | GIN (tsvector BM25) | Exact terms, proper nouns, code | Fails on paraphrasing, semantic gap |
+| Leg | Technique | Dimension | Notes |
+|-----|-----------|-----------|-------|
+| Dense | Cosine similarity | 3072 | `text-embedding-3-large` via OpenAI API |
+| Sparse | BM25-style hashed TF | 65 536 hash indices | `HashedSparseEncoder` (in-process, no model) |
+| Fusion | RRF (`models.Fusion.RRF`) | — | Qdrant server-side, no Python ranking code |
 
-RRF normalizes both ranked lists into a single unified score, combining their strengths.
+---
 
-## `hybrid_search()` SQL Function
+## Module: `shared/qdrant/client.py`
 
-Defined in migration `20260115000006`:
+```
+shared/qdrant/
+├── client.py    ← QdrantVectorStore + QdrantHybridRetriever
+└── __init__.py
+```
 
-```sql
-CREATE OR REPLACE FUNCTION hybrid_search(
-    query_embedding vector(384),   -- encoded query
-    query_text text,               -- raw query text for keyword search
-    p_user_id text,                -- restrict to user's documents + global
-    p_limit integer DEFAULT 20,
-    vector_weight float DEFAULT 0.7,
-    keyword_weight float DEFAULT 0.3
-) RETURNS TABLE (
-    chunk_id uuid,
-    document_id uuid,
-    content text,
-    similarity_score float,
-    rank integer
+### `QdrantVectorStore`
+
+Thin async adapter over `qdrant-client`. One instance per process, connected to `QDRANT_URL`.
+
+```python
+class QdrantVectorStore:
+    COLLECTION = "knowledge_chunks"
+
+    async def ensure_collection(self) -> None:
+        # Creates collection if absent; recreates on dimension mismatch
+        # HNSW config: m=16, ef_construct=128
+        # Payload indexes: user_id (tenant), is_global, document_id, chunk_index
+
+    async def upsert_chunks(self, items: list[dict]) -> int:
+        # Writes dense + sparse PointStruct batch to Qdrant
+
+    async def hybrid_search(
+        self,
+        query_dense: list[float],
+        query_sparse_indices: list[int],
+        query_sparse_values: list[float],
+        user_id: str,
+        top_k: int = 5,
+    ) -> list[RetrievedChunk]: ...
+
+    async def delete_document(self, document_id: str) -> None: ...
+    async def delete_user_data(self, user_id: str) -> None: ...
+```
+
+### `QdrantHybridRetriever`
+
+High-level retriever used by the chat pipeline:
+
+```python
+class QdrantHybridRetriever:
+    store: QdrantVectorStore
+    embedder: CloudEmbeddingGateway   # dense embeddings
+    sparse: HashedSparseEncoder        # sparse encoding
+
+    async def search(
+        self,
+        query: str,
+        user_id: str,
+        top_k: int = 20,
+        document_id: Optional[uuid.UUID] = None,
+    ) -> list[SearchResult]:
+        # 1. dense = embedder.embed_query(query)        → 3072-dim vector
+        # 2. s_idx, s_val = sparse.encode(query)        → hashed BM25 indices
+        # 3. hits = store.hybrid_search(dense, sparse)  → Qdrant RRF fusion
+        # 4. Optionally backfill document_title from PostgreSQL if missing in payload
+        # 5. Return List[SearchResult]
+```
+
+---
+
+## Hybrid Search — Request Structure
+
+Qdrant's `query_points` with server-side RRF:
+
+```python
+response = await client.query_points(
+    collection_name="knowledge_chunks",
+    prefetch=[
+        # Leg 1: Dense cosine
+        Prefetch(query=query_dense, using="dense", limit=top_k * 4, filter=tenant_filter),
+        # Leg 2: Sparse BM25
+        Prefetch(query=SparseVector(indices=q_idx, values=q_val), using="sparse", limit=top_k * 4, filter=tenant_filter),
+    ],
+    query=FusionQuery(fusion=Fusion.RRF),   # server-side RRF
+    limit=top_k,
+    with_payload=True,
 )
 ```
 
-**Algorithm**:
+**Tenant filter**: each search is scoped to `user_id == <current_user>` OR `is_global == true` — users only retrieve their own documents plus shared global documents.
 
-```sql
--- Vector search branch
-WITH vector_results AS (
-    SELECT dc.id, dc.document_id, dc.content,
-           1 - (dc.embedding <=> query_embedding) AS sim,
-           ROW_NUMBER() OVER (ORDER BY dc.embedding <=> query_embedding) AS vrank
-    FROM document_chunks dc
-    JOIN documents d ON dc.document_id = d.id
-    WHERE d.user_id = p_user_id OR d.is_global = true
-    ORDER BY dc.embedding <=> query_embedding
-    LIMIT p_limit * 2
-),
--- Keyword search branch
-keyword_results AS (
-    SELECT dc.id, dc.document_id, dc.content,
-           ts_rank_cd(to_tsvector('english', dc.content),
-                      plainto_tsquery('english', query_text)) AS krank_score,
-           ROW_NUMBER() OVER (ORDER BY krank_score DESC) AS krank
-    FROM document_chunks dc
-    JOIN documents d ON dc.document_id = d.id
-    WHERE d.user_id = p_user_id OR d.is_global = true
-      AND to_tsvector('english', dc.content) @@ plainto_tsquery('english', query_text)
-    ORDER BY krank_score DESC
-    LIMIT p_limit * 2
-),
--- Reciprocal Rank Fusion
-rrf AS (
-    SELECT
-        COALESCE(v.id, k.id) AS chunk_id,
-        COALESCE(v.document_id, k.document_id) AS document_id,
-        COALESCE(v.content, k.content) AS content,
-        COALESCE(vector_weight / (60 + v.vrank), 0)
-          + COALESCE(keyword_weight / (60 + k.krank), 0) AS rrf_score
-    FROM vector_results v
-    FULL OUTER JOIN keyword_results k ON v.id = k.id
-)
-SELECT chunk_id, document_id, content, rrf_score, ROW_NUMBER() OVER (ORDER BY rrf_score DESC)
-FROM rrf
-ORDER BY rrf_score DESC
-LIMIT p_limit
-```
+---
 
-**RRF formula**: `score = vector_weight / (60 + vector_rank) + keyword_weight / (60 + keyword_rank)`
-
-The constant `60` is the standard RRF smoothing parameter — prevents top-1 results from dominating when rank differences are large.
-
-## Pipeline: `HybridSearchEngine`
-
+## Pipeline: `QdrantHybridRetriever.search()`
 
 <Mermaid chart={`
 flowchart TD
     Query["User query string"]
-    Encode["EmbeddingModel.encode(query)\nquery → vector(384)"]
-    SQL["hybrid_search() SQL function\n(pgvector cosine + tsvector BM25 + RRF)"]
-    Results["List of SearchResult\nchunk_id, document_id, content, relevance_score"]
-    TopK["Take top_k=5 results\nfor context building"]
-    Context["QueryContext\nchunks + context_text + avg_similarity"]
+    Dense["CloudEmbeddingGateway.embed_query()\nquery → vector(3072)"]
+    Sparse["HashedSparseEncoder.encode()\nquery → (indices, values)"]
+    Qdrant["QdrantVectorStore.hybrid_search()\nPrefetch dense + sparse → RRF fusion"]
+    Results["List of RetrievedChunk\nchunk_id, document_id, content, similarity_score"]
+    Backfill["Optional: backfill document_title from PostgreSQL"]
+    TopK["SearchResult list (top_k=20 default)"]
 
-    Query --> Encode --> SQL --> Results --> TopK --> Context
+    Query --> Dense --> Qdrant
+    Query --> Sparse --> Qdrant
+    Qdrant --> Results --> Backfill --> TopK
 `} />
 
 
-## Index Specifications
+## Collection Schema
 
-**Vector index** (HNSW):
-```sql
-CREATE INDEX ON document_chunks USING hnsw (embedding vector_cosine_ops)
-WITH (m = 16, ef_construction = 64);
+| Field | Type | Configuration |
+|-------|------|--------------|
+| `dense` (vector) | `float[]` | Size: 3072, Distance: Cosine, HNSW m=16 ef_construct=128 |
+| `sparse` (vector) | `SparseVector` | BM25-style hash indices (dim=65536) |
+| `user_id` (payload) | keyword | Tenant index (`is_tenant=true`) for partition performance |
+| `is_global` (payload) | bool | Indexed for fast global doc filtering |
+| `document_id` (payload) | keyword | Indexed for per-document deletion |
+| `chunk_index` (payload) | integer | Ordered chunk position within document |
+| `content` (payload) | text | Raw chunk text (not indexed) |
+| `document_title` (payload) | text | Denormalized for zero-join retrieval |
+| `source_url` (payload) | text | Origin URL or repo path |
+
+---
+
+## Retrieval in the Chat Pipeline
+
+The `features/chat/pipeline.py` (`QueryPipeline`) calls `retriever.search()` when `use_rag=true`:
+
+```python
+chunks = await retriever.search(
+    query=user_message,
+    user_id=user_id,
+    top_k=config.top_k or 20,
+)
+context = format_citations(chunks)  # [1] content [source: title]
 ```
-- `m = 16`: number of bi-directional links per node (higher = more accurate, more memory)
-- `ef_construction = 64`: search width during index build (higher = more accurate index)
-- Search operator: `<=>` (cosine distance; 0 = identical, 2 = maximally different)
 
-**Full-text search index** (GIN):
-```sql
-CREATE INDEX ON document_chunks USING gin(to_tsvector('english', content));
-```
-- `'english'` dictionary: stemming, stopword removal
-- `ts_rank_cd`: rank by cover density (proximity of matched terms)
-- `plainto_tsquery`: converts raw user query to tsquery without requiring special syntax
-
-## Access Control in Search
-
-The `WHERE d.user_id = p_user_id OR d.is_global = true` clause enforces document-level access control at the database layer:
-
-- A user can only retrieve chunks from documents they own
-- Global documents (`is_global = true`, set by admins) are available to all users
-- There is **no role-based document access** beyond this binary global/private distinction
-- Access control is enforced in SQL — not in application code — making it harder to bypass accidentally
-
-## `QueryPipeline` Weights
-
-Default weights (configurable):
-- `vector_weight = 0.7` (70% semantic)
-- `keyword_weight = 0.3` (30% keyword)
-
-These can be overridden per-request via `ChatConfig.context_limit` (though the proto does not expose `vector_weight` directly — weights are currently service-level config, not per-request).
+The formatted context is injected into the LLM prompt alongside user memory and conversation history.

@@ -1,0 +1,121 @@
+# Memory Subsystem
+
+## Overview
+
+In OpenTier v1.1.0, user memory is a **persistent, personalized memory layer** that spans across conversations while being extracted **asynchronously** via Redis Streams.
+
+Memory extraction is intentionally decoupled from the hot streaming chat path:
+1. During chat, the user's existing memory is fetched with a quick indexed lookup and injected into the prompt.
+2. Upon completion of a chat turn, the intelligence service publishes an event to Redis Streams.
+3. A background worker picks up the event, executes LLM-driven memory extraction, and atomically upserts the memory ledger.
+
+This architecture ensures zero latency impact on Time-to-First-Token (TTFT) and token streaming throughput.
+
+---
+
+## Data Model (`user_memories`)
+
+The transactional system of record for memory is PostgreSQL 18:
+
+```sql
+CREATE TABLE IF NOT EXISTS user_memories (
+    user_id VARCHAR(255) PRIMARY KEY,
+    memory TEXT NOT NULL DEFAULT '',
+    metadata JSONB NOT NULL DEFAULT '{}',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_memories_updated_at ON user_memories(updated_at);
+```
+
+### Schema Attributes
+
+| Column | Type | Description |
+|---|---|---|
+| `user_id` | `VARCHAR(255)` | Primary key identifying the user. |
+| `memory` | `TEXT` | Compact, synthesized text representation of user preferences, context, and facts. |
+| `metadata` | `JSONB` | Structured metadata (e.g. extraction count, model used, topic tags). |
+| `updated_at` | `TIMESTAMPTZ` | Timestamp of the most recent memory update. |
+
+---
+
+## Asynchronous Memory Extraction Flow
+
+<Mermaid chart={`
+sequenceDiagram
+    participant Chat as Chat Service
+    participant Redis as Redis 8 Streams (CHAT_EVENTS)
+    participant Worker as Background Worker (role=memory)
+    participant LLM as LLM Provider
+    participant DB as PostgreSQL 18 (user_memories)
+
+    Chat->>Chat: Stream chat tokens to user
+    Chat->>Redis: XADD opentier:intel:chat_events (chat.completed.v1)
+    Note over Chat: Chat HTTP/SSE completes immediately
+
+    Worker->>Redis: XREADGROUP group=memory stream=CHAT_EVENTS
+    Redis-->>Worker: chat.completed.v1 envelope
+    Worker->>DB: SELECT memory FROM user_memories WHERE user_id=$1
+    DB-->>Worker: Existing memory
+    Worker->>LLM: Prompt LLM: synthesize updated facts from turn
+    LLM-->>Worker: Extracted facts & delta
+    Worker->>DB: INSERT ... ON CONFLICT (user_id) DO UPDATE
+    Worker->>Redis: XACK opentier:intel:chat_events
+`} />
+
+---
+
+## Worker Consumer Handler (`features/chat/memory.py`)
+
+The worker registers consumer group `memory` listening to stream `Streams.CHAT_EVENTS`:
+
+```python
+# features/chat/memory.py
+async def handle_memory_extraction(envelope: EventEnvelope, msg_id: str) -> None:
+    """Extract user preferences and facts asynchronously after chat turn completes."""
+    payload = envelope.payload
+    user_id = payload.get("user_id")
+    user_message = payload.get("user_message")
+    assistant_message = payload.get("assistant_message")
+
+    if not user_id or not user_message or not assistant_message:
+        return
+
+    # 1. Fetch current memory
+    current_memory = await repository.get_user_memory(user_id)
+
+    # 2. Run summarizer LLM prompt
+    updated_memory = await extract_memory_delta(
+        existing=current_memory,
+        user_message=user_message,
+        assistant_message=assistant_message,
+    )
+
+    # 3. Upsert back to PostgreSQL
+    if updated_memory and updated_memory != current_memory:
+        await repository.upsert_user_memory(user_id, updated_memory)
+```
+
+---
+
+## Prompt Injection & Context Assembly
+
+During a chat request in `features/chat/pipeline.py`, the stored memory is loaded and provided to the system prompt template:
+
+```markdown
+<!-- prompts/chat_system.md -->
+You are OpenTier, an intelligent AI assistant.
+
+{% if user_memory %}
+<user_memory>
+{{ user_memory }}
+</user_memory>
+Use the user memory context above to tailor responses to the user's preferences,
+ongoing projects, and style without explicitly repeating it unless relevant.
+{% endif %}
+```
+
+### Safety & Size Boundaries
+- **Length Capping**: Memory updates are capped to prevent context window explosion.
+- **Deduplication**: Sublinear extraction prompts ensure repetitive queries do not pollute memory with duplicated statements.
+- **Isolation**: Tenant filtering ensures `user_id` boundaries are strictly enforced across memory queries and storage.

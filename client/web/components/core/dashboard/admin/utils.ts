@@ -1,12 +1,12 @@
 export const getStatusColor = (status: string) => {
     switch (status) {
         case "completed":
-            return "bg-green-500";
+            return "bg-primary";
         case "processing":
-            return "bg-yellow-500";
+            return "bg-amber-500";
         case "failed":
-            return "bg-red-500";
+            return "bg-destructive";
         default:
-            return "bg-gray-500";
+            return "bg-muted-foreground";
     }
 };

@@ -16,10 +16,29 @@ import {
     fetchResourcesApi,
     getResourceStatusApi,
     toggleUserDisabledApi,
-    updateUserLimitApi,
     updateUserRoleApi,
 } from '@/lib/api/admin-api';
 import { getSubmissionQueue as getSubmissionQueueApi, reviewSubmission as reviewSubmissionApi } from '@/lib/api/contributor-api';
+import {
+    fetchProvidersApi,
+    fetchAllModelsApi,
+    createProviderApi,
+    updateProviderApi,
+    deleteProviderApi,
+    createModelApi,
+    updateModelApi,
+    deleteModelApi,
+    reembedAllApi,
+    type ReembedResponse,
+} from '@/lib/api/models-api';
+import type {
+    ProviderResponse,
+    CatalogModelResponse,
+    CreateProviderRequest,
+    UpdateProviderRequest,
+    CreateModelRequest,
+    UpdateModelRequest,
+} from '@/lib/api-types';
 
 export interface IngestionJob {
     resource_id: string;
@@ -59,6 +78,11 @@ interface AdminState {
     queueStatusFilter: string;
     queueReview: QueueReviewState;
 
+    providers: ProviderResponse[];
+    catalogModels: CatalogModelResponse[];
+    isLoadingProviders: boolean;
+    isLoadingCatalogModels: boolean;
+
     usersPagination: UsersPagination;
     resourcesPagination: ResourcesPagination;
 
@@ -74,7 +98,6 @@ interface AdminState {
     fetchUsers: (params?: { search?: string; limit?: number; offset?: number }) => Promise<void>;
     fetchResources: (params?: { resource_type?: string; status?: string; limit?: number; cursor?: string }) => Promise<void>;
     updateUserRole: (userId: string, role: string) => Promise<void>;
-    updateUserLimit: (userId: string, limit: number) => Promise<void>;
     toggleUserDisabled: (userId: string, disabled: boolean) => Promise<void>;
     deleteUser: (userId: string) => Promise<void>;
     addResource: (data: AddResourceRequest) => Promise<void>;
@@ -84,6 +107,17 @@ interface AdminState {
     reviewSubmissionItem: (submissionId: string, action: 'approve' | 'reject', feedback?: string) => Promise<void>;
     clearError: () => void;
     reset: () => void;
+
+    fetchProviders: () => Promise<void>;
+    fetchCatalogModels: () => Promise<void>;
+    createProvider: (data: CreateProviderRequest) => Promise<void>;
+    updateProvider: (id: string, data: UpdateProviderRequest) => Promise<void>;
+    deleteProvider: (id: string) => Promise<void>;
+    createCatalogModel: (data: CreateModelRequest) => Promise<void>;
+    updateCatalogModel: (id: string, data: UpdateModelRequest) => Promise<void>;
+    deleteCatalogModel: (id: string) => Promise<void>;
+    reembedAll: (modelSlug?: string) => Promise<ReembedResponse>;
+    isReembedding: boolean;
 
     trackJob: (job: Omit<IngestionJob, 'progress' | 'chunks_created' | 'created_at'>) => void;
     dismissJob: (resource_id: string) => void;
@@ -115,6 +149,11 @@ export const useAdminStore = create<AdminState>()(
                 isLoadingUsers: false,
                 isLoadingResources: false,
                 isLoadingQueue: false,
+                isLoadingProviders: false,
+                isLoadingCatalogModels: false,
+                isReembedding: false,
+                providers: [],
+                catalogModels: [],
                 error: null,
 
                 setActiveTab: (tab) => set({ activeTab: tab }),
@@ -126,6 +165,99 @@ export const useAdminStore = create<AdminState>()(
                         set({ stats, isLoadingStats: false });
                     } catch (err) {
                         set({ stats: null, error: (err as Error).message, isLoadingStats: false });
+                    }
+                },
+
+                fetchProviders: async () => {
+                    set({ isLoadingProviders: true, error: null });
+                    try {
+                        const providers = await fetchProvidersApi();
+                        set({ providers, isLoadingProviders: false });
+                    } catch (err) {
+                        set({ error: (err as Error).message, isLoadingProviders: false });
+                    }
+                },
+
+                fetchCatalogModels: async () => {
+                    set({ isLoadingCatalogModels: true, error: null });
+                    try {
+                        const catalogModels = await fetchAllModelsApi();
+                        set({ catalogModels, isLoadingCatalogModels: false });
+                    } catch (err) {
+                        set({ error: (err as Error).message, isLoadingCatalogModels: false });
+                    }
+                },
+
+                createProvider: async (data) => {
+                    try {
+                        await createProviderApi(data);
+                        await get().fetchProviders();
+                    } catch (err) {
+                        set({ error: (err as Error).message });
+                        throw err;
+                    }
+                },
+
+                updateProvider: async (id, data) => {
+                    try {
+                        await updateProviderApi(id, data);
+                        await get().fetchProviders();
+                    } catch (err) {
+                        set({ error: (err as Error).message });
+                        throw err;
+                    }
+                },
+
+                deleteProvider: async (id) => {
+                    try {
+                        await deleteProviderApi(id);
+                        await get().fetchProviders();
+                    } catch (err) {
+                        set({ error: (err as Error).message });
+                        throw err;
+                    }
+                },
+
+                createCatalogModel: async (data) => {
+                    try {
+                        await createModelApi(data);
+                        await get().fetchCatalogModels();
+                    } catch (err) {
+                        set({ error: (err as Error).message });
+                        throw err;
+                    }
+                },
+
+                updateCatalogModel: async (id, data) => {
+                    try {
+                        await updateModelApi(id, data);
+                        await get().fetchCatalogModels();
+                    } catch (err) {
+                        set({ error: (err as Error).message });
+                        throw err;
+                    }
+                },
+
+                deleteCatalogModel: async (id) => {
+                    try {
+                        await deleteModelApi(id);
+                        await get().fetchCatalogModels();
+                    } catch (err) {
+                        set({ error: (err as Error).message });
+                        throw err;
+                    }
+                },
+
+                reembedAll: async (modelSlug) => {
+                    set({ isReembedding: true, error: null });
+                    try {
+                        const res = await reembedAllApi(modelSlug);
+                        await get().fetchCatalogModels();
+                        set({ isReembedding: false });
+                        return res;
+                    } catch (err) {
+                        set({ isReembedding: false, error: (err as Error).message });
+                        throw err;
                     }
                 },
 
@@ -189,18 +321,6 @@ export const useAdminStore = create<AdminState>()(
                     }
                 },
 
-                updateUserLimit: async (userId, message_limit) => {
-                    try {
-                        await updateUserLimitApi(userId, message_limit);
-                        await get().fetchUsers({
-                            limit: get().usersPagination.limit,
-                            offset: get().usersPagination.offset,
-                        });
-                    } catch (err) {
-                        set({ error: (err as Error).message });
-                        throw err;
-                    }
-                },
 
                 toggleUserDisabled: async (userId, disabled) => {
                     try {

@@ -1,11 +1,80 @@
-import { Activity, AlertCircle, CheckCircle2, XCircle } from "lucide-react";
+import { Activity, AlertCircle, CheckCircle2, HelpCircle, XCircle } from "lucide-react";
 import { SiPython, SiRust } from "react-icons/si";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { TabsContent } from "@/components/ui/tabs";
 import type { AdminMonitoringTabProps } from "./types";
 
-export const AdminMonitoringTab = ({ rustApiHealth, pythonApiHealth }: AdminMonitoringTabProps) => {
+export const AdminMonitoringTab = ({
+    rustApiHealth,
+    pythonApiHealth,
+    isLoadingRustApi = false,
+    isLoadingPythonApi = false,
+}: AdminMonitoringTabProps) => {
+    const renderHealthStatus = (
+        health: typeof rustApiHealth,
+        isLoading: boolean
+    ) => {
+        if (isLoading) {
+            return (
+                <div className="flex items-center gap-2">
+                    <Skeleton className="h-4 w-16" />
+                    <Skeleton className="h-5 w-16 rounded-full" />
+                </div>
+            );
+        }
+
+        if (!health || !health.status) {
+            return (
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                    <HelpCircle className="h-4 w-4 opacity-50" />
+                    <Badge variant="outline" className="text-muted-foreground border-muted-foreground/30 text-xs">
+                        No info
+                    </Badge>
+                </div>
+            );
+        }
+
+        const uptime = health.uptime_seconds != null
+            ? `${((health.uptime_seconds) / (60 * 60 * 24)).toFixed(2)} days`
+            : "No info";
+
+        if (health.status === "healthy") {
+            return (
+                <>
+                    <p className="text-xs text-muted-foreground">{uptime}</p>
+                    <CheckCircle2 className="h-5 w-5 text-green-500" />
+                    <Badge variant="outline" className="border-green-500 text-green-700 dark:text-green-400">
+                        Healthy
+                    </Badge>
+                </>
+            );
+        }
+
+        if (health.status === "degraded") {
+            return (
+                <>
+                    <p className="text-xs text-muted-foreground">{uptime}</p>
+                    <AlertCircle className="h-5 w-5 text-yellow-500" />
+                    <Badge variant="outline" className="border-yellow-500 text-yellow-700 dark:text-yellow-400">
+                        Degraded
+                    </Badge>
+                </>
+            );
+        }
+
+        return (
+            <>
+                <p className="text-xs text-muted-foreground">{uptime}</p>
+                <XCircle className="h-5 w-5 text-red-500" />
+                <Badge variant="outline" className="border-red-500 text-red-700 dark:text-red-400">
+                    Down
+                </Badge>
+            </>
+        );
+    };
+
     return (
         <TabsContent value="monitoring" className="space-y-4">
             <Card>
@@ -29,31 +98,7 @@ export const AdminMonitoringTab = ({ rustApiHealth, pythonApiHealth }: AdminMoni
                                 </div>
                             </div>
                             <div className="flex items-center justify-between gap-2 sm:justify-start">
-                                {rustApiHealth?.status === "healthy" ? (
-                                    <>
-                                        <p className="text-xs text-muted-foreground">
-                                            {((rustApiHealth.uptime_seconds || 0) / (60 * 60 * 24)).toFixed(2)} days
-                                        </p>
-                                        <CheckCircle2 className="h-5 w-5 text-green-500" />
-                                        <Badge variant="outline" className="border-green-500 text-green-700 dark:text-green-400">
-                                            Healthy
-                                        </Badge>
-                                    </>
-                                ) : rustApiHealth?.status === "degraded" ? (
-                                    <>
-                                        <AlertCircle className="h-5 w-5 text-yellow-500" />
-                                        <Badge variant="outline" className="border-yellow-500 text-yellow-700 dark:text-yellow-400">
-                                            Degraded
-                                        </Badge>
-                                    </>
-                                ) : (
-                                    <>
-                                        <XCircle className="h-5 w-5 text-red-500" />
-                                        <Badge variant="outline" className="border-red-500 text-red-700 dark:text-red-400">
-                                            Down
-                                        </Badge>
-                                    </>
-                                )}
+                                {renderHealthStatus(rustApiHealth, isLoadingRustApi)}
                             </div>
                         </div>
 
@@ -68,31 +113,7 @@ export const AdminMonitoringTab = ({ rustApiHealth, pythonApiHealth }: AdminMoni
                                 </div>
                             </div>
                             <div className="flex items-center justify-between gap-2 sm:justify-start">
-                                {pythonApiHealth?.status === "healthy" ? (
-                                    <>
-                                        <p className="text-xs text-muted-foreground">
-                                            {((pythonApiHealth.uptime_seconds || 0) / (60 * 60 * 24)).toFixed(2)} days
-                                        </p>
-                                        <CheckCircle2 className="h-5 w-5 text-green-500" />
-                                        <Badge variant="outline" className="border-green-500 text-green-700 dark:text-green-400">
-                                            Healthy
-                                        </Badge>
-                                    </>
-                                ) : pythonApiHealth?.status === "degraded" ? (
-                                    <>
-                                        <AlertCircle className="h-5 w-5 text-yellow-500" />
-                                        <Badge variant="outline" className="border-yellow-500 text-yellow-700 dark:text-yellow-400">
-                                            Degraded
-                                        </Badge>
-                                    </>
-                                ) : (
-                                    <>
-                                        <XCircle className="h-5 w-5 text-red-500" />
-                                        <Badge variant="outline" className="border-red-500 text-red-700 dark:text-red-400">
-                                            Down
-                                        </Badge>
-                                    </>
-                                )}
+                                {renderHealthStatus(pythonApiHealth, isLoadingPythonApi)}
                             </div>
                         </div>
                     </div>
@@ -101,3 +122,4 @@ export const AdminMonitoringTab = ({ rustApiHealth, pythonApiHealth }: AdminMoni
         </TabsContent>
     );
 };
+

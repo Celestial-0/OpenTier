@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { useQuery } from "@/hooks/use-query";
 import { getIntelligenceApiHealth, getRustApiHealth } from "@/lib/api/health-api";
+import { adjustUserCreditsApi } from "@/lib/api/credits-api";
 import {
     DashboardHealth,
     CreateResourceForm
@@ -17,8 +18,8 @@ import { Queue } from "./queue";
 import { AdminMonitoringTab } from "./admin/monitoring-tab";
 import { AdminResourcesTab } from "./admin/resources-tab";
 import { AdminStatsTab } from "./admin/stats-tab";
-import { AdminTabsList } from "./admin/tabs-list";
 import { AdminUsersTab } from "./admin/users-tab";
+import { AdminModelsTab } from "./admin/models-tab";
 
 export const Admin = () => {
     // Admin context and store
@@ -28,11 +29,25 @@ export const Admin = () => {
         users,
         resources,
         jobs,
+        providers,
+        catalogModels,
         isLoadingStats,
         isLoadingUsers,
         isLoadingResources,
+        isLoadingProviders,
+        isLoadingCatalogModels,
+        isReembedding,
         activeTab,
-        setActiveTab
+        setActiveTab,
+        fetchProviders,
+        fetchCatalogModels,
+        createProvider,
+        updateProvider,
+        deleteProvider,
+        createCatalogModel,
+        updateCatalogModel,
+        deleteCatalogModel,
+        reembedAll,
     } = useAdminStore();
 
     const {
@@ -41,7 +56,6 @@ export const Admin = () => {
         fetchUsers,
         fetchResources,
         updateUserRole,
-        updateUserLimit,
         toggleUserDisabled,
         deleteUser,
         addResource,
@@ -61,7 +75,6 @@ export const Admin = () => {
     // Local state
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedRole, setSelectedRole] = useState<Record<string, string>>({});
-    const [selectedLimit, setSelectedLimit] = useState<Record<string, string>>({});
 
     // Resource form state
     const [isAddResourceOpen, setIsAddResourceOpen] = useState(false);
@@ -87,6 +100,8 @@ export const Admin = () => {
             fetchStats();
             fetchUsers();
             fetchResources();
+            fetchProviders();
+            fetchCatalogModels();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isAdmin]); // Only re-fetch when isAdmin changes
@@ -140,23 +155,6 @@ export const Admin = () => {
         }
     };
 
-    // Handle limit update
-    const handleLimitUpdate = async (userId: string) => {
-        const limitStr = selectedLimit[userId];
-        if (limitStr) {
-            const limit = parseInt(limitStr);
-            if (!isNaN(limit)) {
-                try {
-                    await updateUserLimit(userId, limit);
-                    toast.success("User limit updated");
-                } catch (error) {
-                    console.error('Failed to update limit:', error);
-                    toast.error("Failed to update limit");
-                }
-            }
-        }
-    };
-
     // Handle toggle disable
     const handleToggleDisable = async (userId: string, currentStatus: boolean | undefined) => {
         try {
@@ -174,6 +172,24 @@ export const Admin = () => {
             await deleteUser(userId);
         } catch (error) {
             console.error('Failed to delete user:', error);
+        }
+    };
+
+    // Handle credit adjustment
+    const handleAdjustCredits = async (
+        userId: string,
+        delta: number,
+        reason: "admin_adjustment" | "grant" | "refund",
+        note?: string
+    ) => {
+        try {
+            const res = await adjustUserCreditsApi(userId, { delta, reason, note });
+            toast.success(res.message || "Credits adjusted successfully");
+            fetchUsers({ search: searchQuery });
+        } catch (error) {
+            console.error('Failed to adjust credits:', error);
+            toast.error(error instanceof Error ? error.message : "Failed to adjust credits");
+            throw error;
         }
     };
 
@@ -238,8 +254,20 @@ export const Admin = () => {
 
     return (
         <div className="space-y-6">
+            <div className="pb-3 border-b border-border/50">
+                <h1 className="text-2xl font-bold tracking-tight text-foreground">
+                    {activeTab === "stats" && "Platform Telemetry"}
+                    {activeTab === "users" && "User Directory"}
+                    {activeTab === "resources" && "Knowledge Resources"}
+                    {activeTab === "models" && "AI Models & Providers"}
+                    {activeTab === "queue" && "Submissions Queue"}
+                    {activeTab === "monitoring" && "System Health & Monitoring"}
+                </h1>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                    Administrative configuration and controls managed via sidebar navigation
+                </p>
+            </div>
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-                <AdminTabsList />
 
                 <AdminStatsTab stats={stats} isLoadingStats={isLoadingStats} />
 
@@ -248,14 +276,12 @@ export const Admin = () => {
                     users={users}
                     searchQuery={searchQuery}
                     selectedRole={selectedRole}
-                    selectedLimit={selectedLimit}
                     setSelectedRole={setSelectedRole}
-                    setSelectedLimit={setSelectedLimit}
                     onSearch={handleSearch}
                     onRoleUpdate={handleRoleUpdate}
-                    onLimitUpdate={handleLimitUpdate}
                     onToggleDisable={handleToggleDisable}
                     onDeleteUser={handleDeleteUser}
+                    onAdjustCredits={handleAdjustCredits}
                 />
 
                 <AdminResourcesTab
@@ -273,6 +299,24 @@ export const Admin = () => {
                 <AdminMonitoringTab
                     rustApiHealth={RustApiHealth.data}
                     pythonApiHealth={PythonApiHealth.data}
+                    isLoadingRustApi={RustApiHealth.isLoading}
+                    isLoadingPythonApi={PythonApiHealth.isLoading}
+                />
+
+
+                <AdminModelsTab
+                    providers={providers}
+                    models={catalogModels}
+                    isLoadingProviders={isLoadingProviders}
+                    isLoadingModels={isLoadingCatalogModels}
+                    onCreateProvider={createProvider}
+                    onUpdateProvider={updateProvider}
+                    onDeleteProvider={deleteProvider}
+                    onCreateModel={createCatalogModel}
+                    onUpdateModel={updateCatalogModel}
+                    onDeleteModel={deleteCatalogModel}
+                    isReembedding={isReembedding}
+                    onReembedAll={reembedAll}
                 />
 
                 <TabsContent value="queue" className="space-y-4">

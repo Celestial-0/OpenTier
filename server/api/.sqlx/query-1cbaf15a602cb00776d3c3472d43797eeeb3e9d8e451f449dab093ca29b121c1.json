@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE sessions\n        SET role = 'contributor'::user_role\n        WHERE user_id = $1\n          AND expires_at > NOW()\n          AND role = 'user'::user_role\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1cbaf15a602cb00776d3c3472d43797eeeb3e9d8e451f449dab093ca29b121c1"
+}

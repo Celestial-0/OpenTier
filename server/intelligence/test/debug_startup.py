@@ -1,5 +1,4 @@
 import asyncio
-import os
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -7,6 +6,8 @@ from dotenv import load_dotenv
 _server_env = Path(__file__).resolve().parent.parent.parent / ".env"
 load_dotenv(_server_env if _server_env.exists() else None)
 
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core.lifecycle import startup, shutdown
 

@@ -17,6 +17,7 @@ pub struct SignInResponse {
     pub user_id: Uuid,
     pub email: String,
     pub session_token: String,
+    #[serde(with = "crate::common::timestamp")]
     pub expires_at: DateTime<Utc>,
 }
 
@@ -53,6 +54,7 @@ pub struct RefreshRequest {
 #[derive(Debug, Serialize)]
 pub struct RefreshResponse {
     pub session_token: String,
+    #[serde(with = "crate::common::timestamp")]
     pub expires_at: DateTime<Utc>,
 }
 
@@ -131,6 +133,7 @@ pub struct RecoverAccountResponse {
     pub user_id: Uuid,
     pub email: String,
     pub session_token: String,
+    #[serde(with = "crate::common::timestamp")]
     pub expires_at: DateTime<Utc>,
     pub message: String,
 }

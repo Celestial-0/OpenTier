@@ -3,7 +3,7 @@
 import logging
 
 from core.config import get_config, validate_config
-from core.database import close_db, init_db
+from shared.database import close_db, init_db
 from core.logging import setup_logging
 
 logger = logging.getLogger(__name__)

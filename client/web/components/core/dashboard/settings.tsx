@@ -16,11 +16,14 @@ import { Lock, Bell, Palette, Shield, Trash2, AlertTriangle, CheckCircle2 } from
 import { useChatStore } from "@/store/chat-store";
 import { useUserStore } from "@/store/user-store";
 import { useUi } from "@/context/ui-context";
+import { useAuth } from "@/context/auth-context";
+import { toast } from "sonner";
 
 const emptySubscribe = () => () => {};
 
 export const Settings = () => {
     const { setActiveDashboardView } = useUi();
+    const { resendVerification } = useAuth();
     const {
         user,
         preferences,
@@ -30,9 +33,23 @@ export const Settings = () => {
         isLoading
     } = useUserStore();
 
-    // Local state for password dialog
+    // Local state for verification and password dialog
+    const [isSendingVerification, setIsSendingVerification] = useState(false);
     const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
     const [currentPassword, setCurrentPassword] = useState("");
+
+    const handleResendVerification = async () => {
+        if (!user?.email) return;
+        setIsSendingVerification(true);
+        try {
+            await resendVerification(user.email);
+            toast.success(`Verification email sent to ${user.email}`);
+        } catch (err) {
+            toast.error((err as Error).message || "Failed to send verification email");
+        } finally {
+            setIsSendingVerification(false);
+        }
+    };
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
     const [passwordError, setPasswordError] = useState<string | null>(null);
@@ -81,11 +98,8 @@ export const Settings = () => {
     };
 
     const handleDeleteAccount = async () => {
-        if (confirm("Are you sure you want to delete your account? This cannot be undone.")) {
-            await deleteAccount();
-            // Redirect handled by store/auth context usually, or we can force it here
-            window.location.href = "/";
-        }
+        await deleteAccount();
+        window.location.href = "/";
     };
 
     return (
@@ -125,8 +139,13 @@ export const Settings = () => {
                                     Verified
                                 </Badge>
                             ) : (
-                                <Button variant="outline" size="sm">
-                                    Verify Email
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={handleResendVerification}
+                                    disabled={isSendingVerification}
+                                >
+                                    {isSendingVerification ? "Sending..." : "Verify Email"}
                                 </Button>
                             )}
                         </div>
@@ -152,12 +171,12 @@ export const Settings = () => {
                                     </DialogHeader>
                                     <div className="space-y-4 py-4">
                                         {passwordError && (
-                                            <div className="text-sm text-red-500 bg-red-50 p-2 rounded">
+                                            <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 p-2 rounded-md">
                                                 {passwordError}
                                             </div>
                                         )}
                                         {passwordSuccess && (
-                                            <div className="text-sm text-green-500 bg-green-50 p-2 rounded">
+                                            <div className="text-sm text-primary bg-primary/10 border border-primary/20 p-2 rounded-md">
                                                 {requiresCurrentPassword ? "Password changed successfully!" : "Password created successfully!"}
                                             </div>
                                         )}
@@ -291,24 +310,13 @@ export const Settings = () => {
                     <AccordionContent className="space-y-4 pt-4">
                         <div className="flex items-center justify-between">
                             <div className="space-y-1">
-                                <p className="text-sm font-medium">Two-Factor Authentication</p>
-                                <p className="text-sm text-muted-foreground">
-                                    Add an extra layer of security
-                                </p>
-                            </div>
-                            <Button variant="outline" size="sm" disabled>
-                                Coming Soon
-                            </Button>
-                        </div>
-                        <div className="flex items-center justify-between">
-                            <div className="space-y-1">
                                 <p className="text-sm font-medium">Active Sessions</p>
                                 <p className="text-sm text-muted-foreground">
-                                    View and manage logged-in devices
+                                    View and manage logged-in devices and active tokens
                                 </p>
                             </div>
                             <Button variant="outline" size="sm" onClick={() => setActiveDashboardView("sessions")}>
-                                Manage
+                                Manage Sessions
                             </Button>
                         </div>
                     </AccordionContent>

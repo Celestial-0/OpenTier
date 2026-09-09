@@ -1,0 +1,14 @@
+version: v2
+lint:
+  use:
+    - STANDARD
+  except:
+    - PACKAGE_VERSION_SUFFIX      # package already carries the .v1 suffix
+    - PACKAGE_DIRECTORY_MATCH     # proto file is located at server/proto root
+    - SERVICE_SUFFIX              # preserves established service names (Health, Chat, Knowledge)
+    - RPC_REQUEST_RESPONSE_UNIQUE # preserves established message reuse across RPCs
+    - RPC_REQUEST_STANDARD_NAME   # preserves established RPC request message naming
+    - RPC_RESPONSE_STANDARD_NAME  # preserves established RPC response message naming
+breaking:
+  use:
+    - FILE

@@ -9,7 +9,9 @@ pub fn build_client(
         ClientId::new(config.client_id.clone()),
         Some(ClientSecret::new(config.client_secret.clone())),
         AuthUrl::new("https://discord.com/oauth2/authorize".to_string())?,
-        Some(TokenUrl::new("https://discord.com/api/oauth2/token".to_string())?),
+        Some(TokenUrl::new(
+            "https://discord.com/api/oauth2/token".to_string(),
+        )?),
     )
     .set_redirect_uri(RedirectUrl::new(config.redirect_url.clone())?);
 
@@ -44,7 +46,10 @@ pub async fn fetch_user_info(
 
 /// Build Discord avatar URL when available.
 pub fn avatar_url(user_id: &str, avatar_hash: &Option<String>) -> Option<String> {
-    avatar_hash
-        .as_ref()
-        .map(|hash| format!("https://cdn.discordapp.com/avatars/{}/{}.png", user_id, hash))
+    avatar_hash.as_ref().map(|hash| {
+        format!(
+            "https://cdn.discordapp.com/avatars/{}/{}.png",
+            user_id, hash
+        )
+    })
 }

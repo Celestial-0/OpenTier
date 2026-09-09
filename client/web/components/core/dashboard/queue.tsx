@@ -1,8 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Inbox } from 'lucide-react';
 import { useAdmin } from '@/context/admin-context';
 import { useAdminStore } from '@/store/admin-store';
+
 
 type ReviewState = {
     submissionId: string | null;
@@ -83,21 +86,29 @@ export const Queue = () => {
 
                 {/* Error */}
                 {error && (
-                    <div className="mb-6 px-4 py-3 rounded-lg border bg-red-500/10 border-red-500/30 text-red-400 text-sm">
+                    <div className="mb-6 px-4 py-3 rounded-lg border bg-destructive/10 border-destructive/30 text-destructive text-sm">
                         {error}
                     </div>
                 )}
 
                 {/* Loading */}
                 {isLoadingQueue ? (
-                    <div className="flex items-center justify-center py-20 text-muted-foreground">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mr-3" />
-                        Loading submissions...
+                    <div className="space-y-4">
+                        {Array.from({ length: 3 }).map((_, i) => (
+                            <div key={i} className="border border-border rounded-xl p-5 space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <Skeleton className="h-6 w-1/3" />
+                                    <Skeleton className="h-5 w-16 rounded-full" />
+                                </div>
+                                <Skeleton className="h-4 w-1/4" />
+                            </div>
+                        ))}
                     </div>
                 ) : queueItems.length === 0 ? (
-                    <div className="text-center py-20 text-muted-foreground">
-                        <p className="text-lg">No {queueStatusFilter} submissions</p>
-                        <p className="text-sm mt-1">Check back later or change the filter.</p>
+                    <div className="text-center py-20 text-muted-foreground border border-dashed rounded-xl">
+                        <Inbox className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                        <p className="font-medium text-base">No info</p>
+                        <p className="text-xs text-muted-foreground mt-1">No {queueStatusFilter} submissions available</p>
                     </div>
                 ) : (
                     <div className="space-y-4">
@@ -119,16 +130,17 @@ export const Queue = () => {
                                     >
                                         <div className="flex-1 min-w-0">
                                             <div className="flex items-center gap-3">
-                                                <h3 className="font-semibold truncate">{item.title}</h3>
+                                                <h3 className="font-semibold truncate">{item.title || 'Untitled'}</h3>
                                                 <span className="shrink-0 text-xs px-2 py-0.5 rounded-full border border-border bg-accent/50 text-muted-foreground">
-                                                    {item.resource_type}
+                                                    {item.resource_type || 'No info'}
                                                 </span>
                                             </div>
                                             <p className="text-sm text-muted-foreground mt-1">
-                                                by {item.contributor_name || item.contributor_email || 'Unknown'} ·{' '}
-                                                {new Date(item.created_at).toLocaleDateString()}
+                                                by {item.contributor_name || item.contributor_email || 'No info'} ·{' '}
+                                                {item.created_at ? new Date(item.created_at).toLocaleDateString() : 'No info'}
                                             </p>
                                         </div>
+
                                         <span className="text-muted-foreground text-sm ml-4">
                                             {isExpanded ? '▲' : '▼'}
                                         </span>
@@ -150,8 +162,8 @@ export const Queue = () => {
 
                                             {/* Admin feedback (if already reviewed) */}
                                             {item.admin_feedback && (
-                                                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-sm">
-                                                    <span className="font-medium text-amber-400">Feedback:</span>{' '}
+                                                <div className="p-3 rounded-lg bg-muted border border-border text-sm">
+                                                    <span className="font-medium text-foreground">Feedback:</span>{' '}
                                                     {item.admin_feedback}
                                                 </div>
                                             )}
@@ -181,7 +193,7 @@ export const Queue = () => {
                                                                 'approve',
                                                                 isEditingFeedback ? reviewDraft.feedback : '',
                                                             )}
-                                                            className="flex-1 py-2.5 px-4 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-500 disabled:opacity-50 transition-colors text-sm"
+                                                            className="flex-1 py-2.5 px-4 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors text-sm cursor-pointer"
                                                         >
                                                             {queueReview.loading && isReviewing && queueReview.action === 'approve'
                                                                 ? 'Approving...'
@@ -195,7 +207,7 @@ export const Queue = () => {
                                                                 'reject',
                                                                 isEditingFeedback ? reviewDraft.feedback : '',
                                                             )}
-                                                            className="flex-1 py-2.5 px-4 rounded-lg bg-red-600 text-white font-medium hover:bg-red-500 disabled:opacity-50 transition-colors text-sm"
+                                                            className="flex-1 py-2.5 px-4 rounded-lg bg-destructive text-destructive-foreground font-medium hover:bg-destructive/90 disabled:opacity-50 transition-colors text-sm cursor-pointer"
                                                         >
                                                             {queueReview.loading && isReviewing && queueReview.action === 'reject'
                                                                 ? 'Rejecting...'

@@ -1,159 +1,121 @@
 # Observability & Reliability
 
-## Rust API Logging
+## Logging Architecture
 
-**Framework**: `tracing` + `tracing-subscriber`
+### Rust API Gateway
+- **Framework**: `tracing` with `tracing-subscriber` and `EnvFilter`.
+- **Level**: Configured via `RUST_LOG` (default: `api=info,tower_http=info`).
+- **Middleware**: `tower_http::trace::TraceLayer` records request latency, paths, client IPs, and status codes.
 
-Initialized in `observability/logging.rs`:
+### Python Intelligence & Background Worker
+- **Framework**: Python standard `logging` with structured JSON/extra dictionary context.
+- **Correlation ID**: Distributed tracing propagates `x-correlation-id` across HTTP headers, gRPC metadata, and Redis Stream event envelopes.
 
-```rust
-tracing_subscriber::registry()
-    .with(EnvFilter::new(
-        std::env::var("RUST_LOG").unwrap_or_else(|_| "api=debug".into())
-    ))
-    .with(tracing_subscriber::fmt::layer())
-    .init();
-```
-
-**Default filter**: `api=debug` — logs all messages from the `api` crate at DEBUG level, other crates at WARN.
-
-**Request tracing**: `TraceLayer` from `tower-http` automatically emits structured span events for every request:
-- On request: method, path, version
-- On response: status code, duration
-- On failure: error description
-
-Example output:
-```
-2026-03-01T10:00:00Z DEBUG api::chat::handlers: Creating conversation user_id=abc123
-2026-03-01T10:00:00Z INFO  tower_http::trace: 200 POST /chat/conversations in 12ms
-```
-
-## Python Intelligence Logging
-
-**Framework**: Python `logging` module, configured in `core/lifecycle.py`:
-
-```python
-logging.basicConfig(
-    level=getattr(logging, config.log_level),  # "INFO" default
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-)
-```
-
-`x-correlation-id` from gRPC metadata is included in log lines for distributed tracing between Rust and Python.
+---
 
 ## Health & Readiness Probes
 
-| Endpoint | Type | Checks |
-|----------|------|--------|
-| `GET /health/api` | Liveness | Axum process alive, returns uptime |
-| `GET /health/intelligence` | Liveness | gRPC `Health.Check` (5s timeout) |
-| gRPC `Health.Ready` | Readiness | DB health (`SELECT 1`) + embedding model loaded |
+OpenTier provides layered health checks covering network liveness and downstream dependency readiness:
 
+| Endpoint | Protocol | Type | Checks |
+|---|---|---|---|
+| `GET /health` | HTTP | Liveness | Basic Rust process uptime and gateway responsiveness. |
+| `GET /health/api` | HTTP | Liveness | Detailed gateway metrics, active connections, and runtime uptime. |
+| `GET /health/intelligence` | HTTP | Proxy Liveness | Gateway proxies unary call to Python gRPC `Health.Check`. |
+| `Health.Ready` | gRPC | Deep Readiness | Verifies active connections to **PostgreSQL 18**, **Qdrant**, and **Redis 8**. |
 
 <Mermaid chart={`
 flowchart TD
-    LB["Load Balancer"]
-    APILiveness["GET /health/api\n200 OK — process alive + uptime"]
-    IntelLiveness["GET /health/intelligence\nproxies gRPC Health.Check"]
-    IntelReadiness["gRPC Health.Ready\nSELECT 1 + embedding model loaded"]
+    LB["Load Balancer / Ingress"]
+    APILiveness["GET /health\n200 OK — Rust Gateway Alive"]
+    IntelLiveness["GET /health/intelligence\nProxies gRPC Health.Check"]
+    DeepReadiness["gRPC Health.Ready\nVerifies PG18 + Qdrant + Redis"]
 
     LB --> APILiveness
     LB --> IntelLiveness
-    IntelLiveness --> IntelReadiness
+    IntelLiveness --> DeepReadiness
 `} />
 
+---
 
-**Startup implication**: If the Intelligence service fails its readiness probe (embedding model not loaded), the API's `/health/intelligence` will return an error. Load balancers can use this to delay routing chat requests until the service is fully ready.
+## Worker Heartbeats, Stream Metrics & DLQ
 
-## Background Tasks
+Background workers in OpenTier v1.1.0 run an autonomous observability cycle:
 
-### Session Cleanup (`auth/background.rs`)
+### 1. Startup & Roundtrip Heartbeat
+- When a worker boots, it publishes an `ops.worker.started.v1` envelope to `opentier:ops:heartbeat` (`HEARTBEAT_STREAM`).
+- The `heartbeat` consumer group picks up and acknowledges the message, logging `heartbeat processed` with the `msg_id` and `correlation_id`.
+- This confirms full roundtrip read/write capability against the Redis Streams backbone.
 
-```rust
-pub fn start_session_cleanup_task(db: PgPool) -> JoinHandle<()> {
-    tokio::spawn(async move {
-        loop {
-            sqlx::query!("DELETE FROM sessions WHERE expires_at < NOW()")
-                .execute(&db).await.log_error();
-            tokio::time::sleep(CLEANUP_INTERVAL).await;
-        }
-    })
+### 2. Stream Metrics & Lag Monitoring
+Every 60 seconds, background workers execute `stream_metrics()`:
+- Inspects `xinfo_stream(name)` to log total stream length.
+- Inspects `xpending(name, "workers")` to calculate pending/unacknowledged consumer lag.
+- Inspects `xlen(Streams.dlq(name))` to report Dead-Letter Queue (DLQ) depth.
+
+```json
+{
+  "event": "stream_metrics",
+  "stream": "opentier:intel:ingestion_jobs",
+  "length": 4,
+  "pending": 0,
+  "dlq_depth": 0
 }
 ```
 
-Runs as a detached Tokio task. If it panics, it is not restarted automatically — the `sessions` table will accumulate expired rows until the API restarts.
+### 3. Orphaned Job Sweeps (Self-Healing)
+- **Startup Sweep**: On boot, the worker scans PostgreSQL for any ingestion jobs stranded in `processing` state by previous worker crashes and re-enqueues them to Redis.
+- **Periodic Sweep**: Runs every 5 minutes to automatically recover any jobs stranded by transient worker kills.
 
-## Migration Safety
+### 4. Dead-Letter Queue (DLQ) Handling
+- Each stream maintains a dedicated DLQ:
+  - `opentier:intel:ingestion_jobs:dlq`
+  - `opentier:intel:chat_events:dlq`
+- When a consumer handler raises exceptions after `max_retries = 3`, the envelope is diverted to the DLQ with the error payload and the original message is acknowledged (`XACK`).
+- Operational CLI script: `python scripts/dlq.py` allows operators to inspect, replay, or purge dead-lettered events.
 
-### Rust — sqlx Offline Mode
+---
 
-The `.sqlx/` directory contains a precomputed JSON cache of all query type information. This enables the Rust service to compile without a live database connection:
+## Background Tasks in Rust Gateway
 
-```
-cargo sqlx prepare    # regenerate .sqlx/ from live DB
-cargo build           # uses .sqlx/ cache if SQLX_OFFLINE=true
-```
+- **Session Cleanup Task** (`auth/background.rs`): Runs a detached Tokio task every hour:
+  ```rust
+  sqlx::query!("DELETE FROM sessions WHERE expires_at < NOW()").execute(&db).await;
+  ```
+- **Credit Hold Expiration**: Periodic reaper releases unconsumed credit holds exceeding timeout limits.
 
-If a developer changes a query without running `cargo sqlx prepare`, the CI build will fail at compile time — providing a compile-time guarantee that all SQL is valid against the current schema.
+---
 
-### Python — Manual Migration Scripts
+## Centralized Schema & Migration Safety
 
-Python migrations in `server/intelligence/migrations/` are plain SQL files run manually or via a migration script. There is no Alembic versioning table — migration state is implicit (check if table exists). This creates risk of:
-- Forgetting to run migrations in production
-- Running migrations twice (creating duplicate indexes, etc.)
+All database migrations are centralized in `server/api/migrations/`:
+- **SQLx Offline Mode**: `.sqlx/` cache ensures Rust builds are verified at compile time against live schema requirements without requiring an active database during CI/CD.
+- **Docker Auto-Migration**: The gateway runs `sqlx::migrate!()` upon startup before opening port `4000`, guaranteeing consistent table definitions across all running containers.
 
-**Recommendation**: Add Alembic version tracking or use explicit `IF NOT EXISTS` guards on all DDL statements (which the current migrations do use: `CREATE TABLE IF NOT EXISTS`, `CREATE EXTENSION IF NOT EXISTS`).
+---
 
-## Testing Strategy
-
-### Python Intelligence Tests (`test/`)
-
-- **Framework**: `pytest` + `pytest-asyncio`
-- **pytest.ini**: configures `asyncio_mode = auto` (all async tests run automatically)
-- **Test scope**: unit tests for `TextChunker`, `EmbeddingModel`, `DocumentProcessor`; integration tests for gRPC servicers against a test DB
-
-### Rust API Tests
-
-- **Framework**: Rust's built-in `#[tokio::test]`
-- **Strategy**: integration tests against a test PostgreSQL instance; `sqlx::test` macro provides per-test transaction rollback
-
-## Scaling Considerations
-
-| Bottleneck | Current State | Scaling Path |
-|------------|--------------|--------------|
-| Session DB lookup (per request) | 1 query per authenticated request | Add Redis session cache; token → role/user_id |
-| Embedding model | Single process, CPU/GPU | Run multiple Python workers behind a gRPC proxy |
-| Connection pool | Rust: 10 connections, 20 max overflow | Increase pool size; add PgBouncer |
-| LLM provider | External API, rate-limited | Add request queue + backpressure in QueryPipeline |
-| HNSW index | Monolithic in PostgreSQL | Migrate to dedicated vector DB (Qdrant, Weaviate) at scale |
-| Single PostgreSQL | Both services share one DB | Read replicas for search queries; separate cluster for vector data |
-
-## Failure Isolation
-
+## Failure Isolation & Blast Radius
 
 <Mermaid chart={`
 flowchart TD
-    subgraph Failures["Failure Scenarios"];
-        IntelDown["Intelligence service down"]
-        DBDown["Database down"]
-        LLMDown["LLM provider unavailable"]
-        EmbModelFail["Embedding model crash"]
+    subgraph Outages["Service Outage"]
+        IntelDown["Python Intelligence Down"]
+        WorkerDown["Worker Down"]
+        QdrantDown["Qdrant Down"]
+        RedisDown["Redis Down"]
     end
 
-    subgraph Impact["Blast Radius"];
-        AuthOK["Auth / User / Admin: OPERATIONAL"]
-        ChatFail["Chat endpoints: HTTP 503"]
-        AllFail["All endpoints: HTTP 500 / 503"]
-        ChatDegraded["Chat + Ingestion: DEGRADED"]
-        IngestFail["New ingestion: FAILED\nExisting search: DEGRADED"]
+    subgraph Impact["Blast Radius in v1.1.0"]
+        AuthOK["Auth / User Management: OPERATIONAL"]
+        ChatDegraded["Chat: FALLS BACK to Non-RAG (if Qdrant down)"]
+        ChatDown["Chat: UNAVAILABLE (if Intelligence down)"]
+        AsyncDeferred["Ingestion & Metering: BUFFERED in Redis / Outbox"]
     end
 
     IntelDown --> AuthOK
-    IntelDown --> ChatFail
-    DBDown --> AllFail
-    LLMDown --> ChatDegraded
-    EmbModelFail --> IngestFail
+    IntelDown --> ChatDown
+    WorkerDown --> AuthOK
+    WorkerDown --> AsyncDeferred
+    QdrantDown --> ChatDegraded
+    RedisDown --> AsyncDeferred
 `} />
-
-
-The most critical single point of failure is the **shared PostgreSQL database**. A database outage affects all three processes simultaneously. Redis-based session caching would allow the Rust API to serve cached sessions during short DB outages.

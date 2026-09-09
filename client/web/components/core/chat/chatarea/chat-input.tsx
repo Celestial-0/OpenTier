@@ -41,47 +41,13 @@ import { SpeechInput } from "@/components/ai-elements/speech-input";
 import { CheckIcon, GlobeIcon } from "lucide-react";
 import { useCallback } from "react";
 
-// ─── Models Data ─────────────────────────────────────────────────────────────
-
-export const models = [
-  {
-    chef: "OpenAI",
-    chefSlug: "openai",
-    id: "gpt-4o",
-    name: "GPT-4o",
-    providers: ["openai", "azure"],
-  },
-  {
-    chef: "OpenAI",
-    chefSlug: "openai",
-    id: "gpt-4o-mini",
-    name: "GPT-4o Mini",
-    providers: ["openai", "azure"],
-  },
-  {
-    chef: "Anthropic",
-    chefSlug: "anthropic",
-    id: "claude-opus-4-20250514",
-    name: "Claude 4 Opus",
-    providers: ["anthropic", "azure", "google", "amazon-bedrock"],
-  },
-  {
-    chef: "Anthropic",
-    chefSlug: "anthropic",
-    id: "claude-sonnet-4-20250514",
-    name: "Claude 4 Sonnet",
-    providers: ["anthropic", "azure", "google", "amazon-bedrock"],
-  },
-  {
-    chef: "Google",
-    chefSlug: "google",
-    id: "gemini-2.0-flash-exp",
-    name: "Gemini 2.0 Flash",
-    providers: ["google"],
-  },
-];
-
-export const chefs = ["OpenAI", "Anthropic", "Google"];
+export interface ChatModelItem {
+    id: string;       // slug
+    name: string;     // display_name
+    chef: string;     // provider_display_name
+    chefSlug: string; // provider_slug
+    providers: string[]; // [provider_slug]
+}
 
 // ─── Attachment Sub-components ───────────────────────────────────────────────
 
@@ -138,7 +104,7 @@ const ModelItem = ({
   isSelected,
   onSelect,
 }: {
-  m: (typeof models)[0];
+  m: ChatModelItem;
   isSelected: boolean;
   onSelect: (id: string) => void;
 }) => {
@@ -170,6 +136,7 @@ interface ChatInputProps {
   text: string;
   status: "submitted" | "streaming" | "ready" | "error";
   model: string;
+  availableModels: ChatModelItem[];
   modelSelectorOpen: boolean;
   useWebSearch: boolean;
   isSubmitDisabled: boolean;
@@ -185,6 +152,7 @@ export const ChatInput = ({
   text,
   status,
   model,
+  availableModels,
   modelSelectorOpen,
   useWebSearch,
   isSubmitDisabled,
@@ -195,7 +163,8 @@ export const ChatInput = ({
   onModelSelect,
   onModelSelectorOpenChange,
 }: ChatInputProps) => {
-  const selectedModelData = models.find((m) => m.id === model);
+  const selectedModelData = availableModels.find((m) => m.id === model);
+  const chefs = [...new Set(availableModels.map((m) => m.chef))];
 
   return (
     <div className="mt-auto shrink-0 pt-4 max-w-4xl w-full mx-auto">
@@ -254,7 +223,7 @@ export const ChatInput = ({
                     <ModelSelectorEmpty>No models found.</ModelSelectorEmpty>
                     {chefs.map((chef) => (
                       <ModelSelectorGroup heading={chef} key={chef}>
-                        {models
+                        {availableModels
                           .filter((m) => m.chef === chef)
                           .map((m) => (
                             <ModelItem

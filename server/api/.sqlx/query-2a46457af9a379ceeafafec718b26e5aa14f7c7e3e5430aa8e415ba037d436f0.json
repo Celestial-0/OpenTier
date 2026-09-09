@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO credit_holds (user_id, amount, idempotency_key)\n        VALUES ($1, $2::float8, $3)\n        ON CONFLICT (user_id, idempotency_key) DO UPDATE\n        SET amount = EXCLUDED.amount,\n            status = 'open',\n            created_at = NOW()\n        WHERE credit_holds.status != 'open'\n           OR credit_holds.created_at < NOW() - INTERVAL '1 hour'\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Float8",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2a46457af9a379ceeafafec718b26e5aa14f7c7e3e5430aa8e415ba037d436f0"
+}

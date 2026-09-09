@@ -166,13 +166,20 @@ impl IntelligenceClient {
         request
     }
 
-    /// Create a request with the specified timeout and a correlation ID for tracing
-    fn request_with_correlation<T>(&self, inner: T, timeout: Duration) -> tonic::Request<T> {
+    /// Create a request with the specified timeout and a correlation ID for tracing.
+    /// Propagate the caller-supplied correlation_id (from the HTTP
+    /// `X-Correlation-ID` header) so the trace chain is unbroken; generate a
+    /// fresh one only when none was provided.
+    fn request_with_correlation<T>(
+        &self,
+        inner: T,
+        timeout: Duration,
+        correlation_id: Option<String>,
+    ) -> tonic::Request<T> {
         let mut request = tonic::Request::new(inner);
         request.set_timeout(timeout);
 
-        // Add correlation ID for distributed tracing
-        let correlation_id = Uuid::new_v4().to_string();
+        let correlation_id = correlation_id.unwrap_or_else(|| Uuid::new_v4().to_string());
         request.metadata_mut().insert(
             "x-correlation-id",
             correlation_id
@@ -211,67 +218,23 @@ impl IntelligenceClient {
     pub async fn send_message(
         &mut self,
         request: pb::ChatRequest,
+        correlation_id: Option<String>,
     ) -> Result<tonic::Response<pb::ChatResponse>, tonic::Status> {
         // Note: send_message is NOT idempotent, so we don't retry to avoid duplicate messages
         // Use correlation ID for distributed tracing
-        let req = self.request_with_correlation(request, self.timeouts.chat);
+        let req = self.request_with_correlation(request, self.timeouts.chat, correlation_id);
         self.chat_client.send_message(req).await
     }
 
     pub async fn stream_chat(
         &mut self,
         request: pb::ChatRequest,
+        correlation_id: Option<String>,
     ) -> Result<tonic::Response<tonic::codec::Streaming<pb::ChatStreamChunk>>, tonic::Status> {
         // Note: stream_chat is NOT idempotent, so we don't retry
         // Use correlation ID for distributed tracing
-        let req = self.request_with_correlation(request, self.timeouts.stream);
+        let req = self.request_with_correlation(request, self.timeouts.stream, correlation_id);
         self.chat_client.stream_chat(req).await
-    }
-
-    pub async fn get_conversation(
-        &mut self,
-        request: pb::GetConversationRequest,
-    ) -> Result<tonic::Response<pb::ConversationResponse>, tonic::Status> {
-        //  Retry for read-only operations with exponential backoff
-        let mut attempts = 0;
-        let mut backoff = self.retry_config.initial_backoff;
-
-        loop {
-            let req = self.request_with_timeout(request.clone(), self.timeouts.chat);
-            match self.chat_client.get_conversation(req).await {
-                Ok(result) => return Ok(result),
-                Err(status) if self.should_retry(&status, attempts) => {
-                    attempts += 1;
-                    self.log_retry(&status, backoff, attempts);
-                    sleep(backoff).await;
-                    backoff = self.next_backoff(backoff);
-                }
-                Err(status) => return Err(status),
-            }
-        }
-    }
-
-    pub async fn delete_conversation(
-        &mut self,
-        request: pb::DeleteConversationRequest,
-    ) -> Result<tonic::Response<pb::DeleteConversationResponse>, tonic::Status> {
-        //  Delete is idempotent, safe to retry
-        let mut attempts = 0;
-        let mut backoff = self.retry_config.initial_backoff;
-
-        loop {
-            let req = self.request_with_timeout(request.clone(), self.timeouts.chat);
-            match self.chat_client.delete_conversation(req).await {
-                Ok(result) => return Ok(result),
-                Err(status) if self.should_retry(&status, attempts) => {
-                    attempts += 1;
-                    self.log_retry(&status, backoff, attempts);
-                    sleep(backoff).await;
-                    backoff = self.next_backoff(backoff);
-                }
-                Err(status) => return Err(status),
-            }
-        }
     }
 
     pub async fn generate_title(
@@ -397,126 +360,13 @@ impl IntelligenceClient {
         }
     }
 
-    pub async fn cancel_ingestion(
+    pub async fn reembed_all(
         &mut self,
-        request: pb::CancelIngestionRequest,
-    ) -> Result<tonic::Response<pb::CancelIngestionResponse>, tonic::Status> {
-        //  Cancel is idempotent, safe to retry
-        let mut attempts = 0;
-        let mut backoff = self.retry_config.initial_backoff;
-
-        loop {
-            let req = self.request_with_timeout(request.clone(), self.timeouts.resource);
-            match self.resource_client.cancel_ingestion(req).await {
-                Ok(result) => return Ok(result),
-                Err(status) if self.should_retry(&status, attempts) => {
-                    attempts += 1;
-                    self.log_retry(&status, backoff, attempts);
-                    sleep(backoff).await;
-                    backoff = self.next_backoff(backoff);
-                }
-                Err(status) => return Err(status),
-            }
-        }
-    }
-
-    /// Upload a large file using chunked streaming
-    ///
-    /// This method handles files > 100MB by streaming chunks to the server.
-    /// The file is split into 10MB chunks and streamed with integrity verification.
-    pub async fn chunked_upload(
-        &mut self,
-        user_id: String,
-        resource_id: Option<String>,
-        filename: String,
-        content_type: String,
-        file_data: Vec<u8>,
-        resource_type: pb::ResourceType,
-        title: Option<String>,
-        metadata: std::collections::HashMap<String, String>,
-        config: Option<pb::IngestionConfig>,
-    ) -> Result<tonic::Response<pb::ChunkedUploadResponse>, tonic::Status> {
-        use sha2::{Digest, Sha256};
-
-        const CHUNK_SIZE: usize = 10 * 1024 * 1024; // 10MB chunks
-
-        let total_size = file_data.len() as i64;
-        let total_chunks = ((file_data.len() + CHUNK_SIZE - 1) / CHUNK_SIZE) as i32;
-
-        // Compute checksum
-        let mut hasher = Sha256::new();
-        hasher.update(&file_data);
-        let checksum = format!("{:x}", hasher.finalize());
-
-        let resource_id = resource_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-
-        // Build data chunks first (collect to owned Vec to avoid lifetime issues)
-        let file_len = file_data.len();
-        let data_chunks: Vec<pb::FileChunk> = file_data
-            .chunks(CHUNK_SIZE)
-            .enumerate()
-            .map(|(i, chunk)| {
-                let is_last = (i + 1) * CHUNK_SIZE >= file_len;
-                pb::FileChunk {
-                    payload: Some(pb::file_chunk::Payload::Data(chunk.to_vec())),
-                    chunk_index: (i + 1) as i32,
-                    is_last,
-                }
-            })
-            .collect();
-
-        // Build complete chunk stream with metadata first
-        let metadata_chunk = pb::FileChunk {
-            payload: Some(pb::file_chunk::Payload::Metadata(pb::ChunkMetadata {
-                user_id: user_id.clone(),
-                resource_id: resource_id.clone(),
-                filename: filename.clone(),
-                content_type,
-                total_size,
-                total_chunks,
-                r#type: resource_type.into(),
-                title,
-                metadata,
-                config,
-                checksum: Some(checksum),
-            })),
-            chunk_index: 0,
-            is_last: false,
-        };
-
-        let chunks: Vec<pb::FileChunk> =
-            std::iter::once(metadata_chunk).chain(data_chunks).collect();
-
-        let request = tonic::Request::new(futures::stream::iter(chunks));
-
-        self.resource_client.chunked_upload(request).await
-    }
-
-    /// Synchronize resource metadata between API and Intelligence databases
-    ///
-    /// This method enables eventual consistency between the two databases by
-    /// comparing resource states and detecting conflicts.
-    pub async fn sync_resource_metadata(
-        &mut self,
-        request: pb::SyncMetadataRequest,
-    ) -> Result<tonic::Response<pb::SyncMetadataResponse>, tonic::Status> {
-        //  Sync is idempotent, safe to retry
-        let mut attempts = 0;
-        let mut backoff = self.retry_config.initial_backoff;
-
-        loop {
-            let req = self.request_with_timeout(request.clone(), self.timeouts.resource);
-            match self.resource_client.sync_resource_metadata(req).await {
-                Ok(result) => return Ok(result),
-                Err(status) if self.should_retry(&status, attempts) => {
-                    attempts += 1;
-                    self.log_retry(&status, backoff, attempts);
-                    sleep(backoff).await;
-                    backoff = self.next_backoff(backoff);
-                }
-                Err(status) => return Err(status),
-            }
-        }
+        model_slug: Option<String>,
+    ) -> Result<tonic::Response<pb::ReembedAllResponse>, tonic::Status> {
+        let req =
+            self.request_with_timeout(pb::ReembedAllRequest { model_slug }, self.timeouts.resource);
+        self.resource_client.reembed_all(req).await
     }
 
     // Health Methods
@@ -530,28 +380,6 @@ impl IntelligenceClient {
         loop {
             let req = self.request_with_timeout(pb::HealthCheckRequest {}, self.timeouts.health);
             match self.health_client.check(req).await {
-                Ok(result) => return Ok(result),
-                Err(status) if self.should_retry(&status, attempts) => {
-                    attempts += 1;
-                    self.log_retry(&status, backoff, attempts);
-                    sleep(backoff).await;
-                    backoff = self.next_backoff(backoff);
-                }
-                Err(status) => return Err(status),
-            }
-        }
-    }
-
-    pub async fn check_ready(
-        &mut self,
-    ) -> Result<tonic::Response<pb::ReadyCheckResponse>, tonic::Status> {
-        //  Retry for health checks
-        let mut attempts = 0;
-        let mut backoff = self.retry_config.initial_backoff;
-
-        loop {
-            let req = self.request_with_timeout(pb::ReadyCheckRequest {}, self.timeouts.health);
-            match self.health_client.ready(req).await {
                 Ok(result) => return Ok(result),
                 Err(status) if self.should_retry(&status, attempts) => {
                     attempts += 1;

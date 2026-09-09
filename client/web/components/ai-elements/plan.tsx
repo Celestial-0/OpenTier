@@ -1,8 +1,6 @@
 "use client";
 
-import type { ComponentProps } from "react";
-
-import { buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardAction,
@@ -19,7 +17,8 @@ import {
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { ChevronsUpDownIcon } from "lucide-react";
-import { createContext, useContext } from "react";
+import type { ComponentProps } from "react";
+import { createContext, useContext, useMemo } from "react";
 
 import { Shimmer } from "./shimmer";
 
@@ -46,11 +45,15 @@ export const Plan = ({
   isStreaming = false,
   children,
   ...props
-}: PlanProps) => (
-  <PlanContext.Provider value={{ isStreaming }}>
-    <Collapsible data-slot="plan" {...props} render={<Card className={cn("shadow-none", className)} />}>{children}</Collapsible>
-  </PlanContext.Provider>
-);
+}: PlanProps) => {
+  const contextValue = useMemo(() => ({ isStreaming }), [isStreaming]);
+
+  return (
+    <PlanContext.Provider value={contextValue}>
+      <Collapsible data-slot="plan" {...props} render={<Card className={cn("shadow-none", className)} />}>{children}</Collapsible>
+    </PlanContext.Provider>
+  );
+};
 
 export type PlanHeaderProps = ComponentProps<typeof CardHeader>;
 
@@ -126,7 +129,10 @@ export type PlanTriggerProps = ComponentProps<typeof CollapsibleTrigger>;
 
 export const PlanTrigger = ({ className, ...props }: PlanTriggerProps) => (
   <CollapsibleTrigger
-    className={cn(buttonVariants({ size: "icon", variant: "ghost" }), className)}
+    className={cn(
+      "inline-flex items-center justify-center size-8 rounded-md hover:bg-accent hover:text-accent-foreground transition-colors",
+      className
+    )}
     data-slot="plan-trigger"
     {...props}
   >

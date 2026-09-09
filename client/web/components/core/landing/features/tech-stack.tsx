@@ -21,7 +21,7 @@ export const FeatureTechStack = () => {
                     {sliderItems.map((item, index) => (
                         <Tooltip key={`${item.title}-${index}`}>
                             <TooltipTrigger render={
-                                <div className="cursor-pointer transition-transform duration-300 hover:scale-110 flex items-center justify-center">
+                                <div className="cursor-pointer transition-transform duration-300 hover:scale-110 flex items-center justify-center text-foreground">
                                     {item.icon}
                                 </div>
                             } />

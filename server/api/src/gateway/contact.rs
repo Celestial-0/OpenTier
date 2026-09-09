@@ -27,20 +27,22 @@ pub fn routes() -> Router<AppState> {
 async fn handle_contact(
     State(state): State<AppState>,
     Json(req): Json<ContactRequest>,
-) -> Result<Json<ContactResponse>, (StatusCode, Json<ContactResponse>)> {
+) -> Result<Json<ContactResponse>, crate::common::problem::ApiProblem> {
+    use crate::common::problem::ApiProblem;
+    let rid = uuid::Uuid::new_v4().to_string();
+
     // Basic validation
     if req.name.trim().is_empty()
         || req.email.trim().is_empty()
         || req.subject.trim().is_empty()
         || req.message.trim().is_empty()
     {
-        return Err((
+        return Err(ApiProblem::new(
             StatusCode::BAD_REQUEST,
-            Json(ContactResponse {
-                success: false,
-                message: "All fields are required.".to_string(),
-            }),
-        ));
+            "validation_failed",
+            "All fields are required.",
+        )
+        .with_request_id(rid));
     }
 
     let email_config = &state.config.email;
@@ -84,7 +86,10 @@ async fn handle_contact(
 
     let subject = format!("[OpenTier Contact] {}", req.subject);
 
-    match email_service.send_contact_email(recipient, &subject, &html_body).await {
+    match email_service
+        .send_contact_email(recipient, &subject, &html_body)
+        .await
+    {
         Ok(()) => {
             tracing::info!("Contact form submitted by {} <{}>", req.name, req.email);
             Ok(Json(ContactResponse {
@@ -94,13 +99,12 @@ async fn handle_contact(
         }
         Err(e) => {
             tracing::error!("Failed to send contact email: {}", e);
-            Err((
+            Err(ApiProblem::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ContactResponse {
-                    success: false,
-                    message: "Failed to send message. Please try again later.".to_string(),
-                }),
-            ))
+                "contact_delivery_failed",
+                "Failed to send message. Please try again later.",
+            )
+            .with_request_id(uuid::Uuid::new_v4().to_string()))
         }
     }
 }

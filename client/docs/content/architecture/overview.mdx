@@ -18,64 +18,73 @@ OpenTier/
 │   └── docs/                 # Documentation content (MDX)
 │
 └── server/
-    ├── docker-compose.yml    # Orchestrates db → migrations → services
-    ├── .env                  # Database credentials (POSTGRES_USER, etc.)
+    ├── docker-compose.yml    # Orchestrates database, redis, qdrant, intelligence, worker, api
+    ├── .env                  # Database credentials (POSTGRES_USER, ENCRYPTION_MASTER_KEY, etc.)
     ├── api/                  # Rust/Axum API gateway (Cargo workspace)
-    │   ├── src/              # Service source modules
+    │   ├── src/              # Service source modules (auth, chat, admin, resources)
+    │   ├── migrations/       # All SQL migrations (up/down)
     │   └── .sqlx/            # Offline query cache (CI safety)
-    ├── db/                   # Unified database management
-    │   └── migrations/       # All SQL migrations (up/down)
-    ├── intelligence/         # Python gRPC intelligence engine
-    │   ├── core/             # Config, DB session, lifecycle
-    │   ├── engine/           # Business logic (chat, ingestion, retrieval)
-    │   └── interfaces/       # gRPC servicers
+    ├── intelligence/         # Python gRPC intelligence engine & workers
+    │   ├── core/             # Config, DB session, lifecycle, events
+    │   ├── features/         # Chat, knowledge, billing, and auth
+    │   ├── shared/qdrant/    # Qdrant hybrid vector store adapter (dense + sparse)
+    │   ├── shared/redis/     # Redis Streams bus, consumer groups, dedupe
+    │   ├── scripts/          # DLQ management, backfill, and smoke tests
+    │   └── worker.py         # Autonomous background stream consumer runtime
     └── proto/
         └── intelligence.proto # Shared Protobuf contract
 ```
 
 ## Isolation Boundaries
 
-
 <Mermaid chart={`
-
 flowchart TB
 
-Browser["Browser"]
+Browser["Browser / Client"]
 
 subgraph CLIENT["Client  ·  Bun / Node"];
     NextJS["Next.js 16\nApp Router + Zustand"]
 end
 
 subgraph RUST["API  ·  Rust / Tokio"];
-    RustAPI["Axum + Tower\nHTTP Gateway"]
+    RustAPI["Axum + Tower\nHTTP Gateway :4000"]
 end
 
-subgraph ROW3["Data + Intelligence + External"];
-    direction LR
-    subgraph PYTHON["Intelligence  ·  Python"];
-        PyService["IntelligenceEngine\ngrpcio-aio + asyncpg"]
+subgraph BACKEND["Core Services & Data Tier"];
+    direction TB
+    subgraph PROCESSES["Application Processes"];
+        direction LR
+        PyService["Intelligence Engine\nPython gRPC :50051"]
+        WorkerService["Background Worker\nPython Streams Consumer"]
     end
-    subgraph DB["PostgreSQL"];
-        PG["Core Tables\n+\nVector Tables"]
+    subgraph DATA["Data & Vector Infrastructure"];
+        direction LR
+        PG["PostgreSQL 18\nACID Relational Store"]
+        REDIS["Redis 8 (AOF)\nStreams, Locks, Rate Limits"]
+        QDRANT["Qdrant Vector DB\nDense (3072d) + Sparse BM25"]
     end
-    subgraph EXT["External Services"];
-        direction TB
-        LLM["LLM Provider\nOpenAI / Gemini"]
-        OAuth["OAuth Provider\nGoogle / GitHub"]
+    subgraph EXT["External Providers"];
+        direction LR
+        LLM["LLM Providers\nGemini / OpenAI / Ollama"]
+        OAuth["OAuth Providers\nGoogle / GitHub"]
         SMTP["SMTP Server"]
     end
 end
 
-Browser -->|"HTTPS  fetch + SSE"| NextJS
-NextJS -->|"HTTP/1.1  REST + SSE  —  next.config proxy"| RustAPI
-RustAPI -->|"sqlx  TCP"| PG
-RustAPI -->|"gRPC  HTTP/2  —  tonic + Protobuf"| PyService
-PyService -->|"asyncpg + pgvector"| PG
-PyService -->|"httpx"| LLM
+Browser -->|"HTTPS fetch + SSE"| NextJS
+NextJS -->|"HTTP REST + SSE — reverse proxy"| RustAPI
+RustAPI -->|"sqlx TCP"| PG
+RustAPI -->|"redis-rs TCP"| REDIS
+RustAPI -->|"gRPC HTTP/2 — tonic + Protobuf"| PyService
+PyService -->|"asyncpg"| PG
+PyService -->|"qdrant-client"| QDRANT
+PyService -->|"httpx (decrypted keys)"| LLM
+WorkerService -->|"aioredis (consumer groups)"| REDIS
+WorkerService -->|"asyncpg"| PG
+WorkerService -->|"qdrant-client"| QDRANT
 RustAPI -->|"OAuth2 + PKCE"| OAuth
-RustAPI -->|"lettre  SMTP"| SMTP
+RustAPI -->|"lettre SMTP"| SMTP
 `} />
-
 
 ## Language Boundaries
 
@@ -83,15 +92,19 @@ RustAPI -->|"lettre  SMTP"| SMTP
 |----------|-----------|----------|--------------------|
 | Browser ↔ Next.js | Fetch API + SSE | HTTP/1.1 | Zod (`api-types.ts`) |
 | Next.js ↔ Rust API | HTTP Proxy (`next.config`) | HTTP/1.1 | None (passthrough) |
-| Rust ↔ Python | tonic client / grpcio server | HTTP/2 gRPC | Protobuf v3 |
-| Rust ↔ PostgreSQL | sqlx (offline-verified) | TCP | Compile-time query checks |
+| Rust ↔ Python | tonic client / grpcio server | HTTP/2 gRPC | Protobuf v3 (`intelligence.proto`) |
+| Rust ↔ Redis | redis-rs | RESP3 / TCP | Redis command protocol |
+| Python ↔ Redis | redis.asyncio | RESP3 / TCP | `EventEnvelope` (`core.events`) |
+| Python ↔ Qdrant | qdrant-client | HTTP/REST & gRPC | Qdrant point schema (`knowledge_chunks`) |
+| Rust ↔ PostgreSQL | sqlx (compile-time checked) | TCP | Compile-time query checks |
 | Python ↔ PostgreSQL | asyncpg / SQLAlchemy | TCP | SQLAlchemy ORM models |
 
 ## Deployment Implications
 
-- **Three independent processes**: client (Node/Bun), API (Rust binary), Intelligence (Python). Each can be scaled, restarted, and deployed independently.
-- **Single database**: both Rust and Python connect to the same PostgreSQL instance. All migrations are centralized in `server/db/migrations/` and managed by [`sqlx-cli`](https://crates.io/crates/sqlx-cli).
-- **Orchestrated startup**: Docker Compose enforces the startup order: `db` (healthcheck) → `api` & `intelligence`. The `api` container applies any pending SQL migrations, prepares the `sqlx` cache dynamically, and builds at runtime sequentially.
-- **Port assignments**: API default `4000`, Intelligence gRPC default `50051` (configurable via `INTELLIGENCE_SERVICE_URL`).
-- **gRPC lazy connect**: if the Intelligence service is down, the Rust API boots successfully (with degraded chat functionality). Auth, user, and admin endpoints remain fully operational.
-- **Runtime `sqlx` preparation**: Rust sqlx queries are built at runtime in the API Docker container when the database is available. This enables SQL types to be rigorously database-checked automatically on docker compose start, ensuring the db matches the API schemas without tracking offline cache files.
+- **Decoupled Architecture**: Six containerized services (`api`, `intelligence`, `worker`, `qdrant`, `redis`, `database`) orchestrated via Docker Compose.
+- **Independent Failure Domains**: If background ingestion or high-volume scraping is under heavy load, the `worker` process absorbs the work without degrading the gRPC `intelligence` engine or the Rust `api` gateway.
+- **Dedicated Vector Store**: Qdrant handles all high-dimensional dense vectors and sparse lexical indices with sub-millisecond HNSW matching, offloading vector computations from PostgreSQL.
+- **Event Bus with Durability**: Redis 8 with AOF persistence ensures task events are queued safely with consumer groups, manual acknowledgment (`XACK`), automatic reclamation of abandoned tasks (`XAUTOCLAIM`), and Dead-Letter Queues (DLQ).
+- **Port assignments**: API `4000`, Intelligence gRPC `50051`, Qdrant `6333`/`6334`, Redis `6379`, PostgreSQL `5432`.
+- **Runtime `sqlx` preparation**: Rust sqlx queries are built dynamically in the API Docker container against the healthy PostgreSQL database.
+

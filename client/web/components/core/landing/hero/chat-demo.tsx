@@ -53,7 +53,7 @@ export const HeroChatDemo = () => {
                 initial={{ opacity: 0, y: 24 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, ease: "easeOut" }}
-                className="relative rounded-2xl md:rounded-[28px] border border-border/40 dark:border-white/10 bg-linear-to-b from-background/80 to-background/60 backdrop-blur-xl shadow-[0_20px_60px_-20px_rgba(0,0,0,0.3)] overflow-hidden"
+                className="relative rounded-2xl md:rounded-3xl border border-border/40 dark:border-white/10 bg-linear-to-b from-background/80 to-background/60 backdrop-blur-xl shadow-[0_20px_60px_-20px_rgba(0,0,0,0.3)] overflow-hidden"
             >
                 {/* Energy rails */}
                 <div className="absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-primary/70 to-transparent" />
@@ -71,7 +71,7 @@ export const HeroChatDemo = () => {
                         </span>
                     </div>
 
-                    <div className="flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs tracking-widest text-green-500">
+                    <div className="flex items-center gap-1 sm:gap-2 text-xs tracking-widest text-green-500">
                         <span className="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full bg-green-500 animate-pulse" />
                         <span className="hidden sm:inline">ONLINE</span>
                     </div>
@@ -158,7 +158,7 @@ export const HeroChatDemo = () => {
                         </button>
                     </div>
 
-                    <p className="mt-3 sm:mt-4 text-center text-[9px] sm:text-[11px] tracking-widest text-muted-foreground/90 dark:text-muted-foreground/60">
+                    <p className="mt-3 sm:mt-4 text-center text-xs tracking-widest text-muted-foreground/90 dark:text-muted-foreground/60">
                         SYSTEM OUTPUT · SIMULATION MODE
                     </p>
                 </div>

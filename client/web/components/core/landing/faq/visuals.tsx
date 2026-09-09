@@ -3,12 +3,12 @@
 import { useState } from "react";
 
 import {
-    Shield,
     Lock,
     Zap,
     FileCode,
 } from "lucide-react";
 import { SiRust, SiPython, SiPostgresql } from "react-icons/si";
+import { QdrantLogo } from "@/components/core/common/logos";
 import { cn } from "@/lib/utils";
 import {
     Terminal,
@@ -58,25 +58,48 @@ export const PrivacyVisual = () => {
             <div className="absolute inset-0 bg-[linear-gradient(to_right,color-mix(in_oklch,var(--color-primary),transparent_95%)_1px,transparent_1px),linear-gradient(to_bottom,color-mix(in_oklch,var(--color-primary),transparent_95%)_1px,transparent_1px)] bg-[size:24px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]" />
 
             <div className="relative z-10 flex flex-col items-center gap-6">
-                <div className="relative">
-                    <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full" />
-                    <div className="bg-popover border border-border p-4 rounded-2xl shadow-xl flex items-center justify-center relative">
-                        <SiPostgresql className="w-12 h-12 text-primary" />
-                        <div className="absolute -bottom-2 -right-2 bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                            <Lock className="w-3 h-3" />
-                            LOCAL
+                {/* Icon pair */}
+                <div className="flex items-center gap-4">
+                    {/* PostgreSQL 18 */}
+                    <div className="relative">
+                        <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full" />
+                        <div className="bg-popover border border-border p-4 rounded-2xl shadow-xl flex items-center justify-center relative">
+                            <SiPostgresql className="w-10 h-10 text-primary" />
+                            <div className="absolute -bottom-2 -right-2 bg-emerald-500 text-white text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                                <Lock className="w-3 h-3" />
+                                LOCAL
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Divider */}
+                    <div className="flex flex-col items-center gap-1 text-muted-foreground/40">
+                        <div className="w-px h-4 bg-border" />
+                        <span className="text-xs font-mono">+</span>
+                        <div className="w-px h-4 bg-border" />
+                    </div>
+
+                    {/* Qdrant */}
+                    <div className="relative">
+                        <div className="absolute inset-0 bg-rose-500/15 blur-xl rounded-full" />
+                        <div className="bg-popover border border-border p-4 rounded-2xl shadow-xl flex items-center justify-center relative">
+                            <QdrantLogo className="w-10 h-10 text-foreground" uniColor />
+                            <div className="absolute -bottom-2 -right-2 bg-rose-500 text-white text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                                <Lock className="w-3 h-3" />
+                                LOCAL
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <div className="flex gap-4">
+                <div className="flex flex-wrap gap-2 justify-center">
                     <Badge variant="outline" className="gap-2 bg-background/50 backdrop-blur-sm">
                         <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                        PostgreSQL 16
+                        PostgreSQL 18
                     </Badge>
                     <Badge variant="outline" className="gap-2 bg-background/50 backdrop-blur-sm">
-                        <Shield className="w-3 h-3 text-primary" />
-                        RBAC Enabled
+                        <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                        Qdrant Vector DB
                     </Badge>
                 </div>
             </div>
@@ -155,7 +178,7 @@ export const IntegrationVisual = () => {
             </div>
 
             {/* Floating execution badge */}
-            <div className="absolute bottom-4 right-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-3 py-1.5 rounded-full text-[10px] font-bold flex items-center gap-2 backdrop-blur-sm shadow-sm">
+            <div className="absolute bottom-4 right-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-2 backdrop-blur-sm shadow-sm">
                 <Zap className="w-3 h-3 fill-current" />
                 gRPC CONNECTED
             </div>
@@ -174,15 +197,15 @@ export const LogicIsolationVisual = () => {
                     <div className="w-16 h-16 rounded-2xl bg-popover border border-orange-500/40 flex items-center justify-center shadow-[0_0_30px_-10px_rgba(249,115,22,0.3)]">
                         <SiRust className="w-8 h-8" />
                     </div>
-                    <span className="text-[10px] font-bold text-orange-400 tracking-wider">GATEWAY</span>
+                    <span className="text-xs font-bold text-orange-400 tracking-wider">GATEWAY</span>
                 </div>
 
                 {/* Connection */}
                 <div className="flex flex-col items-center gap-1">
-                    <span className="text-[9px] text-muted-foreground font-mono">gRPC Stream</span>
+                    <span className="text-xs text-muted-foreground font-mono">gRPC Stream</span>
                     <div className="flex items-center gap-1">
                         <div className="w-1.5 h-1.5 rounded-full bg-border" />
-                        <div className="w-12 h-[2px] bg-gradient-to-r from-orange-500/50 to-blue-500/50" />
+                        <div className="w-12 h-0.5 bg-gradient-to-r from-orange-500/50 to-blue-500/50" />
                         <div className="w-1.5 h-1.5 rounded-full bg-border" />
                     </div>
                 </div>
@@ -193,7 +216,7 @@ export const LogicIsolationVisual = () => {
                         <SiPython className="w-8 h-8" />
                         <div className="absolute -top-1 -right-1 w-3 h-3 bg-blue-500 rounded-full border-2 border-background animate-bounce" />
                     </div>
-                    <span className="text-[10px] font-bold text-blue-400 tracking-wider">LOGIC</span>
+                    <span className="text-xs font-bold text-blue-400 tracking-wider">LOGIC</span>
                 </div>
             </div>
 

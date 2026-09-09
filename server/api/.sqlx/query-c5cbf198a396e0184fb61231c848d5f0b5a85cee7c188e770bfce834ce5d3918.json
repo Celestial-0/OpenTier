@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT provider, pkce_verifier, expires_at\n        FROM oauth_auth_states\n        WHERE state = $1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "provider",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 1,
+        "name": "pkce_verifier",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "expires_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "c5cbf198a396e0184fb61231c848d5f0b5a85cee7c188e770bfce834ce5d3918"
+}

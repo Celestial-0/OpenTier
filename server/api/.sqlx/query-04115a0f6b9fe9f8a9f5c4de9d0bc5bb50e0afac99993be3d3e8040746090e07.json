@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO oauth_login_codes (code, provider, session_token, email, is_new_user, message, expires_at)\n        VALUES ($1, $2, $3, $4, $5, $6, $7)\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Bool",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "04115a0f6b9fe9f8a9f5c4de9d0bc5bb50e0afac99993be3d3e8040746090e07"
+}

@@ -49,8 +49,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
-import { FREE_MESSAGE_LIMIT } from "@/store/chat-store";
-import { Progress } from "@/components/ui/progress";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -76,7 +74,6 @@ interface SidebarProps {
   onLogout?: () => void;
   onNavigateToDashboard?: (view: string) => void;
   isAuthenticated?: boolean;
-  freeMessageCount?: number;
 }
 
 // ─── Thread List ─────────────────────────────────────────────────────────────
@@ -276,7 +273,6 @@ export const Sidebar = ({
   onLogout,
   onNavigateToDashboard,
   isAuthenticated = false,
-  freeMessageCount = 0,
 }: SidebarProps) => {
   const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
   const isMobile = useIsMobile();
@@ -328,7 +324,7 @@ export const Sidebar = ({
           )}
 
           <div className="px-2 pt-6">
-            <p className="text-[14px] text-muted-foreground leading-snug">
+            <p className="text-sm text-muted-foreground leading-snug">
               You have reached the end of your chat history.
             </p>
           </div>
@@ -336,18 +332,6 @@ export const Sidebar = ({
       </SidebarContent>
 
       <SidebarRail />
-
-      {!isAuthenticated && (
-        <div className="px-4 py-4 border-t">
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Free Plan</span>
-              <span>{Math.min(freeMessageCount, FREE_MESSAGE_LIMIT)} / {FREE_MESSAGE_LIMIT} used</span>
-            </div>
-            <Progress value={Math.min((freeMessageCount / FREE_MESSAGE_LIMIT) * 100, 100)} className="h-1.5" />
-          </div>
-        </div>
-      )}
 
       <SidebarFooter className="border-t flex items-center">
         <UserMenu
@@ -362,31 +346,31 @@ export const Sidebar = ({
         <Drawer open={showDeleteAllDialog} onOpenChange={setShowDeleteAllDialog}>
           <DrawerContent className="bg-[#09090b] border-t border-zinc-800 px-4 pt-2">
             <DrawerHeader className="text-left px-0 pt-4">
-              <DrawerTitle className="text-[20px] font-bold text-white tracking-tight">Delete all chats?</DrawerTitle>
-              <DrawerDescription className="text-[15px] leading-relaxed text-[#a1a1aa] mt-3">
+              <DrawerTitle className="text-xl font-bold text-white tracking-tight">Delete all chats?</DrawerTitle>
+              <DrawerDescription className="text-sm leading-relaxed text-[#a1a1aa] mt-3">
                 This action cannot be undone. This will permanently delete all your chats
                 and remove them from our servers.
               </DrawerDescription>
             </DrawerHeader>
             <DrawerFooter className="px-0 pb-8 pt-6 flex-row gap-3">
-              <Button variant="outline" onClick={() => setShowDeleteAllDialog(false)} className="flex-1 bg-transparent border-zinc-800 text-white hover:bg-zinc-900 border font-medium py-6 rounded-xl text-[15px]">Cancel</Button>
-              <Button onClick={handleDeleteAll} className="flex-1 bg-white text-black hover:bg-zinc-200 font-medium py-6 rounded-xl text-[15px]">Delete All</Button>
+              <Button variant="outline" onClick={() => setShowDeleteAllDialog(false)} className="flex-1 bg-transparent border-zinc-800 text-white hover:bg-zinc-900 border font-medium py-6 rounded-xl text-sm">Cancel</Button>
+              <Button onClick={handleDeleteAll} className="flex-1 bg-white text-black hover:bg-zinc-200 font-medium py-6 rounded-xl text-sm">Delete All</Button>
             </DrawerFooter>
           </DrawerContent>
         </Drawer>
       ) : (
         <Dialog open={showDeleteAllDialog} onOpenChange={setShowDeleteAllDialog}>
-          <DialogContent showCloseButton={false} className="bg-[#09090b] border border-zinc-800 rounded-[14px] p-6 sm:max-w-[480px] gap-8 shadow-2xl">
+          <DialogContent showCloseButton={false} className="bg-[#09090b] border border-zinc-800 rounded-xl p-6 sm:max-w-lg gap-8 shadow-2xl">
             <div className="flex flex-col gap-3">
-              <DialogTitle className="text-[22px] font-bold text-white tracking-tight">Delete all chats?</DialogTitle>
-              <DialogDescription className="text-[15px] leading-relaxed text-[#A1A1AA]">
+              <DialogTitle className="text-2xl font-bold text-white tracking-tight">Delete all chats?</DialogTitle>
+              <DialogDescription className="text-sm leading-relaxed text-[#A1A1AA]">
                 This action cannot be undone. This will permanently delete all your chats
                 and remove them from our servers.
               </DialogDescription>
             </div>
             <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setShowDeleteAllDialog(false)} className="bg-transparent border-zinc-800 border text-white hover:bg-zinc-900 hover:text-white font-medium px-6 py-[22px] h-auto rounded-xl text-[15px]">Cancel</Button>
-              <Button onClick={handleDeleteAll} className="bg-white text-black hover:bg-white/90 font-medium px-6 py-[22px] h-auto rounded-xl text-[15px]">Delete All</Button>
+              <Button variant="outline" onClick={() => setShowDeleteAllDialog(false)} className="bg-transparent border-zinc-800 border text-white hover:bg-zinc-900 hover:text-white font-medium px-6 py-5 h-auto rounded-xl text-sm">Cancel</Button>
+              <Button onClick={handleDeleteAll} className="bg-white text-black hover:bg-white/90 font-medium px-6 py-5 h-auto rounded-xl text-sm">Delete All</Button>
             </div>
           </DialogContent>
         </Dialog>

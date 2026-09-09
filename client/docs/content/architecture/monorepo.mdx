@@ -47,19 +47,24 @@ server/api/
 
 ## Intelligence Service — uv / pyproject.toml
 
-The `server/intelligence/` service uses `uv` (ultra-fast Python package manager) with `pyproject.toml` for dependency declaration. A `.python-version` file pins the interpreter to Python 3.14.
+The `server/intelligence/` service uses `uv` (ultra-fast Python package manager) with `pyproject.toml` for dependency declaration. A `.python-version` file pins the interpreter to Python 3.14. It ships two runtime entry points:
 
 ```
 server/intelligence/
 ├── pyproject.toml   # dependencies, dev tools (ruff, mypy, pytest)
 ├── .python-version  # interpreter pin (3.14)
 ├── pytest.ini       # test configuration
-└── main.py          # entry point
+├── main.py          # gRPC server entry point (:50051)
+├── worker.py        # Redis Streams background consumer runtime
+├── scripts/         # Operational scripts (backfill_qdrant.py, dlq.py, generate_protos.py)
+├── features/        # chat, knowledge, billing, health
+└── shared/          # database, llm, qdrant, redis, crypto
 ```
 
 **Build/run commands**:
 - `uv sync` — install dependencies into virtual environment
 - `uv run python main.py` — start gRPC server
+- `uv run python worker.py` — start Redis Streams background consumers
 - `uv run pytest` — run test suite
 
 **Dev tooling**:
@@ -69,29 +74,34 @@ server/intelligence/
 
 ## Database Migrations — sqlx
 
-All database schema migrations are centralized in `server/db/migrations/`. Both the Rust API and Python Intelligence service share the same PostgreSQL instance, so keeping migrations in a single location ensures consistent schema state.
+All database schema migrations are centralized in `server/api/migrations/`. Both the Rust API and Python Intelligence service share the same PostgreSQL 18 instance, so keeping migrations with the API gateway ensures consistent schema state and seamless compile-time SQL verification via SQLx.
 
 ```
-server/db/
+server/api/
 └── migrations/
-    ├── 20260111000001_create_users_table.up.sql
-    ├── 20260111000001_create_users_table.down.sql
-    ├── ...
-    └── 20260115000009_create_user_memories.up.sql
+    ├── 20260101000001_identity.{up,down}.sql
+    ├── 20260101000002_chat_memory.{up,down}.sql
+    ├── 20260101000003_knowledge.{up,down}.sql
+    ├── 20260101000004_model_catalog.{up,down}.sql
+    ├── 20260101000005_billing.{up,down}.sql
+    ├── 20260101000006_seed_free_credits.{up,down}.sql
+    └── 20260101000007_seed_model_catalog.{up,down}.sql
 ```
 
 **Migration tool**: `sqlx-cli` — a standard toolkit that processes `{timestamp}_{name}.up.sql` / `.down.sql` files directly in Rust workflows.
 
-**Docker Compose integration**: The API's `Dockerfile` pulls `db/migrations` and executes `sqlx migrate run` as part of its primary container startup sequence before compiling. This enforces type-safety checks against the live schema and runs migrations before serving traffic. The startup order is enforced via `depends_on` conditions:
+**Docker Compose integration**: The API's `Dockerfile` compiles `api/migrations` via `sqlx::migrate!()` and executes migrations on startup. This enforces type-safety checks against the live schema and runs migrations before serving traffic. The startup order is enforced via `depends_on` conditions:
 
 ```
-db (service_healthy) → intelligence
-db (service_healthy) → api (runs migrations & prepares query cache & builds binary)
+db (service_healthy), redis (service_healthy), qdrant (service_started) → intelligence
+db (service_healthy), redis (service_healthy), qdrant (service_started) → worker
+intelligence (service_started), db (service_healthy) → api (runs migrations & listens on :4000)
 ```
 
 **Local development**:
-- `cd server && docker compose up` — full stack with automatic migrations
-- Add a new migration: create `{timestamp}_{name}.up.sql` and `{timestamp}_{name}.down.sql` in `server/db/migrations/`
+- `cd server && docker compose up -d` — full 6-service stack with pre-built GHCR images
+- Or for local source building: `docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build`
+- Add a new migration: create `{timestamp}_{name}.up.sql` and `{timestamp}_{name}.down.sql` in `server/api/migrations/`
 
 ## Proto — Shared Contract
 
@@ -110,7 +120,7 @@ graph LR
     Proto["proto/intelligence.proto"]
     BuildRS["server/api/build.rs\n(tonic-prost-build)"]
     RustGenerated["OUT_DIR/\nintelligence.rs\n(Rust structs + client stubs)"]
-    PythonScript["script/generate_proto.sh\n(grpc_tools.protoc)"]
+    PythonScript["scripts/generate_protos.py\n(grpc_tools.protoc)"]
     PythonGenerated["intelligence/generated/\nintelligence_pb2.py\nintelligence_pb2_grpc.py"]
 
     Proto --> BuildRS --> RustGenerated

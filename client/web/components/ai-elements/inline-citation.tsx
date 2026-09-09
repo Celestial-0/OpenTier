@@ -1,9 +1,7 @@
 "use client";
 
-import type { CarouselApi } from "@/components/ui/carousel";
-import type { ComponentProps } from "react";
-
 import { Badge } from "@/components/ui/badge";
+import type { CarouselApi } from "@/components/ui/carousel";
 import {
   Carousel,
   CarouselContent,
@@ -16,6 +14,7 @@ import {
 } from "@/components/ui/hover-card";
 import { cn } from "@/lib/utils";
 import { ArrowLeftIcon, ArrowRightIcon } from "lucide-react";
+import type { ComponentProps } from "react";
 import {
   createContext,
   useCallback,
@@ -51,7 +50,7 @@ export const InlineCitationText = ({
 export type InlineCitationCardProps = ComponentProps<typeof HoverCard>;
 
 export const InlineCitationCard = (props: InlineCitationCardProps) => (
-  <HoverCard {...props} />
+  <HoverCard closeDelay={0} openDelay={0} {...props} />
 );
 
 export type InlineCitationCardTriggerProps = ComponentProps<typeof Badge> & {
@@ -151,27 +150,27 @@ export const InlineCitationCarouselIndex = ({
   const [current, setCurrent] = useState(0);
   const [count, setCount] = useState(0);
 
+  const syncState = useCallback(() => {
+    if (!api) {
+      return;
+    }
+    setCount(api.scrollSnapList().length);
+    setCurrent(api.selectedScrollSnap() + 1);
+  }, [api]);
+
   useEffect(() => {
     if (!api) {
       return;
     }
 
-    const handleChange = () => {
-      setCount(api.scrollSnapList().length);
-      setCurrent(api.selectedScrollSnap() + 1);
-    };
+    syncState();
 
-    const timer = setTimeout(handleChange, 0);
-
-    api.on("select", handleChange);
-    api.on("reInit", handleChange);
+    api.on("select", syncState);
 
     return () => {
-      clearTimeout(timer);
-      api.off("select", handleChange);
-      api.off("reInit", handleChange);
+      api.off("select", syncState);
     };
-  }, [api]);
+  }, [api, syncState]);
 
   return (
     <div

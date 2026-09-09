@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE event_outbox\n        SET attempts = attempts + 1\n        WHERE id IN (\n            SELECT id FROM event_outbox\n            WHERE published_at IS NULL AND attempts < 10\n            ORDER BY created_at\n            LIMIT $1\n            FOR UPDATE SKIP LOCKED\n        )\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "494ce7f015dff072d7240ea44d642de4c34e0ccf7237c29043e7d5c60efb738e"
+}

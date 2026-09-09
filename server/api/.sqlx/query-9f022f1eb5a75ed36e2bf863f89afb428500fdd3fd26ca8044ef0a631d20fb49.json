@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE credit_holds SET status = 'released' WHERE idempotency_key = $1 AND status = 'open'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9f022f1eb5a75ed36e2bf863f89afb428500fdd3fd26ca8044ef0a631d20fb49"
+}

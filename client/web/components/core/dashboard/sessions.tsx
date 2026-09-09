@@ -28,6 +28,7 @@ import {
 import { useUserStore } from "@/store/user-store";
 
 import { DashboardSession } from "@/types/dashboard";
+import { MetricCard } from "./metric-card";
 
 export function Sessions() {
     const { sessions, isLoadingSessions, fetchSessions, revokeSession } = useUserStore();
@@ -55,14 +56,41 @@ export function Sessions() {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h3 className="text-lg font-medium">Active Sessions</h3>
+                    <h3 className="text-xl sm:text-2xl font-bold tracking-tight">Active Sessions & Security</h3>
                     <p className="text-sm text-muted-foreground">
-                        Manage your active sessions and devices.
+                        Manage your active authenticated devices, IP addresses, and tokens.
                     </p>
                 </div>
-                <Button variant="outline" onClick={() => fetchSessions()} disabled={isLoadingSessions}>
+                <Button variant="outline" size="sm" onClick={() => fetchSessions()} disabled={isLoadingSessions}>
                     Refresh
                 </Button>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+                <MetricCard
+                    title="Active Sessions"
+                    subtitle="Currently authenticated tokens"
+                    value={sessions.length}
+                    progressValue={Math.min(100, sessions.length * 20)}
+                    progressVariant="emerald"
+                />
+                <MetricCard
+                    title="Current Device"
+                    subtitle={
+                        sessions.length > 0 && sessions[0]?.ip_address
+                            ? `IP: ${sessions[0].ip_address}`
+                            : "Primary authenticated session"
+                    }
+                    value={
+                        sessions.length > 0
+                            ? sessions[0]?.user_agent?.includes("Mozilla")
+                                ? "Web Browser"
+                                : "Client App"
+                            : "No active sessions"
+                    }
+                    progressValue={sessions.length > 0 ? 100 : 0}
+                    progressVariant="blue"
+                />
             </div>
 
             <Card>
@@ -94,7 +122,7 @@ export function Sessions() {
                                         <TableCell className="font-medium py-4">
                                             <div className="flex items-center gap-2">
                                                 {getDeviceIcon(session.user_agent)}
-                                                <span className="truncate max-w-[200px]" title={session.user_agent || "Unknown"}>
+                                                <span className="truncate max-w-48" title={session.user_agent || "Unknown"}>
                                                     {session.user_agent ? (session.user_agent.includes("Mozilla") ? "Web Browser" : session.user_agent) : "Unknown Device"}
                                                 </span>
                                             </div>

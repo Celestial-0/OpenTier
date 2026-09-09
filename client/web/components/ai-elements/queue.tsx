@@ -1,7 +1,5 @@
 "use client";
 
-import type { ComponentProps } from "react";
-
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -11,6 +9,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { ChevronDownIcon, PaperclipIcon } from "lucide-react";
+import type { ComponentProps } from "react";
 
 export interface QueueMessagePart {
   type: string;
@@ -176,7 +175,7 @@ export const QueueItemFile = ({
     {...props}
   >
     <PaperclipIcon size={12} />
-    <span className="max-w-[100px] truncate">{children}</span>
+    <span className="max-w-24 truncate">{children}</span>
   </span>
 );
 

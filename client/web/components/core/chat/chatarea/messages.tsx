@@ -140,7 +140,7 @@ const UserEditForm = memo(({ initialContent, onSave, onCancel }: UserEditFormPro
   return (
     <div className="flex w-full flex-col gap-2">
       <Textarea
-        className="min-h-[80px] resize-none rounded-lg border border-border bg-secondary px-4 py-3 text-sm focus-visible:ring-1"
+        className="min-h-20 resize-none rounded-lg border border-border bg-secondary px-4 py-3 text-sm focus-visible:ring-1"
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={(e) => {

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE users\n        SET role = 'contributor'::user_role, updated_at = NOW()\n        WHERE id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f9c5d3311f3e529763a1ec92e2e173175c330c57f7206fea075b9f67af787d52"
+}

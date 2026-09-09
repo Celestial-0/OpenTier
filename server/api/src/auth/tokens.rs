@@ -1,4 +1,17 @@
 use rand::{Rng, distributions::Alphanumeric};
+use sha2::{Digest, Sha256};
+
+/// SHA-256 hex digest of a token — the only representation persisted or used
+/// as a cache key (opaque tokens are never stored in plaintext).
+pub fn hash_token(token: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(token.as_bytes());
+    hex_encode(&hasher.finalize())
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
 
 /// Generate a secure random token
 /// Returns a 32-character alphanumeric string

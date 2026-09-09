@@ -87,3 +87,88 @@ pub fn auth_rate_limiter() -> DefaultGovernorLayer {
 pub fn sensitive_auth_rate_limiter() -> DefaultGovernorLayer {
     strict_rate_limiter()
 }
+
+// ===== Distributed sliding-window limiter =====
+
+use axum::{
+    extract::{ConnectInfo, Request, State},
+    middleware::Next,
+    response::Response,
+};
+use std::net::SocketAddr;
+
+use crate::gateway::AppState;
+
+fn client_ip(
+    headers: &axum::http::HeaderMap,
+    addr: &SocketAddr,
+    trusted_cidrs: &[ipnetwork::IpNetwork],
+) -> String {
+    crate::common::client_ip::resolve(addr.ip(), headers, trusted_cidrs)
+}
+
+/// Cross-instance sliding-window limiter backed by Redis.
+///
+/// Bucket = `ot:api:rl:{first_path_segment}:{client_ip}` so auth / contact /
+/// user traffic gets independent windows. Limits come from
+/// `RATE_LIMIT_MAX_REQUESTS` / `RATE_LIMIT_WINDOW_SECONDS` config.
+///
+/// Fail-open: if Redis is unavailable (circuit open), requests pass — local
+/// governor burst limits still apply. This is a deliberate availability-over-
+/// strictness tradeoff (Redis is never authoritative).
+pub async fn distributed_rate_limiter(
+    State(app_state): State<AppState>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    request: Request,
+    next: Next,
+) -> Result<Response, axum::response::Response> {
+    let Some(redis) = &app_state.redis else {
+        return Ok(next.run(request).await);
+    };
+
+    // Reject early when the breaker is open instead of paying a round trip.
+    if redis.is_open() {
+        return Ok(next.run(request).await);
+    }
+
+    let ip = client_ip(
+        request.headers(),
+        &addr,
+        &app_state.config.proxy.trusted_cidrs,
+    );
+    let tag = request
+        .uri()
+        .path()
+        .split('/')
+        .nth(1)
+        .unwrap_or("root")
+        .to_string();
+
+    let limit = i64::from(app_state.config.rate_limit.max_requests.max(1));
+    let window = std::time::Duration::from_secs(app_state.config.rate_limit.window_seconds.max(1));
+
+    let bucket = format!("ot:api:rl:{tag}:{ip}");
+    match redis.sliding_window_allow(&bucket, limit, window).await {
+        Ok(true) => Ok(next.run(request).await),
+        Ok(false) => {
+            tracing::debug!(bucket = %bucket, "distributed rate limit exceeded");
+            use axum::response::IntoResponse;
+            let problem = crate::common::problem::ApiProblem::new(
+                axum::http::StatusCode::TOO_MANY_REQUESTS,
+                "rate_limited",
+                "Too many requests, please try again later",
+            )
+            .with_request_id(uuid::Uuid::new_v4().to_string());
+            let mut resp = problem.into_response();
+            if let Ok(v) = axum::http::HeaderValue::from_str(&window.as_secs().to_string()) {
+                resp.headers_mut()
+                    .insert(axum::http::header::RETRY_AFTER, v);
+            }
+            Err(resp)
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "rate limiter degraded; failing open");
+            Ok(next.run(request).await)
+        }
+    }
+}

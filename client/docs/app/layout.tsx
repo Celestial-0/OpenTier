@@ -2,6 +2,7 @@ import Image from 'next/image'
 import { Footer, Layout, Navbar } from 'nextra-theme-docs'
 import { getPageMap } from 'nextra/page-map'
 import './globals.css'
+import 'katex/dist/katex.min.css'
 
 export const metadata = {
   title: {
@@ -29,6 +30,9 @@ const navbar = (
           className="h-8 w-8"
         />
         <b className="text-base">OpenTier Docs</b>
+        <span className="rounded-md bg-neutral-200/60 dark:bg-neutral-800 px-1.5 py-0.5 text-xs font-mono text-muted-foreground border border-neutral-300 dark:border-neutral-700">
+          v1.1.0
+        </span>
       </div>
     }
   />

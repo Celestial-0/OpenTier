@@ -1,9 +1,7 @@
 use axum::{
-    Json,
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use serde_json::json;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -85,11 +83,7 @@ impl IntoResponse for AuthError {
             AuthError::Validation(ref msg) => (StatusCode::BAD_REQUEST, msg.as_str()),
         };
 
-        let body = Json(json!({
-            "error": message,
-            "message": message,
-        }));
-
-        (status, body).into_response()
+        use crate::common::problem::ApiProblem;
+        ApiProblem::new(status, ApiProblem::slug(message), message).into_response()
     }
 }

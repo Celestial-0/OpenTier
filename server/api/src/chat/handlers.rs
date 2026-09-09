@@ -1,6 +1,8 @@
+use axum::response::IntoResponse;
 use axum::{
     Json,
     extract::{Extension, Path, Query, State},
+    http::HeaderMap,
     response::sse::{Event, KeepAlive, Sse},
 };
 use futures::Stream;
@@ -27,18 +29,13 @@ pub async fn create_conversation(
     let conversation_id = Uuid::new_v4();
     let metadata = req.metadata;
 
-    let row = sqlx::query!(
-        r#"
-        INSERT INTO conversations (id, user_id, title, metadata)
-        VALUES ($1, $2, $3, $4)
-        RETURNING id, user_id, title, metadata, created_at, updated_at
-        "#,
+    let row = crate::infra::postgres::chat_repo::create_conversation(
+        &state.db,
         conversation_id,
-        user_id.to_string(),
+        &user_id.to_string(),
         req.title,
-        metadata
+        metadata,
     )
-    .fetch_one(&state.db)
     .await
     .map_err(|e| ChatError::DatabaseError(e.to_string()))?;
 
@@ -47,8 +44,8 @@ pub async fn create_conversation(
         user_id: row.user_id,
         title: row.title,
         message_count: 0,
-        created_at: row.created_at.timestamp(),
-        updated_at: row.updated_at.timestamp(),
+        created_at: row.created_at,
+        updated_at: row.updated_at,
     }))
 }
 
@@ -60,34 +57,20 @@ pub async fn get_conversation(
     Path(conversation_id): Path<Uuid>,
 ) -> ChatResult<Json<ConversationWithMessages>> {
     // Check ownership and existence
-    let conversation = sqlx::query!(
-        r#"
-        SELECT id, title, created_at, updated_at
-        FROM conversations
-        WHERE id = $1 AND user_id = $2
-        "#,
+    let conversation = crate::infra::postgres::chat_repo::get_owned_meta(
+        &state.db,
         conversation_id,
-        user_id.to_string()
+        &user_id.to_string(),
     )
-    .fetch_optional(&state.db)
     .await
     .map_err(|e| ChatError::DatabaseError(e.to_string()))?
     .ok_or(ChatError::ConversationNotFound(conversation_id.to_string()))?;
 
     // Fetch messages
     // Note: Python Intelligence service persists to 'chat_messages'
-    let messages = sqlx::query!(
-        r#"
-        SELECT id, role::text as "role!", content, sources, metadata, created_at, parent_id
-        FROM chat_messages
-        WHERE conversation_id = $1
-        ORDER BY created_at ASC
-        "#,
-        conversation_id
-    )
-    .fetch_all(&state.db)
-    .await
-    .map_err(|e| ChatError::DatabaseError(e.to_string()))?;
+    let messages = crate::infra::postgres::chat_repo::get_messages(&state.db, conversation_id)
+        .await
+        .map_err(|e| ChatError::DatabaseError(e.to_string()))?;
 
     let response_messages = messages
         .into_iter()
@@ -99,7 +82,7 @@ pub async fn get_conversation(
                 _ => MessageRole::System,
             },
             content: msg.content,
-            created_at: msg.created_at.timestamp(),
+            created_at: msg.created_at,
             sources: serde_json::from_value(msg.sources).unwrap_or_default(),
             parent_id: msg.parent_id.map(|u| u.to_string()),
         })
@@ -109,8 +92,8 @@ pub async fn get_conversation(
         id: conversation.id,
         title: conversation.title,
         messages: response_messages,
-        created_at: conversation.created_at.timestamp(),
-        updated_at: conversation.updated_at.timestamp(),
+        created_at: conversation.created_at,
+        updated_at: conversation.updated_at,
     }))
 }
 
@@ -127,37 +110,19 @@ pub async fn list_conversations(
         .and_then(|c| c.parse::<i64>().ok())
         .unwrap_or(0);
 
-    let conversations = sqlx::query!(
-        r#"
-        SELECT c.id, c.title, c.created_at, c.updated_at,
-               (SELECT COUNT(*) FROM chat_messages m WHERE m.conversation_id = c.id) as "message_count!",
-               (SELECT content FROM chat_messages m WHERE m.conversation_id = c.id ORDER BY created_at DESC LIMIT 1) as "last_message_preview"
-        FROM conversations c
-        WHERE c.user_id = $1
-        ORDER BY c.updated_at DESC
-        LIMIT $2 OFFSET $3
-        "#,
-        user_id.to_string(),
+    let conversations = crate::infra::postgres::chat_repo::list_conversations(
+        &state.db,
+        &user_id.to_string(),
         limit,
-        offset
+        offset,
     )
-    .fetch_all(&state.db)
     .await
     .map_err(|e| ChatError::DatabaseError(e.to_string()))?;
 
-    let total_count = sqlx::query!(
-        r#"
-        SELECT COUNT(*) as count
-        FROM conversations
-        WHERE user_id = $1
-        "#,
-        user_id.to_string()
-    )
-    .fetch_one(&state.db)
-    .await
-    .map_err(|e| ChatError::DatabaseError(e.to_string()))?
-    .count
-    .unwrap_or(0) as i32;
+    let total_count =
+        crate::infra::postgres::chat_repo::count_conversations(&state.db, &user_id.to_string())
+            .await
+            .map_err(|e| ChatError::DatabaseError(e.to_string()))? as i32;
 
     let loaded_count = conversations.len() as i64;
 
@@ -168,8 +133,8 @@ pub async fn list_conversations(
             title: row.title,
             message_count: row.message_count as i32,
             last_message_preview: row.last_message_preview,
-            created_at: row.created_at.timestamp(),
-            updated_at: row.updated_at.timestamp(),
+            created_at: row.created_at,
+            updated_at: row.updated_at,
         })
         .collect();
 
@@ -194,40 +159,29 @@ pub async fn update_conversation(
     Path(conversation_id): Path<Uuid>,
     Json(req): Json<UpdateConversationRequest>,
 ) -> ChatResult<Json<ConversationResponse>> {
-    let conversation = sqlx::query!(
-        r#"
-        UPDATE conversations
-        SET title = COALESCE($3, title),
-            updated_at = NOW()
-        WHERE id = $1 AND user_id = $2
-        RETURNING id, user_id, title, metadata, created_at, updated_at
-        "#,
+    let conversation = crate::infra::postgres::chat_repo::update_title(
+        &state.db,
         conversation_id,
-        user_id.to_string(),
-        req.title
+        &user_id.to_string(),
+        req.title,
     )
-    .fetch_optional(&state.db)
     .await
     .map_err(|e| ChatError::DatabaseError(e.to_string()))?
     .ok_or(ChatError::ConversationNotFound(conversation_id.to_string()))?;
 
     // Get message count
-    let message_count = sqlx::query_scalar!(
-        r#"SELECT COUNT(*) FROM chat_messages WHERE conversation_id = $1"#,
-        conversation_id
-    )
-    .fetch_one(&state.db)
-    .await
-    .map_err(|e| ChatError::DatabaseError(e.to_string()))?
-    .unwrap_or(0);
+    let message_count =
+        crate::infra::postgres::chat_repo::message_count(&state.db, conversation_id)
+            .await
+            .map_err(|e| ChatError::DatabaseError(e.to_string()))?;
 
     Ok(Json(ConversationResponse {
         id: conversation.id,
         user_id: conversation.user_id,
         title: conversation.title,
         message_count: message_count as i32,
-        created_at: conversation.created_at.timestamp(),
-        updated_at: conversation.updated_at.timestamp(),
+        created_at: conversation.created_at,
+        updated_at: conversation.updated_at,
     }))
 }
 
@@ -239,34 +193,22 @@ pub async fn delete_conversation(
     Path(conversation_id): Path<Uuid>,
 ) -> ChatResult<Json<DeleteConversationResponse>> {
     // Check ownership
-    let exists = sqlx::query!(
-        r#"
-        SELECT id FROM conversations
-        WHERE id = $1 AND user_id = $2
-        "#,
+    let exists = crate::infra::postgres::chat_repo::conversation_exists(
+        &state.db,
         conversation_id,
-        user_id.to_string()
+        &user_id.to_string(),
     )
-    .fetch_optional(&state.db)
     .await
-    .map_err(|e| ChatError::DatabaseError(e.to_string()))?
-    .is_some();
+    .map_err(|e| ChatError::DatabaseError(e.to_string()))?;
 
     if !exists {
         return Err(ChatError::ConversationNotFound(conversation_id.to_string()));
     }
 
     // Delete (cascades to messages)
-    let _ = sqlx::query!(
-        r#"
-        DELETE FROM conversations
-        WHERE id = $1
-        "#,
-        conversation_id
-    )
-    .execute(&state.db)
-    .await
-    .map_err(|e| ChatError::DatabaseError(e.to_string()))?;
+    crate::infra::postgres::chat_repo::delete_conversation(&state.db, conversation_id)
+        .await
+        .map_err(|e| ChatError::DatabaseError(e.to_string()))?;
 
     // Since we don't know how many messages were deleted easily without a prior count or RETURNING
     // We can just return 0 or do a count before delete.
@@ -290,15 +232,14 @@ pub async fn generate_conversation_title(
     Json(req): Json<GenerateTitleRequest>,
 ) -> ChatResult<Json<GenerateTitleResponse>> {
     // 1. Verify conversation belongs to user
-    let conversation = sqlx::query!(
-        "SELECT id FROM conversations WHERE id = $1 AND user_id = $2",
+    let conversation_exists = crate::infra::postgres::chat_repo::conversation_exists(
+        &state.db,
         conversation_id,
-        user_id.to_string()
+        &user_id.to_string(),
     )
-    .fetch_optional(&state.db)
     .await?;
 
-    if conversation.is_none() {
+    if !conversation_exists {
         return Err(ChatError::NotFound(format!(
             "Conversation {} not found",
             conversation_id
@@ -335,13 +276,31 @@ pub async fn generate_conversation_title(
 ///
 /// NOTE: Message persistence is handled by the Intelligence service to avoid
 /// dual storage and data inconsistency. The API only validates and forwards.
+/// Release the request's credit hold quietly (R1: no stranded funds).
+async fn release_hold_quiet(
+    db: &sqlx::PgPool,
+    user_id: Option<uuid::Uuid>,
+    key: &Option<crate::middleware::CreditHoldKey>,
+) {
+    let (Some(uid), Some(crate::middleware::CreditHoldKey(k))) = (user_id, key) else {
+        return;
+    };
+    if let Err(e2) = crate::infra::billing::release_by_key(db, uid, k).await {
+        tracing::warn!(error = %e2, "failed to release credit hold");
+    }
+}
+
 pub async fn send_message(
     State(state): State<AppState>,
     user_id_ext: Option<Extension<Uuid>>,
     peer_ip_ext: Option<Extension<PeerIp>>,
+    hold_ext: Option<Extension<crate::middleware::CreditHoldKey>>,
     Path(conversation_id): Path<Uuid>,
-    Json(req): Json<SendMessageRequest>,
+    headers: HeaderMap,
+    Json(req): Json<ChatCompletionRequest>,
 ) -> ChatResult<Json<MessageResponse>> {
+    let cfg = req.config.clone().unwrap_or_default();
+
     // Validate message length
     if req.message.is_empty() {
         return Err(ChatError::InvalidMessage(
@@ -360,19 +319,18 @@ pub async fn send_message(
     } else {
         return Err(ChatError::Unauthorized("No user context found".to_string()));
     };
+    let hold_key: Option<crate::middleware::CreditHoldKey> = hold_ext.map(|Extension(k)| k);
 
     // Verify conversation exists and belongs to user (only for authenticated users)
     // Anonymous users don't have records in the `conversations` table, so Intelligence handles it.
     if !is_anonymous {
-        let conversation_exists = sqlx::query!(
-            r#"SELECT id FROM conversations WHERE id = $1 AND user_id = $2"#,
+        let conversation_exists = crate::infra::postgres::chat_repo::conversation_exists(
+            &state.db,
             conversation_id,
-            user_id_str
+            &user_id_str,
         )
-        .fetch_optional(&state.db)
         .await
-        .map_err(|e| ChatError::DatabaseError(e.to_string()))?
-        .is_some();
+        .map_err(|e| ChatError::DatabaseError(e.to_string()))?;
 
         if !conversation_exists {
             return Err(ChatError::ConversationNotFound(conversation_id.to_string()));
@@ -396,24 +354,39 @@ pub async fn send_message(
     if let Some(regen_id) = req.regenerate_user_msg_id {
         metadata.insert("regenerate_user_msg_id".to_string(), regen_id);
     }
+    if let Some(ref k) = hold_key {
+        metadata.insert("hold_key".to_string(), k.0.clone());
+    }
 
     let grpc_req = crate::grpc::proto::opentier::intelligence::v1::ChatRequest {
         user_id: user_id_str,
         conversation_id: conversation_id.to_string(),
         message: req.message.clone(),
         metadata,
-        config: req.config.as_ref().map(|c| {
-            crate::grpc::proto::opentier::intelligence::v1::ChatConfig {
-                temperature: c.temperature,
-                max_tokens: c.max_tokens,
-                use_rag: Some(c.use_rag),
-                model: c.model.clone(),
-                context_limit: None,
-            }
+        config: Some(crate::grpc::proto::opentier::intelligence::v1::ChatConfig {
+            temperature: cfg.temperature,
+            max_tokens: cfg.max_tokens,
+            use_rag: Some(cfg.use_rag),
+            model: cfg.model.clone(),
+            context_limit: None,
         }),
     };
 
-    let response = client.send_message(grpc_req).await?.into_inner();
+    // Propagate the correlation id (set by the SetRequestId layer,
+    // preferring the inbound X-Correlation-ID) into the gRPC call so the
+    // trace chain (REST -> gRPC -> engine -> billing events) stays joined.
+    let correlation_id = headers
+        .get("x-correlation-id")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    let response = match client.send_message(grpc_req, correlation_id).await {
+        Ok(r) => r.into_inner(),
+        Err(e) => {
+            release_hold_quiet(&state.db, user_uuid, &hold_key).await;
+            return Err(ChatError::from(e));
+        }
+    };
 
     // Parse response
     let message_id = Uuid::parse_str(&response.message_id)
@@ -452,15 +425,6 @@ pub async fn send_message(
     // NOTE: Message persistence is handled by the Intelligence service
     // We only return the response to the client without local storage
 
-    // ── Increment usage counter ──
-    if let Some(uid) = user_uuid {
-        crate::middleware::increment_user_usage(&state, uid).await;
-    } else if is_anonymous {
-        if let Some(Extension(PeerIp(ref ip))) = peer_ip_ext {
-            crate::middleware::increment_ip_usage(&state, ip).await;
-        }
-    }
-
     Ok(Json(MessageResponse {
         message_id,
         conversation_id,
@@ -474,7 +438,7 @@ pub async fn send_message(
             latency_ms: metrics.latency_ms,
             sources_retrieved: sources_count,
         },
-        created_at: response.created_at,
+        created_at: chrono::DateTime::from_timestamp(response.created_at, 0).unwrap_or_default(),
     }))
 }
 
@@ -488,13 +452,17 @@ pub async fn stream_chat(
     State(state): State<AppState>,
     user_id_ext: Option<Extension<Uuid>>,
     peer_ip_ext: Option<Extension<PeerIp>>,
+    hold_ext: Option<Extension<crate::middleware::CreditHoldKey>>,
     Path(conversation_id): Path<Uuid>,
-    Json(req): Json<StreamChatRequest>,
+    headers: HeaderMap,
+    Json(req): Json<ChatCompletionRequest>,
 ) -> ChatResult<(
     axum::http::HeaderMap,
     Sse<impl Stream<Item = Result<Event, Infallible>>>,
 )> {
     use futures::StreamExt;
+
+    let cfg = req.config.clone().unwrap_or_default();
 
     let mut client = state.intelligence_client.clone();
 
@@ -520,22 +488,25 @@ pub async fn stream_chat(
     } else {
         return Err(ChatError::Unauthorized("No user context found".to_string()));
     };
+    let hold_key: Option<crate::middleware::CreditHoldKey> = hold_ext.map(|Extension(k)| k);
 
     // Verify conversation exists and belongs to user (only for authenticated users)
     if !is_anonymous {
-        let conversation_exists = sqlx::query!(
-            r#"SELECT id FROM conversations WHERE id = $1 AND user_id = $2"#,
+        let conversation_exists = crate::infra::postgres::chat_repo::conversation_exists(
+            &state.db,
             conversation_id,
-            user_id_str
+            &user_id_str,
         )
-        .fetch_optional(&state.db)
         .await
-        .map_err(|e| ChatError::DatabaseError(e.to_string()))?
-        .is_some();
+        .map_err(|e| ChatError::DatabaseError(e.to_string()))?;
 
         if !conversation_exists {
             return Err(ChatError::ConversationNotFound(conversation_id.to_string()));
         }
+    }
+
+    if let Some(ref k) = hold_key {
+        metadata.insert("hold_key".to_string(), k.0.clone());
     }
 
     let request = crate::grpc::proto::opentier::intelligence::v1::ChatRequest {
@@ -544,38 +515,48 @@ pub async fn stream_chat(
         message: req.message,
         metadata,
         config: Some(crate::grpc::proto::opentier::intelligence::v1::ChatConfig {
-            temperature: Some(req.temperature),
-            max_tokens: Some(req.max_tokens),
-            use_rag: Some(req.use_rag),
-            model: req.model,
+            temperature: cfg.temperature,
+            max_tokens: cfg.max_tokens,
+            use_rag: Some(cfg.use_rag),
+            model: cfg.model.clone(),
             context_limit: None,
         }),
     };
 
-    let grpc_stream = client
-        .stream_chat(request)
-        .await
-        .map_err(|e| ChatError::GrpcError(e))?
-        .into_inner();
+    // Propagate the correlation id into the gRPC stream call.
+    let correlation_id = headers
+        .get("x-correlation-id")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
 
-    // Increment usage counter when the stream starts
-    if let Some(uid) = user_uuid {
-        crate::middleware::increment_user_usage(&state, uid).await;
-    } else if is_anonymous {
-        if let Some(Extension(PeerIp(ref ip))) = peer_ip_ext {
-            crate::middleware::increment_ip_usage(&state, ip).await;
+    let grpc_stream = match client.stream_chat(request, correlation_id).await {
+        Ok(s) => s.into_inner(),
+        Err(e) => {
+            release_hold_quiet(&state.db, user_uuid, &hold_key).await;
+            return Err(ChatError::GrpcError(e));
         }
-    }
+    };
 
-    let sse_stream = grpc_stream.map(|result| {
+    let sse_stream = grpc_stream.map(move |result| {
         match result {
             Ok(chunk) => {
                 match chunk.chunk_type {
                     Some(crate::grpc::proto::opentier::intelligence::v1::chat_stream_chunk::ChunkType::Token(text)) => {
                         Ok(Event::default().event("message").data(text))
                     }
+                    #[allow(deprecated)]
                     Some(crate::grpc::proto::opentier::intelligence::v1::chat_stream_chunk::ChunkType::Error(err)) => {
+                        // Legacy string form (deprecated in v1.1.0).
                         Ok(Event::default().event("error").data(err))
+                    }
+                    Some(crate::grpc::proto::opentier::intelligence::v1::chat_stream_chunk::ChunkType::TypedError(typed)) => {
+                        // Structured form: emit code + message as JSON.
+                        let data = serde_json::json!({
+                            "code": typed.code,
+                            "message": typed.message,
+                        })
+                        .to_string();
+                        Ok(Event::default().event("error").data(data))
                     }
                     Some(crate::grpc::proto::opentier::intelligence::v1::chat_stream_chunk::ChunkType::Source(source)) => {
                         let chunk = SourceChunk {
@@ -628,50 +609,56 @@ pub async fn stream_chat(
 }
 
 // ============================================================================
-// QUOTA MANAGEMENT
+// CONTENT-NEGOTIATED CHAT COMPLETION
 // ============================================================================
 
-/// Get current quota usage
-/// GET /chat/quota
-pub async fn get_quota(
+/// Single chat-completion endpoint that negotiates the response shape via the
+/// `Accept` header.
+///
+/// - `Accept: text/event-stream` → streamed SSE (delegates to `stream_chat`).
+/// - anything else               → buffered JSON (delegates to `send_message`).
+///
+/// `/conversations/{id}/stream` remains a thin backward-compat alias that points
+/// directly at `stream_chat`; it can be removed once the client cuts over to
+/// sending `Accept: text/event-stream` to this route.
+pub async fn chat_completion(
     State(state): State<AppState>,
-    req: axum::extract::Request,
-) -> ChatResult<axum::Json<serde_json::Value>> {
-    let headers = req.headers();
-    let bearer_token = headers
-        .get(axum::http::header::AUTHORIZATION)
+    user_id_ext: Option<Extension<Uuid>>,
+    peer_ip_ext: Option<Extension<PeerIp>>,
+    hold_ext: Option<Extension<crate::middleware::CreditHoldKey>>,
+    Path(conversation_id): Path<Uuid>,
+    headers: HeaderMap,
+    Json(req): Json<ChatCompletionRequest>,
+) -> axum::response::Response {
+    let wants_stream = headers
+        .get(axum::http::header::ACCEPT)
         .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "));
+        .map(|v| v.to_ascii_lowercase().contains("text/event-stream"))
+        .unwrap_or(false);
 
-    let mut used = 0;
-    let mut limit = crate::middleware::quota::IP_FREE_MESSAGES;
-
-    if let Some(token) = bearer_token {
-        if let Ok((user_id, _)) = crate::auth::session::get_user_from_session(&state.db, token).await {
-            if let Ok(row) = sqlx::query!("SELECT messages_used, message_limit FROM users WHERE id = $1", user_id).fetch_one(&state.db).await {
-                used = row.messages_used;
-                limit = row.message_limit;
-            }
-        }
+    if wants_stream {
+        stream_chat(
+            State(state),
+            user_id_ext,
+            peer_ip_ext,
+            hold_ext,
+            Path(conversation_id),
+            headers,
+            Json(req),
+        )
+        .await
+        .into_response()
     } else {
-        let peer_ip = headers.get("cf-connecting-ip")
-            .or_else(|| headers.get("x-real-ip"))
-            .or_else(|| headers.get("x-forwarded-for"))
-            .and_then(|h| h.to_str().ok())
-            .map(|s| s.split(',').next().unwrap_or("").trim().to_string())
-            .unwrap_or_else(|| {
-                req.extensions().get::<axum::extract::ConnectInfo<std::net::SocketAddr>>()
-                    .map(|ci| ci.0.ip().to_string())
-                    .unwrap_or_else(|| "unknown".to_string())
-            });
-
-        if let Ok(Some(row)) = sqlx::query!("SELECT messages_used FROM ip_usage WHERE ip_address = $1", peer_ip).fetch_optional(&state.db).await {
-            used = row.messages_used;
-        }
+        send_message(
+            State(state),
+            user_id_ext,
+            peer_ip_ext,
+            hold_ext,
+            Path(conversation_id),
+            headers,
+            Json(req),
+        )
+        .await
+        .into_response()
     }
-
-    Ok(axum::Json(serde_json::json!({
-        "messages_used": used,
-        "message_limit": limit
-    })))
 }

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM oauth_auth_states WHERE state = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fde30473f3ae73379d14b9a676c297e2945ac869fa187a2047fc971132e0e3d4"
+}

@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT\n            COALESCE(b.balance::float8, 0.0) AS \"balance!\",\n            COALESCE(b.held::float8, 0.0) AS \"held!\",\n            COALESCE(SUM(CASE WHEN t.delta < 0 THEN ABS(t.delta::float8) ELSE 0 END), 0.0)::float8 AS \"total_spent!\",\n            COALESCE(SUM(CASE WHEN t.delta > 0 THEN t.delta::float8 ELSE 0 END), 0.0)::float8 AS \"total_granted!\",\n            COALESCE(SUM(t.tokens_in)::int8, 0) AS \"total_tokens_in!\",\n            COALESCE(SUM(t.tokens_out)::int8, 0) AS \"total_tokens_out!\",\n            COALESCE(COUNT(CASE WHEN t.reason = 'usage' THEN 1 END)::int8, 0) AS \"total_messages!\"\n        FROM user_credit_balances b\n        LEFT JOIN credit_transactions t ON t.user_id = b.user_id\n        WHERE b.user_id = $1\n        GROUP BY b.balance, b.held\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "balance!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 1,
+        "name": "held!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 2,
+        "name": "total_spent!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 3,
+        "name": "total_granted!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 4,
+        "name": "total_tokens_in!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "total_tokens_out!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "total_messages!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "6a03786a260b9d0c4558598070233c5cfd9abdb119315472b7304db933cba8b2"
+}

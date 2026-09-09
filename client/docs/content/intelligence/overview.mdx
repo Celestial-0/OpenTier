@@ -23,7 +23,7 @@ It exposes **no HTTP endpoints** — its only interface is the gRPC server on po
 | DB async driver | `asyncpg` | ≥ 0.30.0 |
 | DB sync driver | `psycopg[binary]` | ≥ 3.3.2 |
 | ORM | `sqlalchemy` | ≥ 2.0.45 |
-| Vector DB | `pgvector` | ≥ 0.4.2 |
+| Vector DB | `qdrant-client` | ≥ 1.14.3 |
 | Embeddings | `sentence-transformers` | ≥ 5.2.2 |
 | Deep learning | `torch` | ≥ 2.10.0 |
 | Numerical | `numpy` | ≥ 2.4.1 |
@@ -85,7 +85,7 @@ Loaded from environment via `pydantic-settings` with typed validation:
 ### Database (`DB_` prefix)
 | Variable | Default |
 |----------|---------|
-| `DB_URL` | `postgresql://postgres:postgres@localhost:5432/opentier` |
+| `DATABASE_URL` | `postgresql://postgres:postgres@database:5432/opentier` |
 | `DB_POOL_SIZE` | `10` |
 | `DB_MAX_OVERFLOW` | `20` |
 | `DB_POOL_TIMEOUT` | `30` |

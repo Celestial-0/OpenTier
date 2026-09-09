@@ -27,6 +27,8 @@ export interface UserAdminView {
     is_disabled?: boolean;
     message_limit?: number;
     messages_used?: number;
+    credit_balance?: number;
+    credit_held?: number;
 }
 
 export interface UserListResponse {

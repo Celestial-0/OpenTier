@@ -4,18 +4,19 @@
 FROM rust:slim-bookworm AS builder
 
 # Install build dependencies required for compiling protobuf and SSL
+# curl is required by utoipa-swagger-ui build script to download Swagger UI zip
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     libssl-dev \
     protobuf-compiler \
     ca-certificates \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
 
-# Copy proto definitions, database migrations (for compile-time embedding), and api source
+# Copy proto definitions and api source (migrations embedded from api/migrations)
 COPY proto/ ./proto/
-COPY db/ ./db/
 COPY api/ ./api/
 
 WORKDIR /workspace/api

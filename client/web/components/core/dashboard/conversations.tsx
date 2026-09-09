@@ -21,22 +21,31 @@ import {
 } from "@hugeicons/core-free-icons";
 import Link from "next/link";
 import { useChatStore } from "@/store/chat-store";
+import { MetricCard } from "./metric-card";
 
 
 // --- Helpers ---
-const formatDate = (timestamp: number) => {
-    return new Date(timestamp * 1000).toLocaleDateString("en-US", {
+const toTimestampMs = (val: number | string): number => {
+    if (typeof val === "number") {
+        return val < 1e12 ? val * 1000 : val;
+    }
+    const parsed = new Date(val).getTime();
+    return isNaN(parsed) ? 0 : parsed;
+};
+
+const formatDate = (timestamp: number | string) => {
+    const ms = toTimestampMs(timestamp);
+    return new Date(ms).toLocaleDateString("en-US", {
         month: "short",
         day: "numeric",
         year: "numeric",
     });
 };
 
-const formatTimeAgo = (timestamp: number) => {
-    // timestamp is in seconds from API (based on types.rs/api-types.ts confirming i64/number)
-    // JS Date.now() is ms.
-    const seconds = Math.floor((Date.now() / 1000) - timestamp);
-    if (seconds < 60) return "just now";
+const formatTimeAgo = (timestamp: number | string) => {
+    const ms = toTimestampMs(timestamp);
+    const seconds = Math.floor((Date.now() - ms) / 1000);
+    if (isNaN(seconds) || seconds < 0 || seconds < 60) return "just now";
     if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
     if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
     return `${Math.floor(seconds / 86400)}d ago`;
@@ -76,15 +85,41 @@ export const Conversations = () => {
             (conv.title || "Untitled Conversation").toLowerCase().includes(searchQuery.toLowerCase())
         )
         .sort((a, b) => {
-            if (sortBy === "updated") return b.updated_at - a.updated_at;
-            if (sortBy === "created") return b.created_at - a.created_at;
+            if (sortBy === "updated") return toTimestampMs(b.updated_at) - toTimestampMs(a.updated_at);
+            if (sortBy === "created") return toTimestampMs(b.created_at) - toTimestampMs(a.created_at);
             if (sortBy === "messages") return b.message_count - a.message_count;
             return 0;
         });
 
-    return (
-        <div className="mx-auto space-y-4 p-0 animate-in fade-in duration-500">
+    const totalMessages = conversations.reduce((acc, c) => acc + (c.message_count || 0), 0);
+    const avgMessages = conversations.length > 0 ? (totalMessages / conversations.length).toFixed(1) : "0";
 
+    return (
+        <div className="mx-auto space-y-6 p-0 animate-in fade-in duration-500">
+            {/* Summary Metric Cards matching Wireframe Language */}
+            <div className="grid gap-4 sm:grid-cols-3">
+                <MetricCard
+                    title="Conversations"
+                    subtitle="Total recorded sessions"
+                    value={conversations.length}
+                    progressValue={Math.min(100, conversations.length * 5)}
+                    progressVariant="emerald"
+                />
+                <MetricCard
+                    title="Messages"
+                    subtitle="Total exchanged turns"
+                    value={totalMessages}
+                    progressValue={Math.min(100, Math.round((totalMessages / 1000) * 100))}
+                    progressVariant="amber"
+                />
+                <MetricCard
+                    title="Average Length"
+                    subtitle="Messages per chat"
+                    value={`${avgMessages} msgs`}
+                    progressValue={Math.min(100, Math.round(Number(avgMessages) * 10))}
+                    progressVariant="blue"
+                />
+            </div>
 
             {/* Toolbar */}
             <div className="flex flex-col sm:flex-row gap-3 items-center justify-between bg-muted/30 p-2 rounded-xl border">
@@ -157,13 +192,13 @@ export const Conversations = () => {
                                         </div>
                                     </TableCell>
                                     <TableCell>
-                                        <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider font-medium text-muted-foreground">
+                                        <div className="flex items-center gap-2 text-xs uppercase tracking-wider font-medium text-muted-foreground">
                                             <HugeiconsIcon icon={Clock01Icon} className="h-3 w-3" />
                                             {formatTimeAgo(conversation.updated_at)}
                                         </div>
                                     </TableCell>
                                     <TableCell className="hidden md:table-cell text-center">
-                                        <Badge variant="outline" className="font-mono text-[10px] px-2 py-0">
+                                        <Badge variant="outline" className="font-mono text-xs px-2 py-0">
                                             {conversation.message_count} msg
                                         </Badge>
                                     </TableCell>
@@ -183,11 +218,11 @@ export const Conversations = () => {
                                                 <div className="mt-8 space-y-6">
                                                     <div className="grid grid-cols-2 gap-4">
                                                         <div className="p-4 rounded-xl border bg-muted/20">
-                                                            <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Messages</p>
+                                                            <p className="text-xs uppercase tracking-widest text-muted-foreground mb-1">Messages</p>
                                                             <p className="text-2xl font-bold">{conversation.message_count}</p>
                                                         </div>
                                                         <div className="p-4 rounded-xl border bg-muted/20">
-                                                            <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Last Update</p>
+                                                            <p className="text-xs uppercase tracking-widest text-muted-foreground mb-1">Last Update</p>
                                                             <p className="text-sm font-medium pt-1">{formatDate(conversation.updated_at)}</p>
                                                         </div>
                                                     </div>
@@ -238,7 +273,7 @@ export const Conversations = () => {
 
             {/* Footer Summary */}
             <footer className="flex items-center justify-between px-2 pt-2">
-                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em]">
+                <p className="text-xs font-bold text-muted-foreground uppercase tracking-[0.2em]">
                     Active Threads: {filteredConversations.length}
                 </p>
                 <div className="h-px flex-1 bg-linear-to-r from-transparent via-border to-transparent mx-8 hidden sm:block" />

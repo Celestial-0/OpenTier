@@ -14,14 +14,12 @@ export interface AdminUsersTabProps {
     users: UserAdminView[];
     searchQuery: string;
     selectedRole: UserSelectState;
-    selectedLimit: UserSelectState;
     setSelectedRole: Dispatch<SetStateAction<UserSelectState>>;
-    setSelectedLimit: Dispatch<SetStateAction<UserSelectState>>;
     onSearch: (query: string) => void;
     onRoleUpdate: (userId: string) => Promise<void>;
-    onLimitUpdate: (userId: string) => Promise<void>;
     onToggleDisable: (userId: string, currentStatus: boolean | undefined) => Promise<void>;
     onDeleteUser: (userId: string) => Promise<void>;
+    onAdjustCredits?: (userId: string, delta: number, reason: "admin_adjustment" | "grant" | "refund", note?: string) => Promise<void>;
 }
 
 export interface AdminResourcesTabProps {
@@ -39,4 +37,7 @@ export interface AdminResourcesTabProps {
 export interface AdminMonitoringTabProps {
     rustApiHealth: DashboardHealth | null;
     pythonApiHealth: DashboardHealth | null;
+    isLoadingRustApi?: boolean;
+    isLoadingPythonApi?: boolean;
 }
+

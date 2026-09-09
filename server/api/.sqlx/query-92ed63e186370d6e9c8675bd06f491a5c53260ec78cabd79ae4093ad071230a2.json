@@ -1,0 +1,89 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH updated AS (\n            UPDATE users\n            SET role = $2::text::user_role, updated_at = NOW()\n            WHERE id = $1\n            RETURNING id, email, name, role, email_verified, created_at, updated_at, is_disabled, message_limit, messages_used\n        )\n        SELECT\n            u.id, u.email as \"email!\", u.name as \"full_name?\", u.role::text as \"role!\",\n            u.email_verified as \"is_verified!\", u.created_at as \"created_at!\", u.updated_at as \"updated_at!\",\n            u.is_disabled as \"is_disabled!\", u.message_limit as \"message_limit!\", u.messages_used as \"messages_used!\",\n            COALESCE(b.balance::float8, 0.0) as \"credit_balance!\",\n            COALESCE(b.held::float8, 0.0) as \"credit_held!\"\n        FROM updated u\n        LEFT JOIN user_credit_balances b ON b.user_id = u.id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "email!",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "full_name?",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "role!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "is_verified!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "updated_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "is_disabled!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 8,
+        "name": "message_limit!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 9,
+        "name": "messages_used!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 10,
+        "name": "credit_balance!",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 11,
+        "name": "credit_held!",
+        "type_info": "Float8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      null,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "92ed63e186370d6e9c8675bd06f491a5c53260ec78cabd79ae4093ad071230a2"
+}

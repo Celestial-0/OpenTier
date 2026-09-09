@@ -7,7 +7,7 @@ const rainbowButtonVariants = cva(
   cn(
     "relative cursor-pointer group transition-all animate-rainbow",
     "inline-flex items-center justify-center gap-2 shrink-0",
-    "rounded-sm outline-none focus-visible:ring-[3px] aria-invalid:border-destructive",
+    "rounded-sm outline-none focus-visible:ring-2 aria-invalid:border-destructive",
     "text-sm font-medium whitespace-nowrap",
     "disabled:pointer-events-none disabled:opacity-50",
     "[&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 [&_svg]:shrink-0"

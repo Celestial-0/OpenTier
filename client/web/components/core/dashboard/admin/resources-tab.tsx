@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TabsContent } from "@/components/ui/tabs";
@@ -24,6 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { IngestionQueue } from "../ingestion-queue";
 import type { AdminResourcesTabProps } from "./types";
 import { getStatusColor } from "./utils";
+
 
 export const AdminResourcesTab = ({
     isLoadingResources,
@@ -302,25 +304,35 @@ export const AdminResourcesTab = ({
                         </TableHeader>
                         <TableBody>
                             {isLoadingResources ? (
-                                <TableRow>
-                                    <TableCell colSpan={6} className="text-center py-8">
-                                        Loading resources...
-                                    </TableCell>
-                                </TableRow>
+                                Array.from({ length: 5 }).map((_, i) => (
+                                    <TableRow key={i}>
+                                        <TableCell><Skeleton className="h-5 w-44" /></TableCell>
+                                        <TableCell><Skeleton className="h-5 w-20" /></TableCell>
+                                        <TableCell><Skeleton className="h-5 w-16" /></TableCell>
+                                        <TableCell><Skeleton className="h-5 w-20" /></TableCell>
+                                        <TableCell><Skeleton className="h-5 w-12" /></TableCell>
+                                        <TableCell><Skeleton className="h-5 w-24" /></TableCell>
+                                        <TableCell className="text-right"><Skeleton className="h-7 w-8 ml-auto" /></TableCell>
+                                    </TableRow>
+                                ))
                             ) : resources.length === 0 ? (
                                 <TableRow>
-                                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                                        No resources found
+                                    <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
+                                        <Database className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                                        <p className="font-medium text-sm">No info</p>
+                                        <p className="text-xs mt-1">No resources found</p>
                                     </TableCell>
                                 </TableRow>
                             ) : (
                                 resources.map((resource) => (
                                     <TableRow key={resource.id}>
-                                        <TableCell className="font-medium">{resource.title ?? resource.metadata?.title ?? resource.id}</TableCell>
+                                        <TableCell className="font-medium">
+                                            {resource.title || resource.metadata?.title || <span className="text-muted-foreground text-xs italic">No info</span>}
+                                        </TableCell>
                                         <TableCell>
                                             <Badge variant="outline">
                                                 <FileText className="mr-1 h-3 w-3" />
-                                                {resource.type}
+                                                {resource.type || "No info"}
                                             </Badge>
                                         </TableCell>
                                         <TableCell>
@@ -329,16 +341,17 @@ export const AdminResourcesTab = ({
                                             </Badge>
                                         </TableCell>
                                         <TableCell>
-                                            <Badge className={getStatusColor(resource.status)}>{resource.status}</Badge>
+                                            <Badge className={getStatusColor(resource.status)}>{resource.status || "No info"}</Badge>
                                         </TableCell>
-                                        <TableCell>{resource.chunks_created}</TableCell>
+                                        <TableCell>{resource.chunks_created != null ? resource.chunks_created : "No info"}</TableCell>
                                         <TableCell className="text-muted-foreground">
-                                            {new Date(resource.created_at * 1000).toLocaleDateString("en-US", {
+                                            {resource.created_at ? new Date(resource.created_at * 1000).toLocaleDateString("en-US", {
                                                 month: "short",
                                                 day: "numeric",
                                                 year: "numeric",
-                                            })}
+                                            }) : "No info"}
                                         </TableCell>
+
                                         <TableCell className="text-right">
                                             <AlertDialog>
                                                 <AlertDialogTrigger render={<Button variant="ghost" size="sm" />}>

@@ -1,202 +1,172 @@
-# Transactional Schema
+# Transactional Schema (PostgreSQL 18)
 
-## Schema Ownership
+## Overview & Storage Boundaries
 
-OpenTier uses a **single PostgreSQL database** shared between both services. All schema migrations are centralized in a single location:
+OpenTier v1.1.0 cleanly partitions data by workload:
+- **PostgreSQL 18** is the ACID system of record for accounts, sessions, conversations, metadata, credit ledgers, and provider catalog configurations.
+- **Qdrant** is the dedicated vector system of record for dense neural vectors (3072d) and sparse BM25 token indices (`knowledge_chunks` collection).
 
-| Migration Tool | Location | Tables |
-|---------------|----------|--------|
-| [`sqlx-cli`](https://crates.io/crates/sqlx-cli) | `server/db/migrations/` | users, sessions, accounts, verification_tokens, password_reset_tokens, conversations, messages, documents, document_chunks, ingestion_jobs, chat_messages, user_memories, knowledge_submissions |
+All PostgreSQL migrations are centralized in `server/api/migrations/` and applied automatically on API gateway startup via SQLx.
 
-Migrations are applied automatically by the API container during its startup sequence before the server boots. The API container uses `sqlx migrate run` underneath to apply standard `{timestamp}_{name}.up.sql` / `.down.sql` files directly.
+| Migration Tool | Location | Primary Tables |
+|---|---|---|
+| [`sqlx-cli`](https://crates.io/crates/sqlx-cli) | `server/api/migrations/` | `users`, `sessions`, `accounts`, `conversations`, `chat_messages`, `user_memories`, `documents`, `ingestion_jobs`, `model_providers`, `models`, `user_credit_balances`, `credit_transactions`, `credit_holds`, `event_outbox` |
+
+---
 
 ## Entity Relationship Diagram
 
-
 <Mermaid chart={`
 erDiagram
-    users {
-        uuid id PK
-        varchar email UK
-        boolean email_verified
-        varchar password_hash
-        varchar name
-        varchar username UK
-        text avatar_url
-        user_role role
-        timestamptz deleted_at
-        timestamptz created_at
-        timestamptz updated_at
-    }
-
-    sessions {
-        uuid id PK
-        uuid user_id FK
-        varchar session_token UK
-        timestamptz expires_at
-        user_role role
-        inet ip_address
-        text user_agent
-        timestamptz created_at
-        timestamptz updated_at
-    }
-
-    accounts {
-        uuid id PK
-        uuid user_id FK
-        varchar provider
-        varchar provider_account_id
-        text access_token
-        text refresh_token
-        timestamptz expires_at
-        varchar token_type
-        text scope
-        text id_token
-        timestamptz created_at
-        timestamptz updated_at
-    }
-
-    verification_tokens {
-        uuid id PK
-        uuid user_id FK
-        varchar token UK
-        varchar otp
-        timestamptz expires_at
-        timestamptz created_at
-    }
-
-    password_reset_tokens {
-        uuid id PK
-        uuid user_id FK
-        varchar token UK
-        timestamptz expires_at
-        timestamptz created_at
-    }
-
-    conversations {
-        uuid id PK
-        varchar user_id
-        varchar title
-        json metadata
-        timestamptz created_at
-        timestamptz updated_at
-    }
-
-    messages {
-        uuid id PK
-        uuid conversation_id FK
-        message_role role
-        text content
-        jsonb metadata
-        timestamptz created_at
-    }
-
-    chat_messages {
-        uuid id PK
-        uuid conversation_id FK
-        varchar role
-        text content
-        jsonb sources
-        jsonb metadata
-        uuid parent_id FK
-        timestamptz created_at
-    }
-
-    knowledge_submissions {
-        uuid id PK
-        uuid contributor_id FK
-        varchar title
-        text content
-        varchar resource_type
-        jsonb metadata
-        varchar status
-        text admin_feedback
-        uuid reviewed_by FK
-        timestamptz reviewed_at
-        timestamptz created_at
-        timestamptz updated_at
-    }
-
     users ||--o{ sessions : "has"
     users ||--o{ accounts : "links"
     users ||--o{ verification_tokens : "has"
     users ||--o{ password_reset_tokens : "has"
+    users ||--|| user_credit_balances : "owns"
+    users ||--o{ credit_transactions : "audits"
+    users ||--o{ credit_holds : "reserves"
+    users ||--o{ user_memories : "maintains"
     users ||--o{ knowledge_submissions : "creates"
-    conversations ||--o{ messages : "contains"
+
+    model_providers ||--o{ models : "provides"
+    models ||--o{ credit_transactions : "billed for"
+
     conversations ||--o{ chat_messages : "contains"
     chat_messages ||--o| chat_messages : "branches from parent"
+
+    documents ||--o{ ingestion_jobs : "queued for"
 `} />
 
+---
 
-## Table Details
+## Core Table Details
 
-### `users`
+### 1. Identity & Authentication
 
-| Column | Type | Notes |
-|--------|------|-------|
-| `id` | UUID | `gen_random_uuid()` |
-| `email` | VARCHAR(255) | Unique, indexed |
-| `email_verified` | BOOLEAN | Default `false`; OAuth users set `true` immediately |
-| `password_hash` | VARCHAR(255) | `bcrypt`; `NULL` for OAuth-only accounts |
-| `role` | `user_role` ENUM | `user`, `contributor`, or `admin` |
-| `deleted_at` | TIMESTAMPTZ | Soft-delete; `NULL` = active |
+#### `users`
+System accounts for standard, contributor, and admin roles.
 
-**Indexes**: `idx_users_email`, `idx_users_username`, `idx_users_role`, `idx_users_created_at`, `idx_users_deleted_at` (partial, WHERE `deleted_at IS NULL`)  
-**Trigger**: `update_updated_at_column()` updates `updated_at` on every `UPDATE`
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | UUID | PK, `gen_random_uuid()` | Unique user identifier. |
+| `email` | VARCHAR(255) | UNIQUE, NOT NULL | User email address. |
+| `email_verified` | BOOLEAN | NOT NULL, DEFAULT false | Verification status (OAuth auto-verifies). |
+| `password_hash` | VARCHAR(255) | NULL | Bcrypt hash (null for OAuth-only users). |
+| `name` | VARCHAR(255) | NULL | Display name. |
+| `username` | VARCHAR(50) | UNIQUE, NULL | Profile username. |
+| `role` | `user_role` | NOT NULL, DEFAULT 'user' | Enum: `user`, `contributor`, `admin`. |
+| `deleted_at` | TIMESTAMPTZ | NULL | Soft-deletion timestamp. |
 
-### `sessions`
+#### `sessions`
+Opaque session tokens for stateless REST & SSE authentication.
 
-| Column | Type | Notes |
-|--------|------|-------|
-| `session_token` | VARCHAR(255) | 64-char random alphanumeric; unique |
-| `expires_at` | TIMESTAMPTZ | `NOW() + 7 days` |
-| `role` | `user_role` ENUM | **Duplicated from `users.role` at session creation time** |
-| `ip_address` | INET | Client IP (IPv4 or IPv6) |
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | UUID | PK | Session ID. |
+| `user_id` | UUID | FK `users(id)` ON DELETE CASCADE | Target user. |
+| `session_token` | VARCHAR(255) | UNIQUE, NOT NULL | 64-character random cryptographically secure token. |
+| `expires_at` | TIMESTAMPTZ | NOT NULL | Expiration timestamp (default: 30 days). |
+| `role` | `user_role` | NOT NULL | Cached user role snapshot for O(1) single-lookup auth. |
+| `ip_address` | INET | NULL | Client IP address. |
+| `user_agent` | TEXT | NULL | Client user agent string. |
 
-**Key design note**: `role` in sessions is a snapshot taken at login. Role changes do not propagate to active sessions.
+#### `accounts`
+External OAuth 2.0 identity bindings (Google, GitHub, Microsoft, Discord).
 
-### `accounts` (OAuth)
+---
 
-Enforces `UNIQUE(provider, provider_account_id)` — one account per provider per external identity. One user can link multiple providers.
+## AI Model Catalog & Routing Tables
 
-### `conversations`
+v1.1.0 replaces hardcoded model environment variables with dynamic, database-backed catalog configurations.
 
-| Column | Type | Notes |
-|--------|------|-------|
-| `id` | UUID | **No DEFAULT** — caller provides UUID |
-| `user_id` | VARCHAR(255) | Not a foreign key to `users.id` — loose coupling |
+#### `model_providers`
+Configured LLM and embedding providers. API keys are sealed at rest using AES-256-GCM.
 
-**Critical**: `user_id` in `conversations` is a `VARCHAR(255)`, not a `UUID` FK referencing `users`. This allows the Python Intelligence service to create or reference conversations without strict FK integrity — enabling the shared-table architecture without Rust owning all writes.
+| Column | Type | Description |
+|---|---|---|
+| `id` | UUID PK | Provider identifier. |
+| `name` | VARCHAR(100) | Display name (e.g. `Google Gemini`, `OpenAI`). |
+| `slug` | VARCHAR(50) UNIQUE | Provider slug (`google`, `openai`, `ollama`, `custom`). |
+| `api_base` | VARCHAR(255) | Base URL endpoint override (e.g. for Ollama or vLLM). |
+| `encrypted_api_key` | TEXT | AES-256-GCM sealed ciphertext blob (decrypted via `ENCRYPTION_MASTER_KEY`). |
+| `enabled` | BOOLEAN | Global enable/disable toggle. |
+| `config` | JSONB | Provider-specific tunings and headers. |
 
-### `messages` vs `chat_messages`
+#### `models`
+Specific models attached to providers with pricing and fallback chains.
 
-Two tables store message content. This is the most architecturally significant split in the schema:
+| Column | Type | Description |
+|---|---|---|
+| `id` | UUID PK | Model identifier. |
+| `provider_id` | UUID FK | References `model_providers(id)`. |
+| `slug` | VARCHAR(100) UNIQUE | Model slug (e.g. `gemini-2.5-flash`, `gpt-4o`, `text-embedding-3-large`). |
+| `model_type` | VARCHAR(20) | `chat`, `embedding`, or `rerank`. |
+| `context_window` | INTEGER | Token limit for prompt context. |
+| `pricing` | JSONB | Cost structure: `{"input_cost_per_million": 0.15, "output_cost_per_million": 0.60}`. |
+| `is_default` | BOOLEAN | Default model for the given `model_type`. |
+| `fallback_slug` | VARCHAR(100) | Slug of secondary model to try if this model is exhausted or errors. |
 
-| Table | Written by | Read by | Contains |
-|-------|-----------|---------|---------|
-| `messages` | Rust API | Rust API | Minimal message rows (role, content, metadata); **no sources** |
-| `chat_messages` | Python Intelligence | Both services | Full AI messages with `sources` (JSONB), `parent_id` for branching |
+---
 
-In practice the Rust API uses `chat_messages` (via `get_conversation`) and `messages` appears to be vestigial or used for audit logging. This creates a dual-table situation that must be managed carefully during schema changes.
+## Credit Ledger & Billing Tables
 
-### `knowledge_submissions`
+v1.1.0 introduces an immutable, append-only credit ledger for real-time token metering and usage quotas.
+Credits are denominated such that **1 credit = $0.001 USD** (1,000 credits = $1.00). New users receive an automatic **10.00 credit signup bonus** ($0.01 equivalent).
 
-Stores contributor-submitted resources pending admin review.
+#### `user_credit_balances`
+Atomic user balance and optimistic lock version tracking.
 
-| Column | Type | Notes |
-|--------|------|-------|
-| `contributor_id` | UUID FK | References `users.id` |
-| `status` | VARCHAR(20) | `pending`, `approved`, `rejected` |
-| `metadata` | JSONB | Free-form submission metadata |
-| `reviewed_by` | UUID FK | Admin reviewer (`users.id`) |
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `user_id` | UUID | PK, FK `users(id)` | User owning the credit balance. |
+| `balance` | NUMERIC(14,4) | NOT NULL, DEFAULT 0, CHECK >= 0 | Spendable credit balance. |
+| `held` | NUMERIC(14,4) | NOT NULL, DEFAULT 0 | Currently reserved credits for active streaming calls. |
+| `version` | BIGINT | NOT NULL, DEFAULT 0 | Version counter for optimistic concurrency checks. |
 
-**Indexes**: `idx_knowledge_submissions_status`, `idx_knowledge_submissions_contributor`, `idx_knowledge_submissions_created_at`.
+#### `credit_transactions` (Append-Only Ledger)
+Comprehensive audit trail recording every balance adjustment, token consumption, and grant.
 
-### Enums
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | UUID | PK, `gen_random_uuid()` | Unique transaction ID. |
+| `user_id` | UUID | FK `users(id)` | Debited or credited user. |
+| `delta` | NUMERIC(14,4) | NOT NULL | Change in balance (positive for grants, negative for usage). |
+| `balance_after` | NUMERIC(14,4) | NOT NULL | Snapshot of balance immediately following transaction. |
+| `reason` | VARCHAR(30) | NOT NULL | `grant`, `usage`, `refund`, `admin_adjustment`, `signup_bonus`. |
+| `model_id` | UUID | FK `models(id)` | Model consumed during the transaction (if `usage`). |
+| `tokens_in` | INTEGER | DEFAULT 0 | Input prompt tokens billed. |
+| `tokens_out` | INTEGER | DEFAULT 0 | Generated completion tokens billed. |
+| `cost_input` | NUMERIC(14,6) | DEFAULT 0 | Computed credit cost of input tokens. |
+| `cost_output` | NUMERIC(14,6) | DEFAULT 0 | Computed credit cost of output tokens. |
+| `conversation_id` | UUID | NULL | Context conversation ID. |
+| `idempotency_key` | TEXT | NOT NULL, UNIQUE | Deduplication key preventing double-billing on retries. |
+| `correlation_id` | VARCHAR(64) | NULL | Distributed tracing correlation ID. |
 
-```sql
-CREATE TYPE user_role AS ENUM ('user', 'contributor', 'admin');
-CREATE TYPE message_role AS ENUM ('user', 'assistant', 'system');
-```
+#### `credit_holds`
+Temporary reservations placed prior to streaming responses to guarantee sufficient funds before tokens are generated.
 
-`user_role` is used in both `users.role` and `sessions.role`. In `chat_messages`, role is `VARCHAR(50)` (written by Python) — not the PostgreSQL enum type.
+---
+
+## Transactional Outbox (`event_outbox`)
+
+Guarantees reliable message publishing between PostgreSQL transactions and Redis Streams without dual-write race conditions.
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | UUID PK | Event ID. |
+| `stream` | TEXT | Target Redis stream (e.g. `opentier:intel:chat_events`). |
+| `event_type` | TEXT | Event type descriptor (e.g. `billing.charge.v1`). |
+| `correlation_id` | TEXT | Tracing correlation ID. |
+| `payload` | JSONB | Serialized event payload. |
+| `attempts` | INTEGER | Delivery attempt count. |
+| `published_at` | TIMESTAMPTZ | Timestamp when successfully acknowledged by Redis. |
+
+---
+
+## Chat & Ingestion Tables
+
+- **`conversations`**: Chat thread metadata, titles, and ownership.
+- **`chat_messages`**: Chat messages with `sources` (JSONB) citations and tree branching via `parent_id`.
+- **`user_memories`**: Persistent per-user context updated asynchronously by workers.
+- **`documents`**: Ingested content catalogs (titles, URLs, status).
+- **`ingestion_jobs`**: Status tracking (`queued`, `processing`, `completed`, `failed`) for the background worker ingestion pipeline.

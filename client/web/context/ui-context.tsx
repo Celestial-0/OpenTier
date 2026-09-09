@@ -5,6 +5,8 @@ import { useRouter, usePathname } from "next/navigation";
 import { useUserStore } from "@/store/user-store";
 import { DashboardView } from "@/types/dashboard";
 
+import { useAdminStore } from "@/store/admin-store";
+
 /**
  * UI Context
  * 
@@ -31,7 +33,7 @@ interface UiContextType {
     // Dashboard Navigation
     activeDashboardView: DashboardView;
     setActiveDashboardView: (view: DashboardView) => void;
-    navigateToDashboard: (view: DashboardView) => void;
+    navigateToDashboard: (view: DashboardView, adminTab?: string) => void;
 }
 
 const UiContext = createContext<UiContextType | undefined>(undefined);
@@ -63,12 +65,15 @@ export function UiProvider({ children }: { children: React.ReactNode }) {
         setActiveModal(null);
     }, []);
 
-    const navigateToDashboard = useCallback((view: DashboardView) => {
+    const navigateToDashboard = useCallback((view: DashboardView, adminTab?: string) => {
         setActiveDashboardView(view);
+        if (adminTab) {
+            useAdminStore.getState().setActiveTab(adminTab);
+        }
         if (pathname !== "/dashboard") {
             router.push("/dashboard");
         }
-    }, [pathname, router]);
+    }, [pathname, router, setActiveDashboardView]);
 
     return (
         <UiContext.Provider

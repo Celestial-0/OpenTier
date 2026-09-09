@@ -26,7 +26,7 @@ export type OAuthExchangeResponse = {
 
 export function getOAuthAuthorizeUrl(provider: OAuthProvider): string {
     const apiBase = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000').replace(/\/$/, '');
-    return `${apiBase}/auth/oauth/${provider}/authorize`;
+    return `${apiBase}/v1/auth/oauth/${provider}/authorize`;
 }
 
 export function parseOAuthCallbackParams(searchParams: URLSearchParams): {

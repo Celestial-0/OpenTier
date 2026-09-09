@@ -5,8 +5,8 @@ use axum::{
 
 use crate::auth::{
     forgot_password, oauth::oauth_authorize, oauth::oauth_callback, oauth::oauth_exchange,
-    oauth::oauth_get_providers, recover_account, refresh,
-    resend_verification, reset_password, signin, signout, signup, verify_get, verify_post,
+    oauth::oauth_get_providers, recover_account, refresh, resend_verification, reset_password,
+    signin, signout, signup, verify_get, verify_post,
 };
 use crate::gateway::AppState;
 use crate::middleware::{auth_rate_limiter, sensitive_auth_rate_limiter};

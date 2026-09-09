@@ -91,7 +91,11 @@ pub async fn oauth_callback(
         if let Some(desc) = params.error_description {
             serializer.append_pair("error_description", &desc);
         }
-        let redirect_base = app_state.config.oauth.frontend_callback_url.trim_end_matches('/');
+        let redirect_base = app_state
+            .config
+            .oauth
+            .frontend_callback_url
+            .trim_end_matches('/');
         let redirect_url = format!("{}?{}", redirect_base, serializer.finish());
         return Ok(Redirect::temporary(&redirect_url));
     }
@@ -108,7 +112,11 @@ pub async fn oauth_callback(
     )
     .await;
 
-    let redirect_base = app_state.config.oauth.frontend_callback_url.trim_end_matches('/');
+    let redirect_base = app_state
+        .config
+        .oauth
+        .frontend_callback_url
+        .trim_end_matches('/');
 
     let redirect_url = match callback_result {
         Ok(result) => {

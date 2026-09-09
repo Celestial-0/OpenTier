@@ -23,7 +23,6 @@ interface AdminContextValue {
     fetchUsers: (params?: { search?: string; limit?: number; offset?: number }) => Promise<void>;
     fetchResources: (params?: { resource_type?: string; status?: string; limit?: number; cursor?: string }) => Promise<void>;
     updateUserRole: (userId: string, role: string) => Promise<void>;
-    updateUserLimit: (userId: string, limit: number) => Promise<void>;
     toggleUserDisabled: (userId: string, disabled: boolean) => Promise<void>;
     deleteUser: (userId: string) => Promise<void>;
     addResource: (data: DashboardAddResourceRequest) => Promise<void>;
@@ -48,7 +47,6 @@ export const AdminProvider = ({ children }: { children: React.ReactNode }) => {
         fetchUsers: adminStore.fetchUsers,
         fetchResources: adminStore.fetchResources,
         updateUserRole: adminStore.updateUserRole,
-        updateUserLimit: adminStore.updateUserLimit,
         toggleUserDisabled: adminStore.toggleUserDisabled,
         deleteUser: adminStore.deleteUser,
         addResource: adminStore.addResource,

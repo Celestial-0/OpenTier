@@ -2,7 +2,7 @@
 
 from pathlib import Path
 from datetime import timezone, timedelta
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Indian Standard Time (UTC+5:30)
@@ -22,15 +22,38 @@ class DatabaseConfig(BaseSettings):
     url: str = Field(
         default="postgresql://postgres:postgres@localhost:5432/opentier",
         description="PostgreSQL database URL",
+        validation_alias=AliasChoices("DATABASE_URL", "url"),
     )
-    pool_size: int = Field(default=10, description="Connection pool size", ge=1, le=100)
+    pool_size: int = Field(
+        default=20,
+        description="Connection pool size",
+        ge=1,
+        le=100,
+        validation_alias=AliasChoices("DATABASE_POOL_SIZE", "DB_POOL_SIZE", "pool_size"),
+    )
     max_overflow: int = Field(
-        default=20, description="Max overflow connections", ge=0, le=100
+        default=40,
+        description="Max overflow connections",
+        ge=0,
+        le=100,
+        validation_alias=AliasChoices("DATABASE_MAX_OVERFLOW", "DB_MAX_OVERFLOW", "max_overflow"),
     )
-    echo: bool = Field(default=False, description="Echo SQL queries")
-    pool_timeout: int = Field(default=30, description="Pool timeout in seconds", ge=1)
+    echo: bool = Field(
+        default=False,
+        description="Echo SQL queries",
+        validation_alias=AliasChoices("DATABASE_ECHO", "DB_ECHO", "echo"),
+    )
+    pool_timeout: int = Field(
+        default=30,
+        description="Pool timeout in seconds",
+        ge=1,
+        validation_alias=AliasChoices("DATABASE_POOL_TIMEOUT", "DB_POOL_TIMEOUT", "pool_timeout"),
+    )
     pool_recycle: int = Field(
-        default=3600, description="Pool recycle time in seconds", ge=60
+        default=3600,
+        description="Pool recycle time in seconds",
+        ge=60,
+        validation_alias=AliasChoices("DATABASE_POOL_RECYCLE", "DB_POOL_RECYCLE", "pool_recycle"),
     )
 
     model_config = SettingsConfigDict(env_prefix="DB_", extra="ignore")
@@ -109,10 +132,11 @@ class LLMConfig(BaseSettings):
     """LLM configuration."""
 
     provider: str = Field(
-        default="openai", description="LLM provider (openai, anthropic, mock)"
+        default="google", description="LLM provider (openai, anthropic, google)"
     )
+
     api_key: str = Field(default="", description="API Key")
-    model: str = Field(default="gpt-4o", description="Model name")
+    model: str = Field(default="gemini-3.5-flash-lite", description="Model name")
     base_url: str = Field(
         default="https://api.openai.com/v1",
         description="Base URL for OpenAI compatible APIs",

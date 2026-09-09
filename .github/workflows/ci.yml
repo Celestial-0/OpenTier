@@ -1,0 +1,126 @@
+name: OpenTier Continuous Integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: Gateway (Rust) — clippy + tests
+    runs-on: ubuntu-latest
+    env:
+      SQLX_OFFLINE: "true"
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Install protoc
+        run: |
+          PROTOC_VERSION=29.3
+          curl -sSL "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip" -o /tmp/protoc.zip
+          sudo unzip -q -o /tmp/protoc.zip -d /usr/local
+          rm -f /tmp/protoc.zip
+          protoc --version
+
+      - name: Clippy
+        working-directory: server/api
+        run: cargo clippy --all-targets
+
+      - name: Tests
+        working-directory: server/api
+        run: cargo test
+
+  intelligence:
+    name: Intelligence (Python) — ruff + mypy + tests
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      REDIS_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@v7.0.1
+
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.1
+
+      - name: Sync dependencies
+        working-directory: server/intelligence
+        run: uv sync --frozen
+
+      - name: Ruff
+        working-directory: server/intelligence
+        run: uv run --group dev ruff check .
+
+      - name: Mypy
+        working-directory: server/intelligence
+        run: uv run --group dev mypy core/events.py shared/redis/bus.py
+
+      - name: Tests
+        working-directory: server/intelligence
+        run: uv run --group dev pytest test/test_eventbus.py test/test_graph_parity.py -x -q
+
+
+  compose:
+    name: Docker Compose — config valid
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Validate compose file
+        working-directory: server
+        run: docker compose -f docker-compose.yml config -q
+
+  proto:
+    name: Proto — buf lint + breaking
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: bufbuild/buf-action@v1.5.0
+        with:
+          input: server/proto
+          lint: true
+          breaking: true
+          breaking_against: "https://github.com/${{ github.repository }}.git#branch=main,subdir=server/proto"
+  layering:
+    name: R2 gate — SQL only in infra::postgres
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Enforce repository boundary
+
+        working-directory: server/api
+        run: |
+          violators=$(grep -rln "sqlx::query" src --include="*.rs" \
+            | grep -v "infra[/\\]postgres" || true)
+          bad=""
+          for f in $violators; do
+            # Test-module SQL is exempt: check nothing before #[cfg(test)].
+            marker_line=$(grep -n '#\[cfg(test)\]' "$f" | head -1 | cut -d: -f1)
+            if [ -n "$marker_line" ] \
+              && ! head -n "$marker_line" "$f" | grep -q "sqlx::query"; then
+              continue
+            fi
+            bad="$bad $f"
+          done
+          if [ -n "$bad" ]; then
+            echo "::error::SQL statements outside infra::postgres:$bad"
+            exit 1
+          fi
+          echo "layering gate OK"

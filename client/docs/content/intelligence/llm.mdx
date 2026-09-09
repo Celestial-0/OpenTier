@@ -1,111 +1,195 @@
-# LLM Client & Memory
+# LLM Gateway, Model Catalog & Memory
 
-## `LLMClient` (`engine/query/llm/`)
+## Architecture Overview
 
-The LLM client is an abstraction layer over the LLM provider API. Currently configured for OpenAI-compatible APIs with a `google-genai` dependency also present.
+v1.1.0 replaces the single `LLMClient` with a three-layer system:
+
+```
+shared/llm/
+├── gateway.py       ← LLM request dispatcher (chat + stream)
+├── catalog.py       ← DB-backed model registry with TTL cache
+├── embeddings.py    ← Cloud embedding gateway + sparse encoder
+├── ports.py         ← ModelEntry / ProviderEntry dataclasses
+└── tokenizer.py     ← Token counting utilities
+```
+
+Provider credentials are **never** stored in environment variables. They are sealed at rest in PostgreSQL using AES-256-GCM (`ENCRYPTION_MASTER_KEY`) and decrypted on-demand by `shared/crypto/secrets.py`.
+
+---
+
+## `ModelCatalog` (`shared/llm/catalog.py`)
+
+DB-backed registry over the `model_providers` and `models` tables. Maintains an in-process TTL cache (30 s + random jitter) so model resolution stays off the critical request path.
 
 ```python
-class LLMClient:
-    def __init__(self):
-        self.provider = config.llm.provider    # "openai"
-        self.model = config.llm.model          # "gpt-4o"
-        self.temperature = config.llm.temperature  # 0.7
-        self.max_tokens = config.llm.max_tokens    # 1000
-        self.base_url = config.llm.base_url    # "https://api.openai.com/v1"
-        self.api_key = config.llm.api_key
+class ModelCatalog:
+    async def resolve_chat(
+        self, slug: Optional[str] = None
+    ) -> tuple[ModelEntry, list[ModelEntry]]:
+        # Returns (primary_model, fallback_chain[])
+        # Falls back to the DB-configured default when slug is None
 
-    async def generate(self, query, context, memory, config=None) -> str:
-        # Build system prompt (memory + context chunks)
-        # Build user message (query)
-        # POST to LLM API
-        # Return response text
+    async def default_embedding(self) -> ModelEntry:
+        # Returns the active embedding model entry
 
-    async def stream(self, query, context, memory, config=None) -> AsyncGenerator[str]:
-        # Same as generate() but yields tokens as they arrive
+    async def provider_api_key(self, provider: ProviderEntry) -> Optional[str]:
+        # Decrypt-on-demand; plaintext never touches logs or caches
 ```
 
-## Prompt Construction
+**Fallback chain**: each `ModelEntry` can have a `fallback_slug`. `resolve_chat()` walks the chain until it finds a model with no further fallback or encounters a cycle, returning the full ordered list so the gateway can retry in sequence.
 
-The prompt is assembled from up to 4 components:
+### Per-Request Model Override
 
-1. **System memory**: content from `user_memories.memory` (persistent cross-conversation context)
-2. **Retrieved context**: top-k chunks from hybrid search, formatted as citations
-3. **Conversation history**: prior messages in the current conversation (for multi-turn coherence)
-4. **User query**: the current message
-
-```
-System: You are a helpful assistant.
-
-User memory context:
-{memory}
-
-Relevant knowledge base context:
-[1] {chunk_1_content} [source: {document_title}, score: {score}]
-[2] {chunk_2_content} ...
-...
-
-User: {query}
-```
-
-`config.use_rag` (from `ChatConfig`) controls whether the retrieval step is executed. If `use_rag=false`, context is empty and the LLM operates in pure conversation mode.
-
-## Per-Request Config Override
-
-`ChatConfig` (from Protobuf) allows per-request overrides:
+`ChatConfig.model` (Protobuf `optional string`) overrides the default for a single request:
 
 ```protobuf
 message ChatConfig {
-    optional float temperature = 1;
-    optional int32 max_tokens = 2;
-    optional bool use_rag = 3;
-    optional string model = 4;       // override model per-request
-    optional int32 context_limit = 5; // max context chars
+    optional float  temperature   = 1;
+    optional int32  max_tokens    = 2;
+    optional bool   use_rag       = 3;
+    optional string model         = 4;  // model slug override
+    optional int32  context_limit = 5;
 }
 ```
 
-The Python `extract_chat_config()` function in `interfaces/chat.py` reads these optionals and falls back to service-level defaults when not set.
+The `features/chat/grpc_servicer.py` extracts `config.model` and passes it to `ModelCatalog.resolve_chat(slug)`.
 
-## User Memory (`MemoryStorage`)
+---
 
-OpenTier maintains a **persistent per-user memory** across all conversations:
+## `LLMGateway` (`shared/llm/gateway.py`)
+
+Dispatches chat and streaming requests to any OpenAI-compatible provider (Google Gemini, OpenAI, Ollama, vLLM, Azure OpenAI):
+
+```python
+class LLMGateway:
+    async def chat(
+        self,
+        messages: list[dict],
+        model_entry: ModelEntry,
+        api_key: str,
+        config: ChatConfig | None = None,
+    ) -> str: ...  # full response text
+
+    async def stream(
+        self,
+        messages: list[dict],
+        model_entry: ModelEntry,
+        api_key: str,
+        config: ChatConfig | None = None,
+    ) -> AsyncGenerator[str, None]: ...  # yields tokens
+```
+
+**Supported providers** (configured via `model_providers` table `slug`):
+
+| Provider Slug | API Compatibility | Notes |
+|---------------|------------------|-------|
+| `google` | OpenAI-compatible via Gemini REST | `base_url` → Gemini endpoint |
+| `openai` | OpenAI native | `https://api.openai.com/v1` |
+| `ollama` | OpenAI-compatible | `base_url=http://host.docker.internal:11434/v1` |
+| `custom` | Any OpenAI-compatible endpoint | Admin-configured `base_url` |
+
+### Retry Logic
+
+Uses `tenacity` with exponential backoff on rate-limit and timeout errors (up to 3 attempts, 2 s → 4 s → 8 s). Retries walk the fallback chain when the primary model fails.
+
+---
+
+## `CloudEmbeddingGateway` (`shared/llm/embeddings.py`)
+
+Generates dense vector embeddings via any OpenAI-compatible embedding endpoint. Default: `text-embedding-3-large` → **3072 dimensions**.
+
+```python
+class CloudEmbeddingGateway:
+    dims: int  # 3072 default
+
+    async def embed_query(self, text: str) -> list[float]:
+        # Single embedding for retrieval queries
+
+    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        # Batched (64 per API call) for ingestion
+```
+
+Constructed by `build_embedding_gateway()` which reads the active embedding model from `ModelCatalog` and decrypts its provider API key.
+
+### `HashedSparseEncoder` — BM25-style Sparse Leg
+
+Dependency-free sparse encoder producing `SparseVector`-compatible `(indices, values)` pairs for Qdrant's sparse slot. Runs entirely in-process — no network call, no model download.
+
+```python
+class HashedSparseEncoder:
+    dim: int = 65_536  # hash space
+
+    def encode(self, text: str) -> tuple[list[int], list[float]]:
+        # Tokenise (lowercase alphanum), sublinear TF weighting, SHA-1 hashing
+        # Returns (sorted unique indices, weights)
+```
+
+---
+
+## Prompt Construction (`prompts/chat_system.md`)
+
+System prompt is externalized to `server/intelligence/prompts/chat_system.md` (loaded at startup by `prompts/loader.py`). The full prompt is assembled from 4 components at request time:
+
+1. **System prompt** — loaded from `chat_system.md`
+2. **User memory** — from `user_memories.memory` (persistent cross-session context)
+3. **Retrieved context** — top-k chunks from Qdrant hybrid search, formatted as numbered citations
+4. **Conversation history** — prior `chat_messages` rows (multi-turn coherence)
+
+`ChatConfig.use_rag = false` skips the Qdrant retrieval step — the LLM operates in pure conversation mode with no knowledge base context.
+
+---
+
+## User Memory (`features/chat/memory.py`)
+
+Persistent per-user memory stored in PostgreSQL:
 
 ```sql
 CREATE TABLE user_memories (
-    user_id VARCHAR(255) PRIMARY KEY,
-    memory TEXT NOT NULL DEFAULT '',
-    metadata JSONB NOT NULL DEFAULT '{}',
+    user_id    VARCHAR(255) PRIMARY KEY,
+    memory     TEXT NOT NULL DEFAULT '',
+    metadata   JSONB NOT NULL DEFAULT '{}',
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 ```
 
-**Pattern**: one row per user; the `memory` column is a free-text field. The Intelligence service reads this before every chat generation and includes it in the prompt as additional context.
+**Update flow (v1.1.0 — async)**:
 
-**Update mechanism**: the memory is updated by the Intelligence service during or after chat turns (exact update trigger is in `MemoryStorage.update_user_memory()`). This could be:
-- Explicit summaries generated by the LLM
-- Key facts extracted from the conversation
-- User preferences detected from messages
+1. After each chat turn, Intelligence publishes a `chat.completed.v1` event to Redis `CHAT_EVENTS` stream
+2. The `memory` consumer group in `worker.py` picks it up
+3. `handle_memory_extraction()` generates a memory summary via LLM and upserts `user_memories`
 
-The memory subsystem enables personalization across sessions without re-sending conversation history.
+This decouples memory extraction from the hot chat path — TTFT is not affected by memory writes.
 
-## LLM Provider Notes
+---
 
-- **Default**: `LLM_PROVIDER=openai` with `LLM_BASE_URL=https://api.openai.com/v1` — compatible with any OpenAI-compatible API (OpenAI, Azure OpenAI, Ollama, vLLM, etc.)
-- **google-genai**: the `google-genai` package is listed as a dependency (`≥1.63.0`), suggesting Google's Gemini models are a supported provider path, likely behind a `provider=google` config switch
-- **Model override**: any request can specify a different model via `ChatConfig.model`, enabling per-user model routing (e.g., premium users get `gpt-4o`, free users get `gpt-4o-mini`)
+## LLM Provider Management
 
-## Retry Logic (`engine/ingestion/retry.py`)
+> [!IMPORTANT]
+> **No LLM API keys go in `.env`**. Set `ENCRYPTION_MASTER_KEY` and configure all providers via the Admin Dashboard (`/dashboard → Admin → Models`).
 
-Uses `tenacity` for LLM call retries:
+The database stores:
+- `model_providers` — slug, display name, base URL, AES-256-GCM encrypted API key blob
+- `models` — slug, provider FK, token pricing, default flags, fallback chain slug
 
-```python
-@retry(
-    stop=stop_after_attempt(3),
-    wait=wait_exponential(multiplier=1, min=2, max=10),
-    retry=retry_if_exception_type((httpx.TimeoutException, RateLimitError)),
-    reraise=True
-)
-async def _call_llm_with_retry(self, ...):
-    ...
-```
+---
 
-Rate limit errors trigger exponential backoff (2s → 4s → 8s). Timeouts are retried immediately (no backoff) up to the attempt limit.
+## Tokens vs. Centralized Platform Credits
+
+OpenTier enforces a strict separation between provider workload units and platform billing:
+
+1. **Native Raw Tokens (Provider Level)**:
+   - AI providers (Google Gemini, OpenAI, Anthropic, Ollama) measure inference strictly in raw input/prompt tokens and output/completion tokens.
+   - The intelligence runtime receives or counts these exact raw tokens and stores them in `chat_messages` metadata and Redis event envelopes.
+   - External providers have zero awareness of OpenTier credits.
+
+2. **OpenTier Credits (Centralized Platform Currency)**:
+   - Credits are OpenTier's unified internal billing currency, denominated at **1 credit = $0.001 USD** (1,000 credits = $1.00).
+   - The `models` catalog columns `input_cost_per_mtok` and `output_cost_per_mtok` define the credit rate per 1,000,000 provider tokens:
+     ```math
+     \text{Credits Billed} = \frac{\text{Tokens}_{\text{in}} \times \text{input\_cost\_per\_mtok} + \text{Tokens}_{\text{out}} \times \text{output\_cost\_per\_mtok}}{1,000,000}
+     ```
+   - For example, with Gemini 3.5 Flash Lite ($0.10 input / $0.40 output per 1M tokens), the catalog sets rates to `100.0` and `400.0` credits/MTok. A turn with 1,500 input tokens and 300 output tokens bills:
+     ```math
+     \left(\frac{1,500}{1,000,000} \times 100\right) + \left(\frac{300}{1,000,000} \times 400\right) = 0.15 + 0.12 = 0.27 \text{ credits}
+     ```
+   - Pre-stream reservations (`credit_holds`), ledger records (`credit_transactions`), and user balances (`user_credit_balances`) operate exclusively in credits, while preserving the raw token audit counts on every row.

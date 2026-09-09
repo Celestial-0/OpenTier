@@ -1,276 +1,239 @@
 # Docker Deployment
 
-OpenTier's entire server stack — database, schema migrations, intelligence engine, and API gateway — is orchestrated through a single `docker-compose.yml` in the `server/` directory.
+OpenTier's entire server stack is orchestrated through a single `docker-compose.yml` in `server/`. All service images are pulled from GitHub Container Registry (GHCR) — **no local build required**.
 
 ## Prerequisites
-
-Before deploying, ensure you have the following installed:
 
 | Tool | Minimum Version | Purpose |
 |------|----------------|---------|
 | [Docker](https://docs.docker.com/get-docker/) | 24.0+ | Container runtime |
 | [Docker Compose](https://docs.docker.com/compose/install/) | 2.20+ (V2) | Multi-container orchestration |
-| NVIDIA GPU drivers *(optional)* | 535+ | GPU acceleration for embeddings |
 
 ## Quick Start
 
-### 1. Configure Environment Variables
-
-The server requires three `.env` files. Example templates are provided for each.
-
-**Database credentials** (`server/.env`):
+### 1. Fetch Compose File & Environment Template
 
 ```bash
-# Create from scratch — these are used by Docker Compose
-cat > server/.env << 'EOF'
-POSTGRES_USER=opentier
-POSTGRES_PASSWORD=your-secure-password
-POSTGRES_DB=opentier
-
-# Optional: Intelligence service build arguments (for CPU-only deployments like AWS)
-# INTELLIGENCE_BASE_IMAGE=debian:bookworm-slim
-# INTELLIGENCE_UV_ARGS="--extra cpu"
-EOF
+curl -fsSL https://raw.githubusercontent.com/Celestial-0/OpenTier/main/server/docker-compose.yml -o docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/Celestial-0/OpenTier/main/server/.env.example -o .env.example
+cp .env.example .env
 ```
 
-**API service** (`server/api/.env`):
+### 2. Configure Environment
+
+Edit `.env` — all services share a single env file:
+
+**Required — must set before first run:**
+
+| Variable | Description |
+|----------|-------------|
+| `POSTGRES_USER` | Database username |
+| `POSTGRES_PASSWORD` | Database password |
+| `POSTGRES_DB` | Database name (default: `opentier`) |
+| `ENCRYPTION_MASTER_KEY` | AES-256-GCM master key for sealing LLM provider API keys. Generate with: `openssl rand -base64 32` |
+| `FRONTEND_URL` | Your frontend domain (e.g. `https://app.yourdomain.com`) |
+
+**OAuth (enable at least one provider):**
+
+| Variable | Description |
+|----------|-------------|
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google OAuth 2.0 credentials |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub OAuth App credentials |
+| `MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET` | Azure AD OAuth credentials |
+| `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET` | Discord OAuth credentials |
+
+**Email (SMTP):**
+
+| Variable | Description |
+|----------|-------------|
+| `SMTP_HOST` | SMTP server (e.g. `smtp.gmail.com`) |
+| `SMTP_USERNAME` / `SMTP_PASSWORD` | SMTP credentials |
+| `FROM_EMAIL` | Sender address |
+
+> [!NOTE]
+> `DATABASE_URL`, `REDIS_URL`, `QDRANT_URL`, and `INTELLIGENCE_SERVICE_URL` are pre-configured for the internal Docker network — do not change them unless deploying outside Docker Compose.
+
+> [!IMPORTANT]
+> **LLM / AI model API keys are not set in `.env`.** After the stack is running, configure providers and their API keys via the Admin Dashboard (`/dashboard → Admin → Models`). Keys are sealed at rest with `ENCRYPTION_MASTER_KEY`.
+
+### 3. Deploy
 
 ```bash
-# Copy and edit the example
-cp server/api/.env.example server/api/.env
+docker compose up -d
 ```
 
-Key variables to configure in `server/api/.env`:
+Docker will pull all 6 service images from GHCR and start them in dependency order. The API will be available at **`http://localhost:4000`**.
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `GOOGLE_CLIENT_ID` | For OAuth | Google OAuth app client ID |
-| `GOOGLE_CLIENT_SECRET` | For OAuth | Google OAuth app secret |
-| `GITHUB_CLIENT_ID` | For OAuth | GitHub OAuth app client ID |
-| `GITHUB_CLIENT_SECRET` | For OAuth | GitHub OAuth app secret |
-| `SMTP_HOST` | For email | SMTP server (e.g. `smtp.gmail.com`) |
-| `SMTP_USERNAME` | For email | SMTP login |
-| `SMTP_PASSWORD` | For email | SMTP password or app password |
-| `CONTACT_EMAIL` | No | Recipient for contact form emails (defaults to `FROM_EMAIL`) |
-| `FRONTEND_URL` | Yes | Frontend URL for email links (e.g. `http://localhost:3000`) |
-
-> **Note:** `DATABASE_URL`, `SERVER_HOST`, and `INTELLIGENCE_SERVICE_URL` are automatically injected by Docker Compose. You do not need to set them manually.
-
-**Intelligence service** (`server/intelligence/.env`):
+### 4. Verify
 
 ```bash
-# Copy and edit the example
-cp server/intelligence/.env.example server/intelligence/.env
-```
-
-Key variables to configure in `server/intelligence/.env`:
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `LLM_PROVIDER` | Yes | `openai` or `openai`-compatible (for Ollama) |
-| `LLM_API_KEY` | Yes | API key for the LLM provider |
-| `LLM_MODEL` | Yes | Model name (e.g. `gpt-4o`, `llama3`) |
-| `LLM_BASE_URL` | Yes | API endpoint (e.g. `https://api.openai.com/v1`) |
-
-> **Tip:** For a free, local setup using [Ollama](https://ollama.ai/), set `LLM_BASE_URL=http://host.docker.internal:11434/v1`, `LLM_API_KEY=ollama`, and `LLM_MODEL=llama3`.
-
-### 2. Deploy
-
-From the project root:
-
-```bash
-cd server
-docker compose up
-```
-
-> **Note on GPU vs CPU**: Be default, the intelligence service container will download and install PyTorch with massive NVIDIA CUDA dependencies suitable for GPU-enabled machines. If you are deploying on a CPU-only VM (such as AWS EC2) or simply want to save a few gigabytes of space, uncomment the `INTELLIGENCE_BASE_IMAGE` and `INTELLIGENCE_UV_ARGS` variables in `server/.env` to force the Docker container to build a much smaller, CPU-only configuration.
-
-That's it. On first run, Docker will:
-
-1. Pull all required images
-2. Build the `intelligence` and `api` containers
-3. Start PostgreSQL and wait for it to be ready
-4. Run all database migrations
-5. Start the intelligence engine
-6. Start the API gateway
-
-The API will be available at **`http://localhost:4000`**.
-
-### 3. Verify
-
-Once you see the following in your terminal, the stack is fully operational:
-
-```
-opentier-db           | database system is ready to accept connections
-opentier-intelligence | gRPC server started on port 50051
-opentier-api          | Applied migration 20260111000001 create_users_table
-opentier-api          | ...
-opentier-api          | 🚀 API Gateway listening on http://0.0.0.0:4000
-```
-
-You can also check service health:
-
-```bash
-# All containers running
+# Check all containers are running
 docker compose ps
 
-# API health check
+# API health
 curl http://localhost:4000/health
 ```
 
+Expected log lines indicating a healthy stack:
+
+```
+opentier-database     | database system is ready to accept connections
+opentier-redis        | Ready to accept connections
+opentier-qdrant       | Qdrant gRPC listening on 0.0.0.0:6334
+opentier-intelligence | gRPC server started on port 50051
+opentier-worker       | worker runtime started (4 consumers)
+opentier-api          | 🚀 API Gateway listening on http://0.0.0.0:4000
+```
+
+---
+
 ## Architecture
+
+### Six-Service Stack
+
+| Container | Image | Role | Internal Port | Host Port |
+|-----------|-------|------|--------------|-----------|
+| `opentier-database` | `postgres:18` | PostgreSQL — transactional data | 5432 | — |
+| `opentier-redis` | `redis:8-alpine` | Redis 8 Streams — event bus | 6379 | — |
+| `opentier-qdrant` | `qdrant/qdrant:latest` | Vector database | 6333 (HTTP), 6334 (gRPC) | — |
+| `opentier-intelligence` | `ghcr.io/celestial-0/opentier-intelligence:latest` | Python gRPC server | 50051 | — |
+| `opentier-worker` | `ghcr.io/celestial-0/opentier-intelligence:latest` | Redis Streams background workers | — | — |
+| `opentier-api` | `ghcr.io/celestial-0/opentier-api:latest` | Rust API gateway | 4000 | **4000** |
+
+The worker and intelligence containers share the same image; `WORKER_ROLE=all` (set by Compose) switches the entry point to `worker.py`.
 
 ### Startup Sequence
 
-Docker Compose enforces a strict startup order using `depends_on` conditions:
-
 <Mermaid chart={`
 flowchart LR
-    DB["db\n(pgvector/pg16)"]
-    INT["intelligence\n(Python + PyTorch)"]
+    DB["database\n(postgres:18)"]
+    Redis["redis\n(redis:8-alpine)"]
+    Qdrant["qdrant\n(qdrant/qdrant)"]
+    Intel["intelligence\n(Python gRPC)"]
+    Worker["worker\n(Python consumers)"]
     API["api\n(Rust + Axum)"]
 
-    DB -->|"service_healthy\n(pg_isready)"| INT
-    DB -->|"service_healthy\n(pg_isready)"| API
-    INT -->|"service_started"| API
+    DB -->|"service_healthy (pg_isready)"| Intel
+    DB -->|"service_healthy (pg_isready)"| Worker
+    DB -->|"service_healthy (pg_isready)"| API
+    Redis -->|"service_healthy"| Intel
+    Redis -->|"service_healthy"| Worker
+    Qdrant -->|"service_started"| Intel
+    Qdrant -->|"service_started"| Worker
+    Intel -->|"service_started"| API
 `} />
 
 
-| Step | Container | Image | What Happens |
-|------|-----------|-------|-------------|
-| 1 | `opentier-db` | `pgvector/pgvector:pg16` | PostgreSQL starts. On first run, creates the database and user. Healthcheck runs `pg_isready` every 5s. |
-| 2 | `opentier-intelligence` | Built from `server/intelligence/Dockerfile` | Python gRPC service with PyTorch. Loads embedding model, connects to PostgreSQL, starts listening on port 50051. |
-| 3 | `opentier-api` | Built from `server/api/Dockerfile` | Rust API gateway. Connects to PostgreSQL, runs `sqlx migrate run`, compiles `cargo sqlx prepare` and the API, and exposes HTTP API on port 4000. |
-
-### Network & Ports
-
-All services communicate over a private Docker bridge network (`opentier`). Only the API gateway exposes a port to the host:
-
-| Container | Internal Port | Host Port | Protocol |
-|-----------|--------------|-----------|----------|
-| `opentier-db` | 5432 | — (internal only) | PostgreSQL TCP |
-| `opentier-intelligence` | 50051 | — (internal only) | gRPC HTTP/2 |
-| `opentier-api` | 4000 | **4000** | HTTP REST + SSE |
-
 ### Data Persistence
 
-PostgreSQL data is stored in a named Docker volume (`postgres_data`). This volume persists across `docker compose down` and `docker compose up` cycles.
+Named Docker volumes persist across restarts:
+
+| Volume | Container | Data |
+|--------|-----------|------|
+| `postgres_data` | `opentier-database` | All PostgreSQL data |
+| `qdrant_data` | `opentier-qdrant` | All vector embeddings |
+| `redis_data` | `opentier-redis` | Stream data (AOF persistence) |
 
 ```bash
-# Stop services but KEEP data
+# Stop services but KEEP all data
 docker compose down
 
 # Stop services and DELETE all data (fresh start)
 docker compose down -v
 ```
 
+---
+
 ## Common Operations
-
-### Rebuild After Code Changes
-
-```bash
-# Rebuild and restart all services
-docker compose up --build
-
-# Rebuild only a specific service
-docker compose up --build api
-docker compose up --build intelligence
-```
 
 ### View Logs
 
 ```bash
-# All services
-docker compose logs -f
-
-# Single service
 docker compose logs -f api
 docker compose logs -f intelligence
-docker compose logs -f db
+docker compose logs -f worker
+docker compose logs -f qdrant
 ```
 
-### Add a New Migration
-
-Create the migration SQL files in `server/db/migrations/` following the naming convention:
-
-```
-{YYYYMMDD}{HHMMSS}_{description}.up.sql
-{YYYYMMDD}{HHMMSS}_{description}.down.sql
-```
-
-Example:
+### Restart a Single Service
 
 ```bash
-# Create migration files
-touch server/db/migrations/20260305120000_add_user_preferences.up.sql
-touch server/db/migrations/20260305120000_add_user_preferences.down.sql
+docker compose restart worker
+docker compose restart intelligence
 ```
 
-The next `docker compose up` will automatically apply the new migration.
-
-### Roll Back a Migration
+### Database Operations
 
 ```bash
-# Roll back the last migration inside the API container
+# Connect to PostgreSQL directly
+docker exec -it opentier-database psql -U opentier -d opentier
+
+# Roll back the last migration
 docker compose run --rm api sqlx migrate revert \
-  --source ../db/migrations \
-  --database-url "postgres://opentier:your-secure-password@db:5432/opentier?sslmode=disable"
+  --source migrations \
+  --database-url "postgres://opentier:password@database:5432/opentier?sslmode=disable"
+
+# Reset everything (nuclear)
+docker compose down -v && docker compose up -d
 ```
 
-### Reset the Database
+### Inspect Qdrant
 
 ```bash
-# Nuclear option — drops volume, recreates everything from scratch
-docker compose down -v
-docker compose up
+# Qdrant Web UI (when host port is exposed)
+open http://localhost:6333/dashboard
+
+# Collection stats via API
+curl http://localhost:6333/collections/knowledge_chunks
 ```
 
-### Connect to the Database Directly
+### Inspect Redis Streams
 
 ```bash
-docker exec -it opentier-db psql -U opentier -d opentier
+docker exec -it opentier-redis redis-cli
+> XLEN ot:intel:ingestion_jobs
+> XLEN ot:intel:chat_events
+> XLEN ot:intel:ingestion_jobs:dlq
 ```
+
+---
 
 ## Troubleshooting
 
-### `pull access denied` Error
-
-If you see `pull access denied for intelligence` or `pull access denied for api`, it means Docker is trying to pull a pre-built image instead of building locally. Fix by explicitly building:
-
-```bash
-docker compose up --build
-```
-
-### Migration Fails With "Already Exists"
-
-This happens when the database has schema from a previous migration tool (e.g. `sqlx`). Reset the database:
-
-```bash
-docker compose down -v
-docker compose up
-```
-
 ### Intelligence Service Fails to Start
 
-Check if the `.env` file exists and has valid LLM credentials:
+Check that Qdrant and PostgreSQL are both healthy:
 
 ```bash
-cat server/intelligence/.env | grep LLM_
+docker compose logs intelligence | grep ERROR
+docker compose ps qdrant database
 ```
 
-The API will still boot even if intelligence is down — auth, user, and admin endpoints remain operational. Only chat functionality is degraded.
+The `ensure_collection()` call on startup will fail if Qdrant is not reachable.
+
+### Worker Not Processing Jobs
+
+Check Redis connectivity and stream depth:
+
+```bash
+docker compose logs worker | tail -50
+docker exec -it opentier-redis redis-cli XLEN ot:intel:ingestion_jobs
+```
+
+If the DLQ is growing, inspect failures:
+
+```bash
+docker exec -it opentier-redis redis-cli XRANGE ot:intel:ingestion_jobs:dlq - + COUNT 5
+```
 
 ### Port 4000 Already in Use
 
 ```bash
-# Find what's using the port
+# Linux/macOS
+lsof -i :4000
 # Windows
 netstat -ano | findstr :4000
 
-# Linux / macOS
-lsof -i :4000
-
-# Or change the port mapping in docker-compose.yml
-ports:
-  - "8080:4000"  # Map to host port 8080 instead
+# Or remap in .env
+SERVER_PORT=8080
 ```

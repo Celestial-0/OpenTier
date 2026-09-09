@@ -1,20 +1,5 @@
 "use client";
 
-import type { ChatStatus, FileUIPart, SourceDocumentUIPart } from "ai";
-import type {
-  ChangeEvent,
-  ChangeEventHandler,
-  ClipboardEventHandler,
-  ComponentProps,
-  FormEvent,
-  FormEventHandler,
-  HTMLAttributes,
-  KeyboardEventHandler,
-  PropsWithChildren,
-  ReactNode,
-  RefObject,
-} from "react";
-
 import {
   Command,
   CommandEmpty,
@@ -55,14 +40,29 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import type { ChatStatus, FileUIPart, SourceDocumentUIPart } from "ai";
 import {
   CornerDownLeftIcon,
   ImageIcon,
+  Monitor,
   PlusIcon,
   SquareIcon,
   XIcon,
 } from "lucide-react";
 import { nanoid } from "nanoid";
+import type {
+  ChangeEvent,
+  ChangeEventHandler,
+  ClipboardEventHandler,
+  ComponentProps,
+  FormEvent,
+  FormEventHandler,
+  HTMLAttributes,
+  KeyboardEventHandler,
+  PropsWithChildren,
+  ReactNode,
+  RefObject,
+} from "react";
 import {
   Children,
   createContext,
@@ -73,11 +73,106 @@ import {
   useRef,
   useState,
 } from "react";
-import { convertBlobUrlToDataUrl } from "@/lib/browser/file-utils";
 
 // ============================================================================
 // Helpers
 // ============================================================================
+
+const convertBlobUrlToDataUrl = async (url: string): Promise<string | null> => {
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    // FileReader uses callback-based API, wrapping in Promise is necessary
+    // oxlint-disable-next-line eslint-plugin-promise(avoid-new)
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      // oxlint-disable-next-line eslint-plugin-unicorn(prefer-add-event-listener)
+      reader.onloadend = () => resolve(reader.result as string);
+      // oxlint-disable-next-line eslint-plugin-unicorn(prefer-add-event-listener)
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+};
+
+const captureScreenshot = async (): Promise<File | null> => {
+  if (
+    typeof navigator === "undefined" ||
+    !navigator.mediaDevices?.getDisplayMedia
+  ) {
+    return null;
+  }
+
+  let stream: MediaStream | null = null;
+  const video = document.createElement("video");
+  video.muted = true;
+  video.playsInline = true;
+
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({
+      audio: false,
+      video: true,
+    });
+
+    video.srcObject = stream;
+
+    // Video element uses callback-based API, wrapping in Promise is necessary
+    // oxlint-disable-next-line eslint-plugin-promise(avoid-new)
+    await new Promise<void>((resolve, reject) => {
+      // oxlint-disable-next-line eslint-plugin-unicorn(prefer-add-event-listener)
+      video.onloadedmetadata = () => resolve();
+      // oxlint-disable-next-line eslint-plugin-unicorn(prefer-add-event-listener)
+      video.onerror = () => reject(new Error("Failed to load screen stream"));
+    });
+
+    await video.play();
+
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+    if (!width || !height) {
+      return null;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return null;
+    }
+
+    context.drawImage(video, 0, 0, width, height);
+    // canvas.toBlob uses callback-based API, wrapping in Promise is necessary
+    // oxlint-disable-next-line eslint-plugin-promise(avoid-new)
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob(resolve, "image/png");
+    });
+    if (!blob) {
+      return null;
+    }
+
+    const timestamp = new Date()
+      .toISOString()
+      .replaceAll(/[:.]/g, "-")
+      .replace("T", "_")
+      .replace("Z", "");
+
+    return new File([blob], `screenshot-${timestamp}.png`, {
+      lastModified: Date.now(),
+      type: "image/png",
+    });
+  } finally {
+    if (stream) {
+      for (const track of stream.getTracks()) {
+        track.stop();
+      }
+    }
+    video.pause();
+    video.srcObject = null;
+  }
+};
 
 // ============================================================================
 // Provider Context & Types
@@ -164,7 +259,7 @@ export const PromptInputProvider = ({
   >([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   // oxlint-disable-next-line eslint(no-empty-function)
-  const openRef = useRef<() => void>(() => { });
+  const openRef = useRef<() => void>(() => {});
 
   const add = useCallback((files: File[] | FileList) => {
     const incoming = [...files];
@@ -326,8 +421,8 @@ export const PromptInputActionAddAttachments = ({
   const attachments = usePromptInputAttachments();
 
   const handleSelect = useCallback(
-    (e: Parameters<NonNullable<ComponentProps<typeof DropdownMenuItem>["onSelect"]>>[0]) => {
-      e.preventDefault();
+    (e: any) => {
+      e?.preventDefault?.();
       attachments.openFileDialog();
     },
     [attachments]
@@ -336,6 +431,52 @@ export const PromptInputActionAddAttachments = ({
   return (
     <DropdownMenuItem {...props} onSelect={handleSelect}>
       <ImageIcon className="mr-2 size-4" /> {label}
+    </DropdownMenuItem>
+  );
+};
+
+export type PromptInputActionAddScreenshotProps = ComponentProps<
+  typeof DropdownMenuItem
+> & {
+  label?: string;
+};
+
+export const PromptInputActionAddScreenshot = ({
+  label = "Take screenshot",
+  onSelect,
+  ...props
+}: PromptInputActionAddScreenshotProps) => {
+  const attachments = usePromptInputAttachments();
+
+  const handleSelect = useCallback(
+    async (event: any) => {
+      onSelect?.(event);
+      if (event?.defaultPrevented) {
+        return;
+      }
+
+      try {
+        const screenshot = await captureScreenshot();
+        if (screenshot) {
+          attachments.add([screenshot]);
+        }
+      } catch (error) {
+        if (
+          error instanceof DOMException &&
+          (error.name === "NotAllowedError" || error.name === "AbortError")
+        ) {
+          return;
+        }
+        throw error;
+      }
+    },
+    [onSelect, attachments]
+  );
+
+  return (
+    <DropdownMenuItem {...props} onSelect={handleSelect}>
+      <Monitor className="mr-2 size-4" />
+      {label}
     </DropdownMenuItem>
   );
 };
@@ -546,13 +687,13 @@ export const PromptInput = ({
       usingProvider
         ? controller?.attachments.clear()
         : setItems((prev) => {
-          for (const file of prev) {
-            if (file.url) {
-              URL.revokeObjectURL(file.url);
+            for (const file of prev) {
+              if (file.url) {
+                URL.revokeObjectURL(file.url);
+              }
             }
-          }
-          return [];
-        }),
+            return [];
+          }),
     [usingProvider, controller]
   );
 
@@ -656,7 +797,6 @@ export const PromptInput = ({
         }
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- cleanup only on unmount; filesRef always current
     [usingProvider]
   );
 
@@ -709,9 +849,9 @@ export const PromptInput = ({
       const text = usingProvider
         ? controller.textInput.value
         : (() => {
-          const formData = new FormData(form);
-          return (formData.get("message") as string) || "";
-        })();
+            const formData = new FormData(form);
+            return (formData.get("message") as string) || "";
+          })();
 
       // Reset form immediately after capturing text to avoid race condition
       // where user input during async blob conversion would be lost
@@ -903,15 +1043,15 @@ export const PromptInputTextarea = ({
 
   const controlledProps = controller
     ? {
-      onChange: (e: ChangeEvent<HTMLTextAreaElement>) => {
-        controller.textInput.setInput(e.currentTarget.value);
-        onChange?.(e);
-      },
-      value: controller.textInput.value,
-    }
+        onChange: (e: ChangeEvent<HTMLTextAreaElement>) => {
+          controller.textInput.setInput(e.currentTarget.value);
+          onChange?.(e);
+        },
+        value: controller.textInput.value,
+      }
     : {
-      onChange,
-    };
+        onChange,
+      };
 
   return (
     <InputGroupTextarea
@@ -975,10 +1115,10 @@ export const PromptInputTools = ({
 export type PromptInputButtonTooltip =
   | string
   | {
-    content: ReactNode;
-    shortcut?: string;
-    side?: ComponentProps<typeof TooltipContent>["side"];
-  };
+      content: ReactNode;
+      shortcut?: string;
+      side?: ComponentProps<typeof TooltipContent>["side"];
+    };
 
 export type PromptInputButtonProps = ComponentProps<typeof InputGroupButton> & {
   tooltip?: PromptInputButtonTooltip;
@@ -1092,9 +1232,9 @@ export const PromptInputSubmit = ({
   }
 
   const handleClick = useCallback(
-    (e: Parameters<NonNullable<ComponentProps<typeof InputGroupButton>["onClick"]>>[0]) => {
+    (e: any) => {
       if (isGenerating && onStop) {
-        e.preventDefault();
+        e?.preventDefault?.();
         onStop();
         return;
       }
@@ -1174,9 +1314,11 @@ export const PromptInputSelectValue = ({
 export type PromptInputHoverCardProps = ComponentProps<typeof HoverCard>;
 
 export const PromptInputHoverCard = ({
+  openDelay = 0,
+  closeDelay = 0,
   ...props
 }: PromptInputHoverCardProps) => (
-  <HoverCard {...props} />
+  <HoverCard closeDelay={closeDelay} openDelay={openDelay} {...props} />
 );
 
 export type PromptInputHoverCardTriggerProps = ComponentProps<

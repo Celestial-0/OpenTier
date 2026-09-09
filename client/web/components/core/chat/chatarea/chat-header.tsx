@@ -27,7 +27,7 @@ export const ChatHeader = () => {
         <Button
           variant="outline"
           size="icon"
-          className="h-[34px] w-[34px] bg-background border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-[8px]"
+          className="size-8.5 bg-background border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-lg"
           onClick={toggleSidebar}
         >
           <HugeiconsIcon icon={SidebarLeftIcon} size={18} />
@@ -35,7 +35,7 @@ export const ChatHeader = () => {
 
         <DropdownMenu>
           <DropdownMenuTrigger
-            className="inline-flex items-center justify-center h-[34px] px-2.5 gap-1.5 bg-background border border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-[8px] text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="inline-flex items-center justify-center h-8.5 px-2.5 gap-1.5 bg-background border border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <HugeiconsIcon icon={LockedIcon} size={15} />
             <HugeiconsIcon icon={ArrowDownDoubleIcon} size={15} />
@@ -43,17 +43,17 @@ export const ChatHeader = () => {
 
           <DropdownMenuContent
             align="start"
-            className="w-[320px] bg-popover border-border p-2 rounded-xl shadow-2xl mt-1"
+            className="w-80 bg-popover border-border p-2 rounded-xl shadow-2xl mt-1"
           >
             <DropdownMenuItem
               onClick={() => setIsPrivate(true)}
               className="flex items-center justify-between p-3 pt-4 cursor-pointer rounded-lg focus:bg-accent"
             >
               <div className="flex flex-col gap-1.5">
-                <span className="text-[15px] font-semibold text-foreground tracking-tight leading-none">
+                <span className="text-sm font-semibold text-foreground tracking-tight leading-none">
                   Private
                 </span>
-                <span className="text-[13px] text-muted-foreground font-medium leading-none">
+                <span className="text-xs text-muted-foreground font-medium leading-none">
                   Only you can access this chat
                 </span>
               </div>
@@ -67,10 +67,10 @@ export const ChatHeader = () => {
               className="flex items-center justify-between p-3 pb-4 cursor-pointer rounded-lg focus:bg-accent"
             >
               <div className="flex flex-col gap-1.5">
-                <span className="text-[15px] font-semibold text-foreground tracking-tight leading-none">
+                <span className="text-sm font-semibold text-foreground tracking-tight leading-none">
                   Public
                 </span>
-                <span className="text-[13px] text-muted-foreground font-medium leading-none">
+                <span className="text-xs text-muted-foreground font-medium leading-none">
                   Anyone with the link can access this chat
                 </span>
               </div>

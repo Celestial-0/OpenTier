@@ -53,21 +53,12 @@ flowchart LR
 `} />
 
 
-## Free Tier Limit
+## Anonymous Trial & Free Tier Limit
 
-Unauthenticated users are limited to **5 free messages** tracked client-side:
+Unauthenticated guests can test chat without signing up, bounded by a daily message limit (default **5 free messages**):
 
-```typescript
-const FREE_MESSAGE_LIMIT = 5
-
-// In sendMessage():
-if (!isAuthenticated && freeMessageCount >= FREE_MESSAGE_LIMIT) {
-  openModal('signin')  // triggers auth modal
-  return
-}
-```
-
-`freeMessageCount` is persisted in `localStorage` via Zustand's `persist` middleware. This limit is enforced client-side only — there is no server-side enforcement for unauthenticated chat.
+- **Server-side enforcement**: Evaluated at [`chat_quota_middleware`](file:///c:/Users/YASH/Code/Work/OpenTier/server/api/src/middleware/quota.rs) via an atomic 24-hour sliding Redis window (`anon_budget_allow`) with PostgreSQL `ip_usage` fallback.
+- **Credit Transition**: When an anonymous user exhausts their trial messages, the API responds with `402 Payment Required` (`{"signup_required": true}`). Upon registration, new users receive **10 free platform credits** ($0.01 value) and transition into the centralized per-token credit billing model.
 
 ## Streaming vs Non-Streaming
 

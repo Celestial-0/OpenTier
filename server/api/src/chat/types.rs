@@ -1,4 +1,5 @@
 #![allow(dead_code)]
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -58,10 +59,14 @@ pub struct GenerateTitleResponse {
     pub title: String,
 }
 
-/// Send a message (non-streaming)
+/// Unified chat completion request (M6: content-negotiated SSE merge).
+///
+/// Configuration is supplied via the nested `config` object; when absent the
+/// [`ChatConfig`] defaults apply.
 #[derive(Debug, Deserialize)]
-pub struct SendMessageRequest {
+pub struct ChatCompletionRequest {
     pub message: String,
+    #[serde(default)]
     pub config: Option<ChatConfig>,
     pub parent_id: Option<String>,
     pub user_message_id: Option<String>,
@@ -79,33 +84,19 @@ pub struct ChatConfig {
     pub model: Option<String>,
 }
 
+impl Default for ChatConfig {
+    fn default() -> Self {
+        ChatConfig {
+            temperature: Some(0.7),
+            max_tokens: Some(1000),
+            use_rag: true,
+            model: None,
+        }
+    }
+}
+
 fn default_use_rag() -> bool {
     true
-}
-
-/// Stream chat request body (SSE via POST)
-#[derive(Debug, Deserialize)]
-pub struct StreamChatRequest {
-    pub message: String,
-    #[serde(default = "default_temperature")]
-    pub temperature: f32,
-    #[serde(default = "default_max_tokens")]
-    pub max_tokens: i32,
-    #[serde(default = "default_use_rag")]
-    pub use_rag: bool,
-    pub model: Option<String>,
-    pub parent_id: Option<String>,
-    pub user_message_id: Option<String>,
-    pub assistant_message_id: Option<String>,
-    pub regenerate_user_msg_id: Option<String>,
-}
-
-fn default_temperature() -> f32 {
-    0.7
-}
-
-fn default_max_tokens() -> i32 {
-    1000
 }
 
 // ============================================================================
@@ -119,8 +110,10 @@ pub struct ConversationResponse {
     pub user_id: String,
     pub title: Option<String>,
     pub message_count: i32,
-    pub created_at: i64,
-    pub updated_at: i64,
+    #[serde(with = "crate::common::timestamp")]
+    pub created_at: DateTime<Utc>,
+    #[serde(with = "crate::common::timestamp")]
+    pub updated_at: DateTime<Utc>,
 }
 
 /// List conversations response
@@ -138,8 +131,10 @@ pub struct ConversationSummary {
     pub title: Option<String>,
     pub message_count: i32,
     pub last_message_preview: Option<String>,
-    pub created_at: i64,
-    pub updated_at: i64,
+    #[serde(with = "crate::common::timestamp")]
+    pub created_at: DateTime<Utc>,
+    #[serde(with = "crate::common::timestamp")]
+    pub updated_at: DateTime<Utc>,
 }
 
 /// Conversation with messages
@@ -148,8 +143,10 @@ pub struct ConversationWithMessages {
     pub id: Uuid,
     pub title: Option<String>,
     pub messages: Vec<ChatMessage>,
-    pub created_at: i64,
-    pub updated_at: i64,
+    #[serde(with = "crate::common::timestamp")]
+    pub created_at: DateTime<Utc>,
+    #[serde(with = "crate::common::timestamp")]
+    pub updated_at: DateTime<Utc>,
 }
 
 /// Chat message
@@ -160,7 +157,8 @@ pub struct ChatMessage {
     pub content: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub sources: Vec<SourceChunk>,
-    pub created_at: i64,
+    #[serde(with = "crate::common::timestamp")]
+    pub created_at: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_id: Option<String>,
 }
@@ -196,7 +194,8 @@ pub struct MessageResponse {
     pub content: String,
     pub sources: Vec<SourceChunk>,
     pub metrics: ChatMetrics,
-    pub created_at: i64,
+    #[serde(with = "crate::common::timestamp")]
+    pub created_at: DateTime<Utc>,
 }
 
 /// Chat metrics

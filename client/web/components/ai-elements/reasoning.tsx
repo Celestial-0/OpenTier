@@ -1,8 +1,6 @@
 "use client";
 
-import type { ComponentProps, ReactNode } from "react";
-
-import { useControllableState } from "@/hooks/use-controllable-state";
+import { useControllableState } from "@radix-ui/react-use-controllable-state";
 import {
   Collapsible,
   CollapsibleContent,
@@ -14,6 +12,7 @@ import { code } from "@streamdown/code";
 import { math } from "@streamdown/math";
 import { mermaid } from "@streamdown/mermaid";
 import { BrainIcon, ChevronDownIcon } from "lucide-react";
+import type { ComponentProps, ReactNode } from "react";
 import {
   createContext,
   memo,
@@ -25,7 +24,6 @@ import {
   useState,
 } from "react";
 import { Streamdown } from "streamdown";
-import type { PluginConfig } from "streamdown";
 
 import { Shimmer } from "./shimmer";
 
@@ -218,9 +216,7 @@ export const ReasoningContent = memo(
       )}
       {...props}
     >
-      <Streamdown plugins={streamdownPlugins as unknown as PluginConfig}>
-        {children}
-      </Streamdown>
+      <Streamdown plugins={streamdownPlugins}>{children}</Streamdown>
     </CollapsibleContent>
   )
 );

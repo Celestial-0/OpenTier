@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO credit_transactions (\n                user_id, delta, balance_after, reason, idempotency_key, metadata\n            )\n            VALUES ($1, 10.0000, 10.0000, 'signup_bonus', $2, '{\"note\": \"Initial free signup credits fallback grant\"}'::jsonb)\n            ON CONFLICT (idempotency_key) DO NOTHING\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e989c1170a0f887681236861ce41a97c64c0f4514f8df7cc3ad3ade03e071d06"
+}

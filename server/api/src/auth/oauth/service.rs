@@ -3,7 +3,6 @@ use oauth2::{
     AuthorizationCode, CsrfToken, PkceCodeChallenge, PkceCodeVerifier, Scope, TokenResponse,
 };
 use sqlx::PgPool;
-use sqlx::Row;
 
 use super::{Provider, build_oauth_client, discord, github, google, microsoft, x};
 use crate::auth::{AuthError, session, tokens};
@@ -64,17 +63,13 @@ pub async fn get_authorization_url(
     let verifier = pkce_verifier.secret().to_string();
     let expires_at = Utc::now() + chrono::Duration::minutes(10);
 
-    sqlx::query(
-        r#"
-        INSERT INTO oauth_auth_states (state, provider, pkce_verifier, expires_at)
-        VALUES ($1, $2, $3, $4)
-        "#,
+    crate::infra::postgres::oauth_repo::insert_auth_state(
+        db,
+        state,
+        provider.as_str().to_string(),
+        verifier,
+        expires_at,
     )
-    .bind(state)
-    .bind(provider.as_str())
-    .bind(verifier)
-    .bind(expires_at)
-    .execute(db)
     .await?;
 
     Ok(auth_url.to_string())
@@ -90,30 +85,15 @@ pub async fn handle_callback(
 ) -> Result<OAuthCallbackResponse, AuthError> {
     let client = build_oauth_client(provider, config).map_err(|_| AuthError::Internal)?;
 
-    let state_record = sqlx::query(
-        r#"
-        SELECT provider, pkce_verifier, expires_at
-        FROM oauth_auth_states
-        WHERE state = $1
-        "#,
-    )
-    .bind(&state)
-    .fetch_optional(db)
-    .await?
-    .ok_or(AuthError::InvalidOAuthState)?;
+    let state_record = crate::infra::postgres::oauth_repo::get_auth_state(db, &state)
+        .await?
+        .ok_or(AuthError::InvalidOAuthState)?;
 
-    let state_provider: String = state_record.try_get("provider").map_err(|_| AuthError::Internal)?;
-    let pkce_verifier: String = state_record
-        .try_get("pkce_verifier")
-        .map_err(|_| AuthError::Internal)?;
-    let state_expires_at: chrono::DateTime<Utc> = state_record
-        .try_get("expires_at")
-        .map_err(|_| AuthError::Internal)?;
+    let state_provider: String = state_record.provider;
+    let pkce_verifier: String = state_record.pkce_verifier;
+    let state_expires_at: chrono::DateTime<Utc> = state_record.expires_at;
 
-    sqlx::query("DELETE FROM oauth_auth_states WHERE state = $1")
-        .bind(&state)
-        .execute(db)
-        .await?;
+    crate::infra::postgres::oauth_repo::delete_auth_state(db, &state).await?;
 
     if state_provider != provider.as_str() {
         return Err(AuthError::InvalidOAuthState);
@@ -225,129 +205,77 @@ pub async fn handle_callback(
     };
 
     // Check if account already exists
-    let existing_account = sqlx::query!(
-        r#"
-        SELECT user_id FROM accounts
-        WHERE provider = $1 AND provider_account_id = $2
-        "#,
+    let existing_account = crate::infra::postgres::oauth_repo::find_account_user(
+        db,
         provider.as_str(),
-        provider_account_id
+        &provider_account_id,
     )
-    .fetch_optional(db)
     .await?;
 
     let (user_id, is_new_user): (uuid::Uuid, bool) = if let Some(account) = existing_account {
         // Existing OAuth account - ensure account is active before sign-in
-        let linked_user = sqlx::query!(
-            r#"
-            SELECT deleted_at, is_disabled
-            FROM users
-            WHERE id = $1
-            "#,
-            account.user_id
-        )
-        .fetch_optional(db)
-        .await?
-        .ok_or(AuthError::InvalidCredentials)?;
+        let linked_user = crate::infra::postgres::oauth_repo::get_user_flags(db, account)
+            .await?
+            .ok_or(AuthError::InvalidCredentials)?;
 
         if linked_user.is_disabled {
             return Err(AuthError::Unauthorized);
         }
 
         if linked_user.deleted_at.is_some() {
-            sqlx::query!(
-                r#"
-                UPDATE users
-                SET deleted_at = NULL, email_verified = TRUE
-                WHERE id = $1
-                "#,
-                account.user_id
-            )
-            .execute(db)
-            .await?;
+            crate::infra::postgres::oauth_repo::restore_and_verify(db, account).await?;
         }
 
-        (account.user_id, false)
+        (account, false)
     } else {
         // Check if user with this email exists (including soft-deleted users)
-        let existing_user = sqlx::query!(
-            "SELECT id, deleted_at, is_disabled FROM users WHERE email = $1",
-            email
-        )
-        .fetch_optional(db)
-        .await?;
+        let existing_user =
+            crate::infra::postgres::oauth_repo::find_by_email_any(db, &email).await?;
 
         let is_new = existing_user.is_none();
 
-        let user_id = if let Some(ref user) = existing_user {
-            if user.is_disabled {
-                return Err(AuthError::Unauthorized);
-            }
+        let user_id = match existing_user {
+            Some(user) => {
+                if user.is_disabled {
+                    return Err(AuthError::Unauthorized);
+                }
 
-            // Recover soft-deleted account and mark verified for trusted OAuth identity.
-            if user.deleted_at.is_some() {
-                sqlx::query!(
-                    r#"
-                    UPDATE users
-                    SET deleted_at = NULL, email_verified = TRUE
-                    WHERE id = $1
-                    "#,
-                    user.id
+                // Recover soft-deleted account and mark verified for trusted OAuth identity.
+                if user.deleted_at.is_some() {
+                    crate::infra::postgres::oauth_repo::restore_and_verify(db, user.id).await?;
+                }
+
+                // Link OAuth to existing user
+                user.id
+            }
+            None => {
+                // Create new user
+                crate::infra::postgres::oauth_repo::create_oauth_user(
+                    db,
+                    email.clone(),
+                    name.clone(),
+                    avatar_url.clone(),
+                    email_verified,
                 )
-                .execute(db)
-                .await?;
+                .await?
             }
-
-            // Link OAuth to existing user
-            user.id
-        } else {
-            // Create new user
-            let new_user = sqlx::query!(
-                r#"
-                INSERT INTO users (email, name, avatar_url, email_verified)
-                VALUES ($1, $2, $3, $4)
-                RETURNING id
-                "#,
-                email,
-                name,
-                avatar_url,
-                email_verified
-            )
-            .fetch_one(db)
-            .await?;
-
-            new_user.id
         };
 
         // Create OAuth account link
-        sqlx::query!(
-            r#"
-            INSERT INTO accounts (user_id, provider, provider_account_id, access_token)
-            VALUES ($1, $2, $3, $4)
-            "#,
+        crate::infra::postgres::oauth_repo::link_account(
+            db,
             user_id,
             provider.as_str(),
-            provider_account_id,
-            access_token
+            &provider_account_id,
+            access_token,
         )
-        .execute(db)
         .await?;
 
         (user_id, is_new)
     };
 
     // Fetch user role for session creation
-    let user_role = sqlx::query!(
-        r#"
-        SELECT role as "role: crate::auth::Role"
-        FROM users
-        WHERE id = $1
-        "#,
-        user_id
-    )
-    .fetch_one(db)
-    .await?
-    .role;
+    let user_role = crate::infra::postgres::oauth_repo::role_of(db, user_id).await?;
 
     // Create session with user's role
     let (session_token, expires_at) =
@@ -361,20 +289,16 @@ pub async fn handle_callback(
         "Signed in successfully via OAuth"
     };
 
-    sqlx::query(
-        r#"
-        INSERT INTO oauth_login_codes (code, provider, session_token, email, is_new_user, message, expires_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        "#,
+    crate::infra::postgres::oauth_repo::insert_login_code(
+        db,
+        oauth_code.clone(),
+        provider.as_str().to_string(),
+        session_token,
+        email,
+        is_new_user,
+        message.to_string(),
+        oauth_code_expiry,
     )
-    .bind(&oauth_code)
-    .bind(provider.as_str())
-    .bind(&session_token)
-    .bind(&email)
-    .bind(is_new_user)
-    .bind(message)
-    .bind(oauth_code_expiry)
-    .execute(db)
     .await?;
 
     let _ = (user_id, expires_at);
@@ -389,36 +313,21 @@ pub async fn exchange_oauth_code(
     db: &PgPool,
     code: String,
 ) -> Result<OAuthCodeExchangeResult, AuthError> {
-    let row = sqlx::query(
-        r#"
-        SELECT provider, session_token, email, is_new_user, message, expires_at
-        FROM oauth_login_codes
-        WHERE code = $1
-        "#,
-    )
-    .bind(&code)
-    .fetch_optional(db)
-    .await?
-    .ok_or(AuthError::InvalidToken)?;
+    let row = crate::infra::postgres::oauth_repo::get_login_code(db, &code)
+        .await?
+        .ok_or(AuthError::InvalidToken)?;
 
-    let expires_at: chrono::DateTime<Utc> = row.try_get("expires_at").map_err(|_| AuthError::Internal)?;
+    crate::infra::postgres::oauth_repo::delete_login_code(db, &code).await?;
 
-    sqlx::query("DELETE FROM oauth_login_codes WHERE code = $1")
-        .bind(&code)
-        .execute(db)
-        .await?;
-
-    if expires_at < Utc::now() {
+    if row.expires_at < Utc::now() {
         return Err(AuthError::TokenExpired);
     }
 
     Ok(OAuthCodeExchangeResult {
-        provider: row.try_get("provider").map_err(|_| AuthError::Internal)?,
-        session_token: row
-            .try_get("session_token")
-            .map_err(|_| AuthError::Internal)?,
-        email: row.try_get("email").map_err(|_| AuthError::Internal)?,
-        is_new_user: row.try_get("is_new_user").map_err(|_| AuthError::Internal)?,
-        message: row.try_get("message").map_err(|_| AuthError::Internal)?,
+        provider: row.provider,
+        session_token: row.session_token,
+        email: row.email,
+        is_new_user: row.is_new_user,
+        message: row.message,
     })
 }

@@ -5,24 +5,33 @@ package opentier.intelligence.v1;
 // =============================================================================
 // PROTO VERSIONING STRATEGY
 // =============================================================================
-// 
-// Version: 1.0.0 (2026-01-29)
-// 
+//
+// Version: 1.1.0 (2026-08)
+//
+// - REMOVED dead RPCs (no production caller ⇒ removed):
+//     Chat.GetConversation / Chat.DeleteConversation   (API owns conversations)
+//     ResourceService.ChunkedUpload                     (no HTTP exposure;
+//      FileChunk / ChunkMetadata / ChunkedUploadResponse removed with it,
+//      resolving the chunk_index comment/behavior contradiction)
+//     ResourceService.CancelIngestion                   (no route)
+//     ResourceService.SyncResourceMetadata              (stub that reported no
+//      conflicts; Sync* messages/enums removed with it)
+//     Health.Ready                                      (unused by gateway)
+// - ADDED (additive): StreamErrorCode enum + StreamError message; populated in
+//   ChatStreamChunk.typed_error alongside legacy string error field.
+// - DOCUMENTED: ChatStreamChunk state machine + is_final semantics.
+//
 // VERSIONING RULES:
 // 1. Package versioning: opentier.intelligence.v1, v2, etc. for breaking changes
 // 2. Field numbering: Reserve 1-15 for frequently used fields (1-byte encoding)
 // 3. Deprecation: Use [deprecated = true] annotation, maintain for 2 minor versions
-// 4. Reserved fields: When removing fields, mark them as reserved
+// 4. Reserved fields: When removing fields inside a surviving message, mark them reserved
 // 5. Backward compatibility: Only add optional fields, never remove required ones
 //
 // BREAKING CHANGE POLICY:
 // - Major version bump (v1 → v2): Breaking changes allowed
-// - Minor version: New messages/fields only, no removals
-// - Both old and new versions supported for 6 months during migration
-//
-// FIELD RESERVATION:
-// reserved 1000 to 1999; // Reserved for internal use
-// reserved 2000 to 2999; // Reserved for extensions
+// - Minor version: New messages/fields only; RPC removals require zero
+//   production callers (verified) and are recorded in this changelog
 // =============================================================================
 
 // ============================================================================
@@ -30,8 +39,8 @@ package opentier.intelligence.v1;
 // ============================================================================
 
 service Health {
+  // Liveness/basic reachability probe used by the gateway health endpoint.
   rpc Check(HealthCheckRequest) returns (HealthCheckResponse);
-  rpc Ready(ReadyCheckRequest) returns (ReadyCheckResponse);
 }
 
 message HealthCheckRequest {}
@@ -39,15 +48,7 @@ message HealthCheckRequest {}
 message HealthCheckResponse {
   string status = 1;
   optional string version = 2;
-  optional int64 uptime_seconds = 3;
-}
-
-message ReadyCheckRequest {}
-
-message ReadyCheckResponse {
-  bool ready = 1;
-  repeated string dependencies = 2;
-  map<string, bool> dependency_status = 3;
+  optional int64 uptime_seconds = 3; // Unix seconds since process start
 }
 
 // ============================================================================
@@ -55,20 +56,13 @@ message ReadyCheckResponse {
 // ============================================================================
 
 service Chat {
-  // Send a message and get complete response
+  // Send a message and get complete response.
   rpc SendMessage(ChatRequest) returns (ChatResponse);
-  
-  // Stream chat response in real-time
+
+  // Stream chat response in real-time.
   rpc StreamChat(ChatRequest) returns (stream ChatStreamChunk);
-  
-  // Retrieve conversation history (Persisted in API, but this RPC allows Intel to wrap it if needed, 
-  // though API usually handles this directly. include for completeness if Architecture shifts)
-  rpc GetConversation(GetConversationRequest) returns (ConversationResponse);
-  
-  // Delete conversation
-  rpc DeleteConversation(DeleteConversationRequest) returns (DeleteConversationResponse);
-  
-  // Generate conversation title using AI
+
+  // Generate conversation title using AI.
   rpc GenerateTitle(GenerateTitleRequest) returns (GenerateTitleResponse);
 }
 
@@ -94,9 +88,16 @@ message ChatResponse {
   string response = 3;
   repeated ContextChunk sources = 4;
   optional ChatMetrics metrics = 5;
-  int64 created_at = 6;
+  int64 created_at = 6; // Unix seconds
 }
 
+// Streaming state machine (per ChatStreamChunk):
+//   1..N ContextChunk(source) events arrive FIRST (exactly one batch),
+//   then 0..N token events,
+//   then exactly one terminal event: metrics (success) or typed_error/error
+//   (failure) with is_final = true.
+// Consumers MUST treat is_final on the terminal event as stream completion;
+// absence of tokens means an empty response, not a broken stream.
 message ChatStreamChunk {
   string conversation_id = 1;
   string message_id = 2;
@@ -104,9 +105,26 @@ message ChatStreamChunk {
     string token = 3;
     ContextChunk source = 4;
     ChatMetrics metrics = 5;
-    string error = 6;
+    string error = 6 [deprecated = true]; // Legacy "CODE: message" form.
+    StreamError typed_error = 8;          // Preferred structured form.
   }
   bool is_final = 7;
+}
+
+enum StreamErrorCode {
+  STREAM_ERROR_CODE_UNSPECIFIED = 0;
+  STREAM_ERROR_CODE_INTERNAL_ERROR = 1;
+  STREAM_ERROR_CODE_TIMEOUT = 2;
+  STREAM_ERROR_CODE_RATE_LIMITED = 3;
+  STREAM_ERROR_CODE_CONTEXT_TOO_LONG = 4;
+  STREAM_ERROR_CODE_MODEL_UNAVAILABLE = 5;
+  STREAM_ERROR_CODE_INVALID_REQUEST = 6;
+  STREAM_ERROR_CODE_DEADLINE_EXCEEDED = 7;
+}
+
+message StreamError {
+  StreamErrorCode code = 1;
+  string message = 2;
 }
 
 message ChatMetrics {
@@ -127,48 +145,6 @@ message ContextChunk {
   map<string, string> metadata = 7;
 }
 
-message GetConversationRequest {
-  string user_id = 1;
-  string conversation_id = 2;
-  optional int32 limit = 3;
-  optional string cursor = 4;
-}
-
-message ConversationResponse {
-  string conversation_id = 1;
-  repeated ChatMessage messages = 2;
-  optional string next_cursor = 3;
-  int64 created_at = 4;
-  int64 updated_at = 5;
-  map<string, string> metadata = 6;
-}
-
-message ChatMessage {
-  string message_id = 1;
-  MessageRole role = 2;
-  string content = 3;
-  repeated ContextChunk sources = 4;
-  int64 created_at = 5;
-  optional string parent_id = 6;
-}
-
-enum MessageRole {
-  MESSAGE_ROLE_UNSPECIFIED = 0;
-  MESSAGE_ROLE_USER = 1;
-  MESSAGE_ROLE_ASSISTANT = 2;
-  MESSAGE_ROLE_SYSTEM = 3;
-}
-
-message DeleteConversationRequest {
-  string user_id = 1;
-  string conversation_id = 2;
-}
-
-message DeleteConversationResponse {
-  bool success = 1;
-  string conversation_id = 2;
-}
-
 message GenerateTitleRequest {
   string conversation_id = 1;
   string user_message = 2;
@@ -184,20 +160,22 @@ message GenerateTitleResponse {
 // ============================================================================
 
 service ResourceService {
-  // Standard resource addition (for files < 100MB)
   rpc AddResource(AddResourceRequest) returns (AddResourceResponse);
-  
-  // Chunked upload for large files (> 100MB)
-  // Client streams file chunks, server responds with final status
-  rpc ChunkedUpload(stream FileChunk) returns (ChunkedUploadResponse);
-  
   rpc GetResourceStatus(GetResourceStatusRequest) returns (ResourceStatusResponse);
   rpc ListResources(ListResourcesRequest) returns (ListResourcesResponse);
   rpc DeleteResource(DeleteResourceRequest) returns (DeleteResourceResponse);
-  rpc CancelIngestion(CancelIngestionRequest) returns (CancelIngestionResponse);
-  
-  // Database synchronization - allows API layer to sync state with Intelligence
-  rpc SyncResourceMetadata(SyncMetadataRequest) returns (SyncMetadataResponse);
+  rpc ReembedAll(ReembedAllRequest) returns (ReembedAllResponse);
+}
+
+message ReembedAllRequest {
+  optional string model_slug = 1;
+}
+
+message ReembedAllResponse {
+  int32 reembedded_chunks = 1;
+  int32 dimensions = 2;
+  string model_slug = 3;
+  string status = 4;
 }
 
 message AddResourceRequest {
@@ -265,7 +243,7 @@ message ResourceItem {
   string content = 3; // Short summary or snippet
   ResourceStatus status = 4;
   ResourceStats stats = 5;
-  int64 created_at = 6;
+  int64 created_at = 6; // Unix seconds
   map<string, string> metadata = 7;
   bool is_global = 8;
 }
@@ -283,105 +261,6 @@ message DeleteResourceRequest {
 message DeleteResourceResponse {
   bool success = 1;
   string resource_id = 2;
-}
-
-message CancelIngestionRequest {
-  string user_id = 1;
-  string job_id = 2;
-}
-
-message CancelIngestionResponse {
-  bool success = 1;
-  string job_id = 2;
-  optional string message = 3;
-}
-
-// ============================================================================
-// CHUNKED UPLOAD MESSAGES (for files > 100MB)
-// ============================================================================
-
-message FileChunk {
-  // First chunk must include metadata
-  oneof payload {
-    ChunkMetadata metadata = 1;  // First message: file metadata
-    bytes data = 2;              // Subsequent messages: raw file bytes
-  }
-  int32 chunk_index = 3;         // 0-indexed chunk number
-  bool is_last = 4;              // True for final chunk
-}
-
-message ChunkMetadata {
-  string user_id = 1;
-  string resource_id = 2;        // Client-generated or empty for server-generated
-  string filename = 3;
-  string content_type = 4;       // MIME type (e.g., application/pdf)
-  int64 total_size = 5;          // Total file size in bytes
-  int32 total_chunks = 6;        // Expected number of chunks
-  ResourceType type = 7;
-  optional string title = 8;
-  map<string, string> metadata = 9;
-  optional IngestionConfig config = 10;
-  optional string checksum = 11; // SHA256 of complete file for integrity verification
-}
-
-message ChunkedUploadResponse {
-  string job_id = 1;
-  string resource_id = 2;
-  ResourceStatus status = 3;
-  int32 chunks_received = 4;     // Number of chunks successfully received
-  optional string error = 5;
-  optional string checksum = 6;  // Server-computed checksum for verification
-}
-
-// ============================================================================
-// DATABASE SYNCHRONIZATION MESSAGES
-// ============================================================================
-
-message SyncMetadataRequest {
-  string user_id = 1;
-  SyncDirection direction = 2;
-  optional int64 since_timestamp = 3;  // Unix timestamp for incremental sync
-  repeated string resource_ids = 4;    // Specific resources to sync (empty = all)
-}
-
-enum SyncDirection {
-  SYNC_DIRECTION_UNSPECIFIED = 0;
-  SYNC_DIRECTION_API_TO_INTELLIGENCE = 1;  // API pushes state to Intelligence
-  SYNC_DIRECTION_INTELLIGENCE_TO_API = 2;  // Intelligence pushes state to API
-  SYNC_DIRECTION_BIDIRECTIONAL = 3;        // Full reconciliation
-}
-
-message SyncMetadataResponse {
-  bool success = 1;
-  int32 resources_synced = 2;
-  int32 conflicts_found = 3;
-  repeated SyncConflict conflicts = 4;
-  int64 sync_timestamp = 5;           // Timestamp of this sync for next incremental
-  optional string next_cursor = 6;    // For paginated sync
-}
-
-message SyncConflict {
-  string resource_id = 1;
-  ConflictType type = 2;
-  string api_state = 3;         // State in API database
-  string intelligence_state = 4; // State in Intelligence database
-  ConflictResolution resolution = 5;
-}
-
-enum ConflictType {
-  CONFLICT_TYPE_UNSPECIFIED = 0;
-  CONFLICT_TYPE_MISSING_IN_API = 1;
-  CONFLICT_TYPE_MISSING_IN_INTELLIGENCE = 2;
-  CONFLICT_TYPE_STATUS_MISMATCH = 3;
-  CONFLICT_TYPE_METADATA_MISMATCH = 4;
-}
-
-enum ConflictResolution {
-  CONFLICT_RESOLUTION_UNSPECIFIED = 0;
-  CONFLICT_RESOLUTION_USE_API = 1;
-  CONFLICT_RESOLUTION_USE_INTELLIGENCE = 2;
-  CONFLICT_RESOLUTION_MERGE = 3;
-  CONFLICT_RESOLUTION_MANUAL = 4;  // Requires manual intervention
 }
 
 enum ResourceType {
@@ -402,8 +281,6 @@ enum ResourceStatus {
   RESOURCE_STATUS_FAILED = 4;
   RESOURCE_STATUS_PARTIAL = 5;
 }
-
-
 
 // Internal Document message for processing pipeline
 message Document {

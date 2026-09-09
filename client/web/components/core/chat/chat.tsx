@@ -10,6 +10,8 @@ import { Suspense, useEffect, useCallback, useMemo, useRef, useState } from "rea
 import { useRouter, useParams } from "next/navigation";
 import { useChatStore } from "@/store/chat-store";
 import { useAuth } from "@/context/auth-context";
+import { useUi } from "@/context/ui-context";
+import { DashboardView } from "@/types/dashboard";
 
 interface ChatProps {
   children: React.ReactNode;
@@ -20,6 +22,7 @@ export const Chat = ({ children }: ChatProps) => {
   const params = useParams();
   const conversationId = params?.id as string | undefined;
   const { user, logout } = useAuth();
+  const { navigateToDashboard } = useUi();
 
   // ── Store ──────────────────────────────────────────────────────────────
   const {
@@ -31,7 +34,6 @@ export const Chat = ({ children }: ChatProps) => {
     createNewConversation,
     deleteConversation,
     reset: resetChatStore,
-    freeMessageCount,
   } = useChatStore();
 
   // ── Initialization ─────────────────────────────────────────────────────
@@ -112,9 +114,9 @@ export const Chat = ({ children }: ChatProps) => {
 
   const handleNavigateToDashboard = useCallback(
     (view: string) => {
-      router.push(`/dashboard?view=${view}`);
+      navigateToDashboard(view as DashboardView);
     },
-    [router]
+    [navigateToDashboard]
   );
 
   // ── Sidebar threads ────────────────────────────────────────────────────
@@ -157,7 +159,6 @@ export const Chat = ({ children }: ChatProps) => {
             onLogout={handleLogout}
             onNavigateToDashboard={handleNavigateToDashboard}
             isAuthenticated={!!user}
-            freeMessageCount={freeMessageCount}
           />
         </Suspense>
         <SidebarInset>

@@ -10,7 +10,7 @@ pub async fn connect(database_url: &str) -> PgPool {
         .expect("Failed to connect to Postgres");
 
     tracing::info!("🔄 Checking and running database migrations...");
-    sqlx::migrate!("../db/migrations")
+    sqlx::migrate!("./migrations")
         .run(&pool)
         .await
         .expect("Failed to run database migrations");

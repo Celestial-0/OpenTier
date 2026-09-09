@@ -107,13 +107,13 @@ export function FooterContent() {
                     {/* Status Card */}
                     <div className="w-full max-w-sm rounded-xl border border-foreground/10 backdrop-blur-md p-6 text-left">
                         <div className="flex items-center justify-between mb-6">
-                            <h4 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                                 {FOOTER_TEXT.systemStatusTitle}
                             </h4>
 
                             <div className={cn("flex items-center gap-2 rounded-full px-3 py-1 border", statusBadgeBg)}>
                                 <span className={cn("w-1.5 h-1.5 rounded-full animate-pulse", statusDotColor)} />
-                                <AnimatedShinyText className={cn("text-[10px] font-semibold", statusBadgeColor)}>
+                                <AnimatedShinyText className={cn("text-xs font-semibold", statusBadgeColor)}>
                                     {isSystemHealthy ? FOOTER_TEXT.systemStatusBadge : (RustApiHealth.isError || PythonApiHealth.isError ? "Degraded" : "Partial")}
                                 </AnimatedShinyText>
                             </div>
@@ -194,7 +194,7 @@ export function FooterContent() {
                         </span>
                     </HoverCardTrigger>
 
-                    <HoverCardContent className="w-[360px] border-foreground/10  backdrop-blur-xl p-0 overflow-hidden relative">
+                    <HoverCardContent className="w-96 border-foreground/10  backdrop-blur-xl p-0 overflow-hidden relative">
 
 
                         <div className="p-5 space-y-4 relative z-10">
@@ -215,7 +215,7 @@ export function FooterContent() {
                                         {DEVELOPER_PROFILE.role}
                                     </p>
 
-                                    <div className="flex items-center justify-center sm:justify-start mt-2 text-[11px] text-muted-foreground">
+                                    <div className="flex items-center justify-center sm:justify-start mt-2 text-xs text-muted-foreground">
                                         <CalendarDays className="w-3 h-3 mr-2 opacity-70" />
                                         Building since {DEVELOPER_PROFILE.buildingSince}
                                     </div>
@@ -259,7 +259,7 @@ export function FooterContent() {
                     </HoverCardContent>
                 </HoverCard>
 
-                <p className="text-[10px] text-muted-foreground/40">
+                <p className="text-xs text-muted-foreground/40">
                     {FOOTER_TEXT.copyright(new Date().getFullYear())}
                 </p>
             </motion.div>

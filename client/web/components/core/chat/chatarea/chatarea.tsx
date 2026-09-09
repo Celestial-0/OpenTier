@@ -8,19 +8,49 @@ import {
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 
 import { ChatHeader } from "@/components/core/chat/chatarea/chat-header";
-import { ChatInput, models } from "@/components/core/chat/chatarea/chat-input";
+import { ChatInput } from "@/components/core/chat/chatarea/chat-input";
 import {
   Messages,
   type MessageType,
 } from "@/components/core/chat/chatarea/messages";
 
 import { useChatStore } from "@/store/chat-store";
-import type { ChatMessage } from "@/types/chats";
+import type { ChatMessage, SourceChunk } from "@/types/chats";
+
+// Helper to sanitize source titles: never show raw UUIDs, extract clean document titles or URL slugs
+function getCleanSourceTitle(s: SourceChunk): string {
+  const isUuid = (val?: string | null) =>
+    val ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim()) : false;
+
+  if (s.document_title && !isUuid(s.document_title)) {
+    return s.document_title.trim();
+  }
+
+  if (s.source_url) {
+    try {
+      const url = new URL(s.source_url);
+      const pathname = url.pathname.replace(/\/+$/, "");
+      if (pathname && pathname !== "") {
+        const lastPart = pathname.split("/").pop();
+        if (lastPart) {
+          return decodeURIComponent(lastPart)
+            .replace(/[-_]+/g, " ")
+            .replace(/\b\w/g, (c) => c.toUpperCase());
+        }
+      }
+      return url.hostname;
+    } catch {
+      // not a valid URL string
+    }
+  }
+
+  return "Knowledge Resource";
+}
 
 // Stable empty array to avoid creating new references in selectors
 const EMPTY_MESSAGES: ChatMessage[] = [];
@@ -53,10 +83,26 @@ export const ChatArea = () => {
   const switchBranch = useChatStore((s) => s.switchBranch);
 
   // ── Local UI state ─────────────────────────────────────────────────────
-  const [model, setModel] = useState<string>(models[0].id);
   const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
   const [text, setText] = useState<string>("");
   const [useWebSearch, setUseWebSearch] = useState<boolean>(false);
+
+  const model = useChatStore((s) => s.selectedModel);
+  const setSelectedModel = useChatStore((s) => s.setSelectedModel);
+  const availableModels = useChatStore((s) => s.availableModels);
+  const fetchAvailableModels = useChatStore((s) => s.fetchAvailableModels);
+
+  useEffect(() => {
+    fetchAvailableModels();
+  }, [fetchAvailableModels]);
+
+  const modelItems = useMemo(() => availableModels.map(m => ({
+      id: m.slug,
+      name: m.display_name,
+      chef: m.provider_display_name,
+      chefSlug: m.provider_slug,
+      providers: [m.provider_slug],
+  })), [availableModels]);
 
   // ── Derived state ──────────────────────────────────────────────────────
 
@@ -133,11 +179,28 @@ export const ChatArea = () => {
         key: activeMsg.id, // The active branch's ID is the key for this group
         from: activeMsg.role as "user" | "assistant",
         versions: versions.map(v => ({ id: v.id, content: v.content })),
-        sources: activeMsg.sources?.map((s) => ({
-          id: s.chunk_id || s.document_id,
-          href: s.source_url || "#",
-          title: s.document_title || s.document_id || "Source",
-        })),
+        sources: (() => {
+          if (!activeMsg.sources || activeMsg.sources.length === 0) return undefined;
+
+          const uniqueSources: { id: string; href: string; title: string }[] = [];
+          const seen = new Set<string>();
+
+          for (const s of activeMsg.sources) {
+            const title = getCleanSourceTitle(s);
+            const href = s.source_url || "#";
+            const dedupeKey = `${s.document_id || ''}-${href}-${title}`;
+            if (seen.has(dedupeKey)) continue;
+            seen.add(dedupeKey);
+
+            uniqueSources.push({
+              id: s.document_id || s.chunk_id || dedupeKey,
+              href,
+              title,
+            });
+          }
+
+          return uniqueSources.length > 0 ? uniqueSources : undefined;
+        })(),
       };
     });
   }, [storeMessages, activeConversationId, currentActiveLeaf]);
@@ -233,9 +296,9 @@ export const ChatArea = () => {
   }, []);
 
   const handleModelSelect = useCallback((modelId: string) => {
-    setModel(modelId);
+    setSelectedModel(modelId);
     setModelSelectorOpen(false);
-  }, []);
+  }, [setSelectedModel]);
 
   const isSubmitDisabled = useMemo(
     () => !text.trim() || status === "streaming" || status === "submitted",
@@ -293,7 +356,8 @@ export const ChatArea = () => {
       <ChatInput
         text={text}
         status={status}
-        model={model}
+        model={model ?? ""}
+        availableModels={modelItems}
         modelSelectorOpen={modelSelectorOpen}
         useWebSearch={useWebSearch}
         isSubmitDisabled={isSubmitDisabled}

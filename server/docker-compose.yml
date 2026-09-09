@@ -1,14 +1,15 @@
 name: opentier
 
 services:
-  # ── PostgreSQL Database with pgvector ──────────────────────────────
-  db:
-    image: pgvector/pgvector:pg16
-    container_name: opentier-db
+  # ── PostgreSQL Database ─────────────────────────────────────────────
+  database:
+    image: postgres:18
+    container_name: opentier-database
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+      PGDATA: /var/lib/postgresql/data
     expose:
       - "5432"
     volumes:
@@ -23,21 +24,83 @@ services:
     networks:
       - opentier-network
 
+  # ── Redis (cache, locks, rate limits, event streams) ────────────────
+  redis:
+    image: redis:8-alpine
+    container_name: opentier-redis
+    # AOF for stream durability; noeviction so streams and
+    # locks are never silently evicted under memory pressure
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --maxmemory-policy
+      - noeviction
+    expose:
+      - "6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - opentier-network
+
+  # ── Qdrant (vector store of record) ─────────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: opentier-qdrant
+    environment:
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:-}
+    expose:
+      - "6333"
+      - "6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':< /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - opentier-network
+
   # ── Python Intelligence Engine (gRPC) ───────────────────────────────
   intelligence:
     image: ghcr.io/${IMAGE_REPO_OWNER:-celestial-0}/opentier-intelligence:${IMAGE_TAG:-latest}
     container_name: opentier-intelligence
     depends_on:
-      db:
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
         condition: service_healthy
     environment:
       # ── Database (Internal Docker Network) ──────────────────────────
-      DB_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}
+
+      # ── Redis & Qdrant (Internal Docker Network) ─────────────────────
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+
+      # ── Secrets Encryption (provider keys at rest) ───────────────────
+      ENCRYPTION_MASTER_KEY: ${ENCRYPTION_MASTER_KEY}
 
       # ── Runtime ─────────────────────────────────────────────────────
       ENVIRONMENT: ${ENVIRONMENT:-production}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       GRPC_PORT: 50051
+      PYTHONPATH: /app:/app/generated
 
       # ── DB Pool ─────────────────────────────────────────────────────
       DB_POOL_SIZE: ${DB_POOL_SIZE:-20}
@@ -55,23 +118,10 @@ services:
       INGESTION_MAX_CONTENT_LENGTH: ${INGESTION_MAX_CONTENT_LENGTH:-1000000}
       INGESTION_CLEANING_STRATEGY: ${INGESTION_CLEANING_STRATEGY:-standard}
 
-      # ── Embeddings ───────────────────────────────────────────────────
-      EMBEDDING_MODEL_NAME: ${EMBEDDING_MODEL_NAME:-sentence-transformers/all-MiniLM-L6-v2}
-      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-384}
-      EMBEDDING_BATCH_SIZE: ${EMBEDDING_BATCH_SIZE:-32}
-
       # ── Scraping ─────────────────────────────────────────────────────
       SCRAPING_TIMEOUT: ${SCRAPING_TIMEOUT:-30}
       SCRAPING_MAX_RETRIES: ${SCRAPING_MAX_RETRIES:-3}
       SCRAPING_USER_AGENT: ${SCRAPING_USER_AGENT:-OpenTier Intelligence Bot/1.0}
-
-      # ── LLM ──────────────────────────────────────────────────────────
-      LLM_PROVIDER: ${LLM_PROVIDER:-google}
-      LLM_BASE_URL: ${LLM_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai/}
-      LLM_API_KEY: ${LLM_API_KEY}
-      LLM_MODEL: ${LLM_MODEL:-gemini-2.5-flash-lite}
-      LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.3}
-      LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-10000}
 
     expose:
       - "50051"
@@ -85,19 +135,62 @@ services:
     networks:
       - opentier-network
 
+  # ── Intelligence Workers (durable background consumers) ─────────────
+  # Same image as `intelligence`; runs stream consumers instead of the gRPC
+  # server so they scale and fail independently.
+  worker:
+    image: ghcr.io/${IMAGE_REPO_OWNER:-celestial-0}/opentier-intelligence:${IMAGE_TAG:-latest}
+    container_name: opentier-worker
+    command: ["uv", "run", "--no-dev", "worker.py"]
+    depends_on:
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+      ENCRYPTION_MASTER_KEY: ${ENCRYPTION_MASTER_KEY}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      PYTHONPATH: /app:/app/generated
+    # Worker listens on no port; disable inherited TCP healthcheck.
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import os, sys; pids = [f for f in os.listdir('/proc') if f.isdigit()]; sys.exit(0 if any('worker.py' in open(f'/proc/{p}/cmdline', 'rb').read().decode('latin1', 'ignore') for p in pids if os.path.exists(f'/proc/{p}/cmdline')) else 1)\" || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - opentier-network
+
   # ── Rust API Gateway (HTTP) ─────────────────────────────────────────
   api:
     image: ghcr.io/${IMAGE_REPO_OWNER:-celestial-0}/opentier-api:${IMAGE_TAG:-latest}
     container_name: opentier-api
     depends_on:
-      db:
+      database:
         condition: service_healthy
       intelligence:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       # ── Networking & DB (Internal Docker Network) ───────────────────
-      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database:5432/${POSTGRES_DB}
       INTELLIGENCE_SERVICE_URL: http://intelligence:50051
+
+      # ── Redis (Internal Docker Network) ─────────────────────────────
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+
+      # ── Secrets Encryption (provider keys at rest) ───────────────────
+      ENCRYPTION_MASTER_KEY: ${ENCRYPTION_MASTER_KEY}
+
       SERVER_HOST: 0.0.0.0
       SERVER_PORT: 4000
       RUST_LOG: ${RUST_LOG:-api=info,tower_http=info}
@@ -132,10 +225,7 @@ services:
       X_CLIENT_ID: ${X_CLIENT_ID:-}
       X_CLIENT_SECRET: ${X_CLIENT_SECRET:-}
       X_REDIRECT_URL: ${X_REDIRECT_URL:-}
-      X_CONSUMEER_KEY: ${X_CONSUMEER_KEY:-}
-      X_SECRET_KEY: ${X_SECRET_KEY:-}
-      X_BEARER_TOKEN: ${X_BEARER_TOKEN:-}
-
+                  
       # ── Email (SMTP) ──────────────────────────────────────────────────
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
       SMTP_PORT: ${SMTP_PORT:-587}
@@ -163,6 +253,10 @@ services:
       # ── Usage Quota ───────────────────────────────────────────────────
       USAGE_LIMITS_ENABLED: ${USAGE_LIMITS_ENABLED:-true}
 
+      # ── Credit Billing ───────────────────────────────────────────────
+      CREDITS_ENFORCED: ${CREDITS_ENFORCED:-true}
+      CREDIT_RESERVE_ESTIMATE: ${CREDIT_RESERVE_ESTIMATE:-0.2}
+
     ports:
       - "${SERVER_PORT:-4000}:4000"
     healthcheck:
@@ -177,6 +271,8 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
+  qdrant_data:
 
 networks:
   opentier-network:

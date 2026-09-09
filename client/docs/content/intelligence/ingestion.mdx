@@ -1,175 +1,142 @@
-# Ingestion Pipeline
+# Knowledge Ingestion Pipeline
 
-## `DocumentProcessor` — 9-Step Pipeline
+## Overview
 
-`engine/ingestion/processor.py` processes every incoming document through a fixed pipeline:
+Ingestion in v1.1.0 is fully **asynchronous**. The gRPC `AddResource` call publishes a job to Redis Streams and returns immediately. A dedicated background worker consumes the job and runs the full pipeline.
 
+```
+Browser → Rust API → gRPC KnowledgeServicer → Redis INGESTION_JOBS stream
+                                                        ↓
+                                               Worker: handle_ingestion_job()
+                                                        ↓
+                                    DocumentProcessor → Qdrant (vectors) + PostgreSQL (metadata)
+```
 
-<Mermaid chart={`
-%%{init: {'flowchart': {'wrappingWidth': 380}}}%%
-flowchart TB
-    Input["AddResourceRequest\nuser_id · content · type · title · config"]
+---
 
-    subgraph VAL["Validation"];
-        direction TB;
-        V1["1. validate_user_id()\nNon-empty string check"]
-        V2["2. Validate content\nNon-empty check"]
-        V3["3. validate_document_title()\nLength + character check"]
-        V4["4. sanitize_metadata()\nRemove reserved keys, validate types"]
-        V1 --> V2 --> V3 --> V4
-    end
+## Module Layout
 
-    subgraph PROC["Text Processing"];
-        direction TB;
-        Clean["5. clean_with_strategy()\nminimal / standard / aggressive"]
-        Chunk["6. TextChunker.chunk()\nSplit into TextChunk objects"]
-        Clean --> Chunk
-    end
+```
+features/knowledge/
+├── grpc_servicer.py    ← AddResource / ListResources / DeleteResource handlers
+├── service.py          ← KnowledgeService — orchestrates DB + Redis
+├── queue.py            ← publish_ingestion_job() → Redis INGESTION_JOBS stream
+├── repository.py       ← documents / ingestion_jobs DB queries
+├── worker.py           ← handle_ingestion_job() — worker consumer handler
+└── pipeline/
+    ├── processor.py    ← DocumentProcessor: clean → chunk → embed → upsert
+    ├── chunker.py      ← Token-aware text splitter (512 tokens, 50 overlap)
+    ├── crawler.py      ← Web crawler with depth limits and rate control
+    ├── retry.py        ← tenacity retry decorators
+    ├── validation.py   ← Content length / type validation
+    └── scrapers/
+        ├── browser.py  ← Playwright headless Chromium (JS-heavy SPAs)
+        ├── web.py      ← httpx lightweight static HTML fetcher
+        └── github.py   ← PyGitHub repository content fetcher
+```
 
-    subgraph STORE["Storage"];
-        direction TB;
-        StoreDoc["7. DocumentStorage.store_document()\nINSERT INTO documents"]
-        Embed["8. batch_generate_embeddings()\nsentence-transformers → numpy arrays"]
-        StoreEmbed["9. EmbeddingStorage.store_chunks()\nINSERT document_chunks · vector(384)"]
-        StoreDoc --> Embed --> StoreEmbed
-    end
+---
 
-    Track["JobStorage.update_progress()\nUPDATE ingestion_jobs SET progress_percent"]
+## Ingestion Flow
 
-    Input --> VAL --> PROC --> STORE --> Track
-`} />
+### 1. gRPC `AddResource` → Redis
 
-
-Any step failure is caught, logged, and recorded in `ingestion_jobs.errors` (JSONB array). Partial failures result in job `status = 'partial'`.
-
-## Text Cleaning Strategies
-
-| Strategy | Operations |
-|----------|-----------|
-| `minimal` | Strip leading/trailing whitespace |
-| `standard` | Minimal + remove excessive blank lines, normalize Unicode whitespace |
-| `aggressive` | Standard + remove HTML tags, collapse multiple spaces, remove control characters |
-
-Strategy is controlled per-resource via `config.auto_clean` flag and `INGESTION_CLEANING_STRATEGY` env default.
-
-## `TextChunker` (`engine/ingestion/chunker.py`)
+`features/knowledge/grpc_servicer.py` validates the request and delegates to `KnowledgeService.add_resource()`:
 
 ```python
-@dataclass
-class TextChunk:
-    content: str
-    index: int          # sequential chunk index
-    start_char: int     # character offset in source
-    end_char: int
-    metadata: dict      # inherited from document + chunk-level
+# features/knowledge/service.py
+async def add_resource(self, request: AddResourceRequest) -> AddResourceResponse:
+    # 1. Create document row in PostgreSQL (status=queued)
+    doc_id = await self.repository.create_document(...)
+    job_id = await self.repository.create_ingestion_job(doc_id)
 
-class TextChunker:
-    def __init__(self, chunk_size=512, chunk_overlap=50, separator="\n\n"):
-        ...
+    # 2. Publish job to Redis INGESTION_JOBS stream
+    await self.queue.publish_ingestion_job(doc_id, job_id, request)
 
-    def chunk(self, text: str, metadata: dict = {}) -> list[TextChunk]:
-        # Split by paragraph separator ("\n\n")
-        # If paragraph > chunk_size, split by sentence
-        # Maintain overlap of chunk_overlap chars between consecutive chunks
-        # Validate: no chunk > 10MB, no empty chunks
+    # 3. Return immediately — worker handles the rest
+    return AddResourceResponse(resource_id=doc_id, job_id=job_id, status="queued")
 ```
 
-**Algorithm**:
-1. Split on `separator` (`"\n\n"` = paragraph breaks)
-2. If any paragraph exceeds `chunk_size`, split further by sentence boundary
-3. Slide a window of `chunk_size` chars with `chunk_overlap` stride
-4. Track `start_char` / `end_char` for source attribution
+### 2. Worker Receives Job
 
-**Constraints**:
-- `chunk_size` default: 512 characters
-- `chunk_overlap` default: 50 characters
-- Maximum content length enforced before chunking: `INGESTION_MAX_CONTENT_LENGTH = 1,000,000` chars
-
-## `EmbeddingModel` (`engine/embedding/models.py`)
+`features/knowledge/worker.py::handle_ingestion_job()` is called by the Redis consumer:
 
 ```python
-class EmbeddingModel:
-    model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
-    dimensions: int = 384
-    _cache: dict[str, np.ndarray]  # in-memory LRU, max 10,000 entries
-
-    def __init__(self):
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.model = SentenceTransformer(model_name, device=self.device)
-        if self.device == "cuda":
-            self.model.half()  # FP16 on GPU for throughput
-        self._cache = {}
-
-    def encode(
-        self,
-        texts: list[str],
-        batch_size: int = 32,
-        show_progress: bool = False
-    ) -> np.ndarray:
-        # Check cache first
-        # Encode uncached texts in batches of batch_size
-        # L2-normalize if config.normalize = True
-        # Store results in _cache
-        # Return numpy array of shape (len(texts), 384)
+async def handle_ingestion_job(envelope: EventEnvelope, msg_id: str) -> None:
+    # Update job status → processing
+    # Run DocumentProcessor
+    # Update job status → completed / failed
+    # Sweep: auto-recover stuck jobs on startup
 ```
 
-**Cache behavior**: The in-memory dict cache maps `text → embedding vector`. Cache size is bounded by `EMBEDDING_CACHE_SIZE = 10,000`. No eviction policy is specified — the cache grows until the bound is reached, at which point caching stops (not LRU; effectively a "fill then bypass" strategy).
+### 3. `DocumentProcessor` (`pipeline/processor.py`)
 
-## Batch Embedding Pipeline (`engine/embedding/batch.py`)
+Full pipeline for a single document:
+
+1. **Scrape** — `BrowserScraper` (Playwright), `WebScraper` (httpx), or `GitHubScraper`
+2. **Clean** — remove boilerplate, normalize whitespace, strip HTML
+3. **Chunk** — `TextChunker`: 512-token chunks with 50-token overlap
+4. **Embed** — `CloudEmbeddingGateway.embed_documents()` — `text-embedding-3-large` (3072d), batched 64 texts/call
+5. **Sparse encode** — `HashedSparseEncoder.encode()` — BM25-style hashed unigram TF
+6. **Upsert to Qdrant** — `QdrantVectorStore.upsert_chunks()` — stores dense + sparse vectors + payload
+7. **Update PostgreSQL** — mark document `status=completed`, record chunk count
+
+### 4. Qdrant Point Structure
+
+Each chunk becomes one Qdrant point in the `knowledge_chunks` collection:
 
 ```python
-async def batch_generate_embeddings(
-    chunks: list[TextChunk],
-    model: EmbeddingModel,
-    batch_size: int = 32
-) -> list[np.ndarray]:
-    # Process in batches to avoid OOM on large documents
-    # Returns list of 384-dim vectors, one per chunk
+PointStruct(
+    id=chunk_uuid,
+    vector={
+        "dense":  [float, ...],          # 3072-dim cosine
+        "sparse": SparseVector(
+            indices=[int, ...],           # hashed token indices (dim=65536)
+            values=[float, ...],          # sublinear TF weights
+        ),
+    },
+    payload={
+        "user_id":        str,            # tenant partitioning
+        "is_global":      bool,           # visible to all users if True
+        "document_id":    str,            # UUID → PostgreSQL documents.id
+        "chunk_index":    int,            # position in document
+        "content":        str,            # raw text of the chunk
+        "document_title": str,
+        "source_url":     str,
+    },
+)
 ```
 
-## `EmbeddingStorage` (`engine/embedding/storage.py`)
+**Payload indexes**: `user_id` (keyword / tenant), `is_global` (bool), `document_id` (keyword), `chunk_index` (integer).
 
-Persists vectors to PostgreSQL:
+---
 
-```sql
-INSERT INTO document_chunks (document_id, content, chunk_index, embedding, metadata)
-VALUES ($1, $2, $3, $4::vector, $5)
-```
+## Startup Sweep
 
-The `$4::vector` cast stores the numpy array as a pgvector `vector(384)` column, enabling HNSW index searches.
+On boot, `sweep_stuck_jobs()` finds any ingestion jobs in `processing` state (crashed workers) and re-publishes them to the Redis stream. A periodic sweep runs every 5 minutes.
 
-## Web Scraping Subsystem (`engine/ingestion/scrapers/`)
+---
 
-For `ResourceType.WEBSITE`, the ingestion pipeline utilizes a multi-stage scraping architecture to handle everything from static documents to complex single-page applications:
+## Configuration
 
-1. **BrowserScraper (Playwright)**: A headless Chromium-based scraper that handles JavaScript-heavy pages and SPAs using improved navigation logic and modern content extraction APIs.
-2. **HTTpx Scraper**: A lightweight, high-performance fetcher for static HTML content.
-3. **WebCrawler (`engine/ingestion/crawler.py`)**: A robust discovery engine with optimized link finding and depth management, designed for comprehensive site indexing while respecting rate limits.
-4. **Parsing**: Uses BeautifulSoup4 with `lxml` to extract clean text before converting it to Markdown for the chunking pipeline.
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `INGESTION_CHUNK_SIZE` | `512` | Tokens per chunk |
+| `INGESTION_CHUNK_OVERLAP` | `50` | Overlap tokens between chunks |
+| `INGESTION_MAX_BATCH_SIZE` | `100` | Max chunks per Qdrant upsert call |
+| `INGESTION_AUTO_CLEAN` | `true` | Run content cleaner before chunking |
+| `INGESTION_GENERATE_EMBEDDINGS` | `true` | Generate + upsert vectors |
+| `INGESTION_MAX_CONTENT_LENGTH` | `1000000` | Max bytes before truncation |
+| `SCRAPING_TIMEOUT` | `30` | HTTP timeout seconds |
+| `SCRAPING_MAX_RETRIES` | `3` | Retry attempts for failed fetches |
 
-Configuration is centralized in `ScrapingConfig`:
-- `timeout: 30s`
-- `max_retries: 3`
-- `user_agent: "OpenTier Intelligence Bot/1.0"`
+---
 
-## Testing & Validation
+## Supported Resource Types
 
-### End-to-End Ingestion Test (`server/intelligence/script/full_ingestion.py`)
-
-A comprehensive test script that validates the entire pipeline from URL scraping to vector storage. It can be run with custom user IDs and persistence options to verify dashboard visibility.
-
-**Usage**:
-```powershell
-uv run script/full_ingestion.py "https://example.com" --user "YOUR_USER_ID" --persist
-```
-
-- `--user`: Associate the ingestion with a specific user ID.
-- `--persist`: Prevents the script from deleting the resource after the test, allowing it to be viewed in the dashboard.
-
-## GitHub Integration (`engine/ingestion/scrapers/`)
-
-For `ResourceType.CODE` with a GitHub URL, `PyGithub` is used to:
-1. Fetch repository tree
-2. Enumerate files by extension
-3. Fetch file contents
-4. Feed into the ingestion pipeline as `CODE` type documents
+| `ResourceType` | Scraper Used | Notes |
+|---------------|-------------|-------|
+| `TEXT` | None (direct content) | Content passed inline in the gRPC request |
+| `WEBSITE` | BrowserScraper → WebScraper fallback | Handles SPAs and static HTML |
+| `GITHUB_REPO` | GitHubScraper (PyGitHub) | Fetches README + source files |
+| `FILE` | ChunkedUpload gRPC stream | Up to 1 GB; streamed in 10 MB chunks |

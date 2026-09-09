@@ -24,10 +24,9 @@ pub async fn signup(
     State(app_state): State<AppState>,
     Json(payload): Json<SignUpRequest>,
 ) -> Result<Json<SignUpResponse>, AuthError> {
-    crate::common::validation::validate_email(&payload.email)
-        .map_err(|e| AuthError::Validation(e))?;
+    crate::common::validation::validate_email(&payload.email).map_err(AuthError::Validation)?;
     crate::common::validation::validate_password(&payload.password)
-        .map_err(|e| AuthError::Validation(e))?;
+        .map_err(AuthError::Validation)?;
 
     let response = service::signup(&app_state.db, payload, &app_state.config.email).await?;
     Ok(Json(response))
@@ -43,8 +42,7 @@ pub async fn signin(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Json(payload): Json<SignInRequest>,
 ) -> Result<Json<SignInResponse>, AuthError> {
-    crate::common::validation::validate_email(&payload.email)
-        .map_err(|e| AuthError::Validation(e))?;
+    crate::common::validation::validate_email(&payload.email).map_err(AuthError::Validation)?;
 
     let user_agent = headers
         .get(header::USER_AGENT)
@@ -76,6 +74,14 @@ pub async fn signout(
         .ok_or(AuthError::Unauthorized)?;
 
     service::signout(&app_state.db, session_token).await?;
+
+    // Evict the revoked session from Redis so the token is dead immediately.
+    if let Some(cache) = &app_state.session_cache {
+        cache
+            .evict_token_hash(&crate::auth::tokens::hash_token(session_token))
+            .await;
+    }
+
     Ok(Json(serde_json::json!({
         "message": "Signed out successfully"
     })))
@@ -98,7 +104,17 @@ pub async fn refresh(
 
     let ip_address = Some(IpNetwork::from(addr.ip()));
 
+    let old_token = payload.session_token.clone();
+
     let response = service::refresh_session(&app_state.db, payload, ip_address, user_agent).await?;
+
+    // The old token was rotated in Postgres; make sure its cache entry dies.
+    if let Some(cache) = &app_state.session_cache {
+        cache
+            .evict_token_hash(&crate::auth::tokens::hash_token(&old_token))
+            .await;
+    }
+
     Ok(Json(response))
 }
 
@@ -145,7 +161,8 @@ pub async fn reset_password(
     State(app_state): State<AppState>,
     Json(payload): Json<ResetPasswordRequest>,
 ) -> Result<Json<ResetPasswordResponse>, AuthError> {
-    let response = service::reset_password(&app_state.db, payload).await?;
+    let response =
+        service::reset_password(&app_state.db, payload, app_state.session_cache.as_deref()).await?;
     Ok(Json(response))
 }
 

@@ -2,27 +2,35 @@
 
 ## Service Registration
 
-The Intelligence service registers 3 gRPC servicers against the shared `grpc.aio.server`:
+The Intelligence service registers 3 gRPC servicers against the shared `grpc.aio.server` in `main.py`:
 
 ```python
-health_pb2_grpc.add_HealthServicer_to_server(HealthService(), server)
-intelligence_pb2_grpc.add_ChatServicer_to_server(ChatService(engine), server)
-intelligence_pb2_grpc.add_ResourceServiceServicer_to_server(ResourceService(engine), server)
+from features.health.grpc_servicer import HealthServicer
+from features.chat.grpc_servicer import ChatServicer
+from features.knowledge.grpc_servicer import ResourceServiceServicer
+
+health_pb2_grpc.add_HealthServicer_to_server(HealthServicer(), server)
+intelligence_pb2_grpc.add_ChatServicer_to_server(ChatServicer(catalog, retriever), server)
+intelligence_pb2_grpc.add_ResourceServiceServicer_to_server(ResourceServiceServicer(svc), server)
 ```
 
-## `Health` Service
+---
+
+## `Health` Service (`features/health/`)
 
 | RPC | Input | Output | Notes |
 |-----|-------|--------|-------|
 | `Check` | `HealthCheckRequest {}` | `HealthCheckResponse { status, version, uptime_seconds }` | Always returns "healthy" if process is alive |
-| `Ready` | `ReadyCheckRequest {}` | `ReadyCheckResponse { ready, dependencies, dependency_status }` | Checks DB + embedding model |
+| `Ready` | `ReadyCheckRequest {}` | `ReadyCheckResponse { ready, dependencies, dependency_status }` | Checks PostgreSQL + Qdrant + Redis connectivity |
 
-## `Chat` Service
+---
+
+## `Chat` Service (`features/chat/grpc_servicer.py`)
 
 | RPC | Input | Output | Notes |
 |-----|-------|--------|-------|
-| `SendMessage` | `ChatRequest` | `ChatResponse` | Unary; timeout 1200s |
-| `StreamChat` | `ChatRequest` | `stream ChatStreamChunk` | Server-streaming; timeout 300s |
+| `SendMessage` | `ChatRequest` | `ChatResponse` | Unary; timeout 1200 s |
+| `StreamChat` | `ChatRequest` | `stream ChatStreamChunk` | Server-streaming; timeout 300 s |
 | `GetConversation` | `GetConversationRequest { user_id, conversation_id }` | `ConversationResponse { messages[] }` | Fetches from `chat_messages` |
 | `DeleteConversation` | `DeleteConversationRequest { user_id, conversation_id }` | `DeleteConversationResponse { success }` | Checks ownership |
 | `GenerateTitle` | `GenerateTitleRequest { user_id, conversation_id, user_message, assistant_message }` | `GenerateTitleResponse { title }` | LLM call |
@@ -57,61 +65,56 @@ message ChatStreamChunk {
 
 The Rust layer reads each `ChatStreamChunk` from the gRPC stream and converts it to an SSE `data:` event. `is_final=true` triggers the SSE stream close.
 
-## `ResourceService` Service
+---
+
+## `ResourceService` Service (`features/knowledge/grpc_servicer.py`)
+
+> [!IMPORTANT]
+> **`AddResource` is now async in v1.1.0.** It publishes the ingestion job to Redis Streams and returns immediately with `status=queued`. The actual scraping, chunking, embedding and Qdrant upsert happen in the background worker.
 
 | RPC | Type | Input | Output | Timeout |
 |-----|------|-------|--------|---------|
-| `AddResource` | Unary | `AddResourceRequest` | `AddResourceResponse { resource_id, job_id, status }` | 3000s |
-| `ChunkedUpload` | Client-streaming | `stream FileChunk` | `ChunkedUploadResponse` | 3000s |
-| `GetResourceStatus` | Unary | `GetResourceStatusRequest { resource_id, user_id }` | `ResourceStatusResponse` | 10s |
-| `ListResources` | Unary | `ListResourcesRequest { user_id, filters, pagination }` | `ListResourcesResponse { resources[], total, next_cursor }` | 30s |
-| `DeleteResource` | Unary | `DeleteResourceRequest { resource_id, user_id }` | `DeleteResourceResponse { success }` | 30s |
-| `CancelIngestion` | Unary | `CancelIngestionRequest { job_id, user_id }` | `CancelIngestionResponse { success }` | 10s |
-| `SyncResourceMetadata` | Unary | `SyncMetadataRequest` | `SyncMetadataResponse { synced, conflicts[] }` | 60s |
+| `AddResource` | Unary | `AddResourceRequest` | `AddResourceResponse { resource_id, job_id, status="queued" }` | 30 s |
+| `ChunkedUpload` | Client-streaming | `stream FileChunk` | `ChunkedUploadResponse` | 3000 s |
+| `GetResourceStatus` | Unary | `GetResourceStatusRequest { resource_id, user_id }` | `ResourceStatusResponse` | 10 s |
+| `ListResources` | Unary | `ListResourcesRequest { user_id, filters, pagination }` | `ListResourcesResponse { resources[], total, next_cursor }` | 30 s |
+| `DeleteResource` | Unary | `DeleteResourceRequest { resource_id, user_id }` | `DeleteResourceResponse { success }` | 30 s |
+| `CancelIngestion` | Unary | `CancelIngestionRequest { job_id, user_id }` | `CancelIngestionResponse { success }` | 10 s |
+| `SyncResourceMetadata` | Unary | `SyncMetadataRequest` | `SyncMetadataResponse { synced, conflicts[] }` | 60 s |
+
+### `AddResource` — Async Flow
+
+```
+gRPC AddResource
+    → KnowledgeService.add_resource()
+        → repository.create_document()      # PostgreSQL: status=queued
+        → queue.publish_ingestion_job()     # Redis: INGESTION_JOBS stream
+    ← returns { resource_id, job_id, status="queued" }
+
+(Background — opentier-worker container)
+    → handle_ingestion_job()               # Redis consumer
+        → DocumentProcessor.process()      # scrape → chunk → embed → upsert Qdrant
+        → repository.update_job_status()   # PostgreSQL: status=completed/failed
+```
 
 ### `ChunkedUpload` — Client-Streaming
 
-Supports uploading files larger than the 100MB gRPC message limit by streaming in chunks:
+Supports files larger than the 100 MB gRPC message limit:
 
-1. First `FileChunk` must contain `payload.metadata: ChunkMetadata { user_id, resource_id, filename, content_type, total_size, total_chunks, ... }`
-2. Subsequent `FileChunk` messages contain `payload.data: bytes` (max 10MB per chunk)
+1. First `FileChunk` must contain `payload.metadata: ChunkMetadata { user_id, resource_id, filename, content_type, total_size, total_chunks }`
+2. Subsequent chunks contain `payload.data: bytes` (max 10 MB per chunk)
 3. Final chunk has `is_last = true`
 4. Maximum total file size: **1 GB**
 5. Optional `checksum` in `ChunkMetadata` for integrity verification
 
-### `SyncResourceMetadata` — Conflict Resolution
-
-Used to reconcile state between the Rust API and Intelligence service:
-
-```protobuf
-enum SyncDirection {
-    UNSPECIFIED = 0;
-    API_TO_INTELLIGENCE = 1;     // Rust is source of truth
-    INTELLIGENCE_TO_API = 2;     // Python is source of truth
-    BIDIRECTIONAL = 3;           // merge conflicts
-}
-
-enum ConflictType {
-    MISSING_IN_API = 0;
-    MISSING_IN_INTELLIGENCE = 1;
-    STATUS_MISMATCH = 2;
-    METADATA_MISMATCH = 3;
-}
-
-enum ConflictResolution {
-    USE_API = 0;
-    USE_INTELLIGENCE = 1;
-    MERGE = 2;
-    MANUAL = 3;  // returned to caller for manual resolution
-}
-```
+---
 
 ## Correlation ID Propagation
 
 The `Chat` servicer extracts or generates a `x-correlation-id` from gRPC metadata:
 
 ```python
-# interfaces/chat.py
+# features/chat/grpc_servicer.py
 def _get_correlation_id(context: grpc.aio.ServicerContext) -> str:
     metadata = dict(context.invocation_metadata())
     return metadata.get('x-correlation-id', str(uuid.uuid4()))
@@ -119,10 +122,12 @@ def _get_correlation_id(context: grpc.aio.ServicerContext) -> str:
 
 The correlation ID is included in all log lines within the request scope, enabling distributed tracing across the Rust→Python boundary.
 
+---
+
 ## Error Code Mapping
 
 | Python Exception | gRPC Status Code | HTTP (after Rust mapping) |
-|-----------------|-----------------|--------------------------|
+|-----------------|-----------------|--------------------------| 
 | `ConversationNotFound` | `NOT_FOUND` | 404 |
 | `PermissionError` | `PERMISSION_DENIED` | 403 |
 | `ValidationError` (Pydantic) | `INVALID_ARGUMENT` | 400 |
@@ -130,3 +135,5 @@ The correlation ID is included in all log lines within the request scope, enabli
 | `TimeoutError` | `DEADLINE_EXCEEDED` | 504 |
 | `ServiceUnavailable` | `UNAVAILABLE` | 503 |
 | All others | `INTERNAL` | 500 |
+
+Error mapping is centralized in `shared/grpc/errors.py`.

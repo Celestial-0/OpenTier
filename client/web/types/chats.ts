@@ -11,8 +11,8 @@ export interface SourceChunk {
     document_id: string;
     content: string;
     relevance_score: number;
-    document_title?: string;
-    source_url?: string;
+    document_title?: string | null;
+    source_url?: string | null;
 }
 
 export interface ChatMessage {
@@ -20,7 +20,7 @@ export interface ChatMessage {
     role: MessageRole;
     content: string;
     sources?: SourceChunk[];
-    created_at: number; // Unix timestamp in seconds
+    created_at: string | number; // ISO-8601 string from backend or unix number
     parent_id?: string; // UUID of the parent message for branching
 }
 
@@ -29,8 +29,8 @@ export interface ConversationSummary {
     title?: string | null;
     message_count: number;
     last_message_preview?: string | null;
-    created_at: number;
-    updated_at: number;
+    created_at: string | number;
+    updated_at: string | number;
 }
 
 export interface ConversationListResponse {
@@ -48,8 +48,8 @@ export interface ConversationWithMessages {
     id: string;
     title?: string | null;
     messages: ChatMessage[];
-    created_at: number;
-    updated_at: number;
+    created_at: string | number;
+    updated_at: string | number;
 }
 
 export interface ChatMetrics {
@@ -67,7 +67,7 @@ export interface MessageResponse {
     content: string;
     sources: SourceChunk[];
     metrics?: ChatMetrics;
-    created_at: number;
+    created_at: string | number;
 }
 
 export interface SendMessageRequest {
@@ -90,7 +90,6 @@ export interface ChatState {
     messages: Record<string, ChatMessage[]>;
     activeMessageId: Record<string, string | null>;
     nextCursor: string | null;
-    freeMessageCount: number;
     isLoadingConversations: boolean;
     isLoadingMessages: boolean;
     isSendingMessage: boolean;

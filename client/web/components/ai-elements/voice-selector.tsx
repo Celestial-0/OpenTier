@@ -1,7 +1,6 @@
 "use client";
 
-import type { ComponentProps, ReactNode } from "react";
-
+import { useControllableState } from "@radix-ui/react-use-controllable-state";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -33,7 +32,8 @@ import {
   VenusAndMarsIcon,
   VenusIcon,
 } from "lucide-react";
-import { createContext, useCallback, useContext, useMemo, useState } from "react";
+import type { ComponentProps, ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo } from "react";
 
 interface VoiceSelectorContextValue {
   value: string | undefined;
@@ -72,24 +72,17 @@ export const VoiceSelector = ({
   children,
   ...props
 }: VoiceSelectorProps) => {
-  const [valueState, setValueState] = useState<string | undefined>(defaultValue);
-  const value = valueProp !== undefined ? valueProp : valueState;
-  const setValue = useCallback(
-    (newValue: string | undefined) => {
-      setValueState(newValue);
-      onValueChange?.(newValue);
-    },
-    [onValueChange]
-  );
+  const [value, setValue] = useControllableState({
+    defaultProp: defaultValue,
+    onChange: onValueChange,
+    prop: valueProp,
+  });
 
-  const [openState, setOpenState] = useState<boolean>(defaultOpen ?? false);
-  const open = openProp !== undefined ? openProp : openState;
-  const setOpen = useCallback(
-    (newOpen: boolean) => {
-      setOpenState(newOpen);
-    },
-    []
-  );
+  const [open, setOpen] = useControllableState({
+    defaultProp: defaultOpen,
+    onChange: onOpenChange ? (v: boolean) => (onOpenChange as any)(v) : undefined,
+    prop: openProp,
+  });
 
   const voiceSelectorContext = useMemo(
     () => ({ open, setOpen, setValue, value }),
@@ -98,7 +91,7 @@ export const VoiceSelector = ({
 
   return (
     <VoiceSelectorContext.Provider value={voiceSelectorContext}>
-      <Dialog onOpenChange={(newOpen, eventDetails) => { setOpen(newOpen); onOpenChange?.(newOpen, eventDetails); }} open={open} {...props}>
+      <Dialog onOpenChange={setOpen} open={open} {...props}>
         {children}
       </Dialog>
     </VoiceSelectorContext.Provider>
