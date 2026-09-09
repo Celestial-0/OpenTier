@@ -70,11 +70,11 @@ export const Overview = () => {
     return 0;
   }, [summary]);
 
-  const estimatedCost = useMemo(() => {
+  const totalCreditsUsed = useMemo(() => {
     if (summary && summary.total_spent > 0) {
-      return `$${Number(summary.total_spent).toFixed(2)}`;
+      return Number(summary.total_spent).toFixed(2);
     }
-    return "$0.00";
+    return "0.00";
   }, [summary]);
 
   const handleDownloadReport = (format: "json" | "csv") => {
@@ -86,8 +86,8 @@ export const Overview = () => {
         totalConversations: totalConversationsCount,
         totalMessages,
         totalTokens,
-        estimatedCost,
-        availableBalance: summary ? Number(summary.balance).toFixed(2) : "0.00",
+        creditsConsumed: `${totalCreditsUsed} credits`,
+        availableBalance: summary ? `${Number(summary.balance).toFixed(2)} credits` : "0.00 credits",
         activeSessions: sessions.length,
       },
       conversations: conversations.slice(0, 10).map((c) => ({
@@ -114,7 +114,8 @@ export const Overview = () => {
         ["Total Conversations", String(totalConversationsCount)],
         ["Total Messages", String(totalMessages)],
         ["Total Tokens", String(totalTokens)],
-        ["Estimated Cost", estimatedCost],
+        ["Credits Consumed", `${totalCreditsUsed} credits`],
+        ["Available Balance", summary ? `${Number(summary.balance).toFixed(2)} credits` : "0.00 credits"],
         ["Active Sessions", String(sessions.length)],
       ];
       const csvContent = "data:text/csv;charset=utf-8," + csvRows.map((e) => e.join(",")).join("\n");
@@ -225,6 +226,7 @@ export const Overview = () => {
               : "Total tokens consumed"
           }
           value={totalTokens.toLocaleString()}
+          targetText="tokens"
           progressValue={
             summary && summary.total_tokens_in + summary.total_tokens_out > 0
               ? Math.min(
@@ -245,6 +247,7 @@ export const Overview = () => {
           title="Activity"
           subtitle={`${conversations.length} total conversation${conversations.length === 1 ? "" : "s"}`}
           value={totalMessages.toLocaleString()}
+          targetText="msgs"
           progressValue={
             conversations.length > 0
               ? Math.min(
@@ -260,15 +263,16 @@ export const Overview = () => {
           progressVariant="amber"
         />
 
-        {/* Card 3: Cost */}
+        {/* Card 3: Credits Consumed */}
         <MetricCard
-          title="Cost"
+          title="Credits Consumed"
           subtitle={
             summary && summary.total_granted > 0
-              ? `Lifetime spent of $${Number(summary.total_granted).toFixed(2)} granted`
+              ? `Lifetime ${Number(summary.total_spent).toFixed(2)} of ${Number(summary.total_granted).toFixed(2)} granted`
               : "Total credit expenditure"
           }
-          value={estimatedCost}
+          value={totalCreditsUsed}
+          targetText="credits"
           progressValue={
             summary && summary.total_granted > 0
               ? Math.min(
@@ -285,10 +289,11 @@ export const Overview = () => {
           title="Available Balance"
           subtitle={
             summary && summary.held > 0
-              ? `$${Number(summary.held).toFixed(2)} held in flight`
+              ? `${Number(summary.held).toFixed(2)} credits held in flight`
               : "Ready for AI requests"
           }
-          value={summary ? `$${Number(summary.balance).toFixed(2)}` : "$0.00"}
+          value={summary ? Number(summary.balance).toFixed(2) : "0.00"}
+          targetText="credits"
           progressValue={
             summary && summary.total_granted > 0
               ? Math.min(

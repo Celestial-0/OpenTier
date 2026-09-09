@@ -96,6 +96,16 @@ export const ChatArea = () => {
     fetchAvailableModels();
   }, [fetchAvailableModels]);
 
+  // Auto-select first enabled model for the first time if none is selected
+  useEffect(() => {
+    if (!model && availableModels.length > 0) {
+      const defaultModel = availableModels.find((m) => m.is_default) || availableModels[0];
+      if (defaultModel) {
+        setSelectedModel(defaultModel.slug);
+      }
+    }
+  }, [model, availableModels, setSelectedModel]);
+
   const modelItems = useMemo(() => availableModels.map(m => ({
       id: m.slug,
       name: m.display_name,

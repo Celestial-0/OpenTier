@@ -146,7 +146,7 @@ export const ChangePasswordRequestSchema = z.object({
 export const SessionSchema = z.object({
     id: z.uuid(),
     user_id: z.uuid(),
-    session_token: z.string(),
+    session_token: z.string().optional(),
     expires_at: z.string(),
     ip_address: z.string().nullable().optional(),
     user_agent: z.string().nullable().optional(),

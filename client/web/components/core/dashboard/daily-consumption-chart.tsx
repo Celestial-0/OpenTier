@@ -150,7 +150,7 @@ export const DailyConsumptionChart: React.FC<DailyConsumptionChartProps> = ({
 
   const formatYAxis = (val: number) => {
     if (metricType === "cost") {
-      return `$${val}`;
+      return `${val} cr`;
     }
     if (val >= 1_000_000) {
       return `${(val / 1_000_000).toFixed(2).replace(/\.00$/, "")}M`;
@@ -166,10 +166,12 @@ export const DailyConsumptionChart: React.FC<DailyConsumptionChartProps> = ({
       <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between pb-4">
         <div>
           <CardTitle className="text-base sm:text-lg font-semibold tracking-tight text-foreground">
-            Daily token consumption
+            {metricType === "tokens" ? "Daily token consumption" : "Daily credit consumption"}
           </CardTitle>
           <CardDescription className="text-xs sm:text-sm text-muted-foreground mt-0.5">
-            Input and output token volume across your workspace
+            {metricType === "tokens"
+              ? "Input and output token volume across your workspace"
+              : "Credit consumption and expenditure across your workspace"}
           </CardDescription>
         </div>
 
@@ -177,14 +179,23 @@ export const DailyConsumptionChart: React.FC<DailyConsumptionChartProps> = ({
         <div className="flex items-center gap-3 flex-wrap">
           {/* Legend Dots */}
           <div className="flex items-center gap-4 text-xs text-muted-foreground mr-1">
-            <div className="flex items-center gap-1.5">
-              <span className="size-2 rounded-full bg-primary ring-2 ring-primary/20" />
-              <span>Input tokens</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="size-2 rounded-full bg-primary/40 ring-1 ring-border" />
-              <span>Output tokens</span>
-            </div>
+            {metricType === "tokens" ? (
+              <>
+                <div className="flex items-center gap-1.5">
+                  <span className="size-2 rounded-full bg-primary ring-2 ring-primary/20" />
+                  <span>Input tokens</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="size-2 rounded-full bg-primary/40 ring-1 ring-border" />
+                  <span>Output tokens</span>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-primary ring-2 ring-primary/20" />
+                <span>Credits consumed</span>
+              </div>
+            )}
           </div>
 
           {/* Metric View Toggle */}
@@ -211,7 +222,7 @@ export const DailyConsumptionChart: React.FC<DailyConsumptionChartProps> = ({
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              Cost
+              Credits
             </button>
           </div>
 
@@ -308,9 +319,9 @@ export const DailyConsumptionChart: React.FC<DailyConsumptionChartProps> = ({
                         ) : (
                           <>
                             <div className="flex justify-between items-center text-muted-foreground">
-                              <span>Cost:</span>
+                              <span>Credits:</span>
                               <span className="font-medium text-primary font-mono">
-                                ${item.cost.toFixed(4)}
+                                {item.cost.toFixed(4)} cr
                               </span>
                             </div>
                             <div className="flex justify-between items-center text-muted-foreground">
@@ -347,7 +358,7 @@ export const DailyConsumptionChart: React.FC<DailyConsumptionChartProps> = ({
                 ) : (
                   <Bar
                     dataKey="cost"
-                    name="Cost"
+                    name="Credits"
                     fill="currentColor"
                     className="fill-primary"
                     radius={[3, 3, 0, 0]}

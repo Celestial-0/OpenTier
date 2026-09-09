@@ -209,11 +209,9 @@ export const ChatInput = ({
                           provider={selectedModelData.chefSlug}
                         />
                       )}
-                      {selectedModelData?.name && (
-                        <ModelSelectorName>
-                          {selectedModelData.name}
-                        </ModelSelectorName>
-                      )}
+                      <ModelSelectorName>
+                        {selectedModelData?.name || "Select model"}
+                      </ModelSelectorName>
                     </PromptInputButton>
                   }
                 />

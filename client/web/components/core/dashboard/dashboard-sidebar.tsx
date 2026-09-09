@@ -211,7 +211,7 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
                 </SidebarMenuButton>
                 {summary && (
                   <SidebarMenuBadge className="text-xs font-mono font-semibold text-primary">
-                    ${Number(summary.balance).toFixed(2)}
+                    {Number(summary.balance).toFixed(2)} cr
                   </SidebarMenuBadge>
                 )}
               </SidebarMenuItem>
@@ -419,7 +419,7 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
               </span>
             </div>
             <span className="text-xs font-bold font-mono text-primary">
-              ${summary ? Number(summary.balance).toFixed(2) : "0.00"}
+              {summary ? `${Number(summary.balance).toFixed(2)} cr` : "0.00 cr"}
             </span>
           </div>
 

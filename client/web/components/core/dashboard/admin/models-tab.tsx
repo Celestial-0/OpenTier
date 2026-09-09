@@ -677,7 +677,7 @@ export const AdminModelsTab = ({
                                 <TableHead className="py-2.5">Type</TableHead>
                                 <TableHead className="py-2.5">Provider</TableHead>
                                 <TableHead className="py-2.5">Specs / Dimensions</TableHead>
-                                <TableHead className="py-2.5">Pricing (/Mtok)</TableHead>
+                                <TableHead className="py-2.5">Pricing (cr/Mtok)</TableHead>
                                 <TableHead className="py-2.5">Fallback Chain</TableHead>
                                 <TableHead className="py-2.5">Status</TableHead>
                                 <TableHead className="text-right py-2.5 pr-4">Actions</TableHead>
@@ -767,8 +767,8 @@ export const AdminModelsTab = ({
                                                     <span className="text-muted-foreground">Free</span>
                                                 ) : (
                                                     <div className="space-y-0.5">
-                                                        <div>In: ${m.input_cost_per_mtok}</div>
-                                                        <div className="text-muted-foreground">Out: ${m.output_cost_per_mtok}</div>
+                                                        <div>In: {m.input_cost_per_mtok} cr</div>
+                                                        <div className="text-muted-foreground">Out: {m.output_cost_per_mtok} cr</div>
                                                     </div>
                                                 )}
                                             </TableCell>
@@ -1059,7 +1059,7 @@ export const AdminModelsTab = ({
                                 </div>
                                 <div className="grid grid-cols-2 gap-3.5">
                                     <div className="space-y-1.5">
-                                        <Label htmlFor="model-in-cost" className="text-xs font-medium">Input Cost ($/Mtok)</Label>
+                                        <Label htmlFor="model-in-cost" className="text-xs font-medium">Input Cost (credits/Mtok)</Label>
                                         <Input
                                             id="model-in-cost"
                                             type="number"
@@ -1075,7 +1075,7 @@ export const AdminModelsTab = ({
                                         />
                                     </div>
                                     <div className="space-y-1.5">
-                                        <Label htmlFor="model-out-cost" className="text-xs font-medium">Output Cost ($/Mtok)</Label>
+                                        <Label htmlFor="model-out-cost" className="text-xs font-medium">Output Cost (credits/Mtok)</Label>
                                         <Input
                                             id="model-out-cost"
                                             type="number"

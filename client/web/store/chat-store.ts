@@ -23,6 +23,7 @@ import {
     sendConversationMessageApi,
     streamConversationMessageApi,
     updateConversationTitleApi,
+    type StreamChatPayload,
 } from '@/lib/api/chat-api';
 import { fetchAvailableModelsApi } from '@/lib/api/models-api';
 import type { ChatModelResponse } from '@/lib/api-types';
@@ -107,7 +108,24 @@ export const useChatStore = create<ChatState>()(
                     set({ isLoadingModels: true });
                     try {
                         const models = await fetchAvailableModelsApi();
-                        set({ availableModels: models, isLoadingModels: false });
+                        const currentSelected = get().selectedModel;
+                        let selectedModel = currentSelected;
+
+                        // Auto-select first enabled model for first time or if previous model is no longer available
+                        if (!currentSelected || !models.some((m) => m.slug === currentSelected)) {
+                            if (models.length > 0) {
+                                const defaultModel = models.find((m) => m.is_default) || models[0];
+                                selectedModel = defaultModel.slug;
+                            } else {
+                                selectedModel = null;
+                            }
+                        }
+
+                        set({
+                            availableModels: models,
+                            selectedModel,
+                            isLoadingModels: false,
+                        });
                     } catch (err) {
                         set({ error: (err as Error).message, isLoadingModels: false });
                     }
@@ -316,11 +334,14 @@ export const useChatStore = create<ChatState>()(
                             // Note: GET method limits message size due to URL length. 
                             // If message is huge, we might need a workaround or server change.
 
-                            const payload = {
+                            const payload: StreamChatPayload = {
                                 message: content,
-                                temperature: 0.7,
-                                use_rag: true,
-                                max_tokens: 1000,
+                                config: {
+                                    temperature: 0.7,
+                                    use_rag: true,
+                                    max_tokens: 1000,
+                                    model: get().selectedModel || undefined,
+                                },
                                 parent_id: tempUserMessage.parent_id,
                                 user_message_id: tempUserId,
                                 assistant_message_id: tempAssistantId,
@@ -421,7 +442,8 @@ export const useChatStore = create<ChatState>()(
                                 message: content,
                                 config: {
                                     use_rag: true,
-                                    temperature: 0.7
+                                    temperature: 0.7,
+                                    model: get().selectedModel || undefined,
                                 },
                                 parent_id: tempUserMessage.parent_id,
                                 user_message_id: tempUserId,
@@ -583,11 +605,14 @@ export const useChatStore = create<ChatState>()(
 
                     // Stream the new response
                     try {
-                        const payload = {
+                        const payload: StreamChatPayload = {
                             message: newContent,
-                            temperature: 0.7,
-                            use_rag: true,
-                            max_tokens: 1000,
+                            config: {
+                                temperature: 0.7,
+                                use_rag: true,
+                                max_tokens: 1000,
+                                model: get().selectedModel || undefined,
+                            },
                             parent_id: originalMsg.parent_id,
                             user_message_id: newUserId,
                             assistant_message_id: newAssistantId,
@@ -780,11 +805,14 @@ export const useChatStore = create<ChatState>()(
                         // Assuming regenerate counts as a message or maybe not? 
                         // strict: yes. loose: no. Let's ignore for now.
 
-                        const payload = {
+                        const payload: StreamChatPayload = {
                             message: content,
-                            temperature: 0.7,
-                            use_rag: true,
-                            max_tokens: 1000,
+                            config: {
+                                temperature: 0.7,
+                                use_rag: true,
+                                max_tokens: 1000,
+                                model: get().selectedModel || undefined,
+                            },
                             parent_id: parentId, // Reroute back from the same user parent
                             regenerate_user_msg_id: lastUserMsg.id,
                             assistant_message_id: tempAssistantId,
