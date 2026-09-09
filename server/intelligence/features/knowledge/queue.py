@@ -76,7 +76,8 @@ async def find_stuck_jobs(
         await session.execute(
             text(
                 "SELECT id::text FROM ingestion_jobs "
-                "WHERE params != '{}'::jsonb "
+                "WHERE params IS NOT NULL "
+                "AND params::jsonb != '{}'::jsonb "
                 "AND ( "
                 "  status = 'queued' "
                 "  OR (status = 'processing' AND "

@@ -3,8 +3,8 @@ use uuid::Uuid;
 
 use crate::auth::{password, session};
 use crate::users::{
-    ChangePasswordRequest, ChangePasswordResponse, DeleteAccountResponse, SessionListResponse,
-    UpdateProfileRequest, UserError, UserResponse,
+    ChangePasswordRequest, ChangePasswordResponse, DeleteAccountResponse, Session,
+    SessionListResponse, UpdateProfileRequest, UserError, UserResponse,
 };
 
 // ===== User Retrieval =====
@@ -198,12 +198,36 @@ pub async fn soft_delete_account(
 
 // ===== Session Management =====
 
-/// Get all active sessions for a user
+/// Get all active sessions for a user, enriched with device parsing from woothee
 pub async fn get_user_sessions(
     db: &PgPool,
     user_id: Uuid,
+    current_token_hash: Option<&str>,
 ) -> Result<SessionListResponse, UserError> {
-    let sessions = crate::infra::postgres::user_repo::list_sessions(db, user_id).await?;
+    let rows = crate::infra::postgres::user_repo::list_sessions(db, user_id).await?;
+
+    let sessions = rows
+        .into_iter()
+        .map(|row| {
+            let is_current = current_token_hash
+                .map(|cur| row.session_token_hash.as_deref() == Some(cur))
+                .unwrap_or(false);
+
+            let device_info = crate::common::device::parse_user_agent(row.user_agent.as_deref());
+
+            Session {
+                id: row.id,
+                user_id: row.user_id,
+                expires_at: row.expires_at,
+                ip_address: row.ip_address,
+                user_agent: row.user_agent,
+                device_name: Some(device_info.name),
+                device_type: Some(device_info.category),
+                is_current,
+                created_at: row.created_at,
+            }
+        })
+        .collect();
 
     Ok(SessionListResponse { sessions })
 }

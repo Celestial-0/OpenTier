@@ -7,7 +7,6 @@ from typing import Any
 from core.config import IST
 
 from sqlalchemy import (
-    JSON,
     Boolean,
     DateTime,
     ForeignKey,
@@ -17,7 +16,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -41,7 +40,7 @@ class Document(Base):
     document_type: Mapped[str] = mapped_column(String(50), nullable=False)
     source_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     metadata_: Mapped[dict[str, Any]] = mapped_column(
-        "metadata", JSON, nullable=False, default=dict
+        "metadata", JSONB, nullable=False, default=dict
     )
     is_global: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -82,7 +81,7 @@ class DocumentChunk(Base):
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     # Vectors live in Qdrant; text remains here as source of truth.
     metadata_: Mapped[dict[str, Any]] = mapped_column(
-        "metadata", JSON, nullable=False, default=dict
+        "metadata", JSONB, nullable=False, default=dict
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -110,8 +109,11 @@ class IngestionJob(Base):
     total_documents: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     processed_documents: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     failed_documents: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    errors: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    errors: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     progress_percent: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    params: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict
+    )
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -134,7 +136,7 @@ class Conversation(Base):
     user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     title: Mapped[str | None] = mapped_column(String(500), nullable=True)
     metadata_: Mapped[dict[str, Any]] = mapped_column(
-        "metadata", JSON, nullable=False, default=dict
+        "metadata", JSONB, nullable=False, default=dict
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -175,10 +177,10 @@ class ChatMessage(Base):
     )  # user, assistant, system
     content: Mapped[str] = mapped_column(Text, nullable=False)
     sources: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSON, nullable=False, default=list
+        JSONB, nullable=False, default=list
     )  # RAG sources used
     metadata_: Mapped[dict[str, Any]] = mapped_column(
-        "metadata", JSON, nullable=False, default=dict
+        "metadata", JSONB, nullable=False, default=dict
     )
     parent_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
@@ -206,7 +208,7 @@ class UserMemory(Base):
     user_id: Mapped[str] = mapped_column(String(255), primary_key=True)
     memory: Mapped[str] = mapped_column(Text, nullable=False, default="")
     metadata_: Mapped[dict[str, Any]] = mapped_column(
-        "metadata", JSON, nullable=False, default=dict
+        "metadata", JSONB, nullable=False, default=dict
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

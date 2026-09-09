@@ -1,4 +1,4 @@
-# <img src="assets/logo.svg" alt="OpenTier Logo" width="45" align="top" /> OpenTier [![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/Celestial-0/OpenTier)
+# <img src="assets/logo.svg" alt="OpenTier Logo" width="45" align="top" /> OpenTier [![Version](https://img.shields.io/badge/version-1.1.1-blue.svg)](https://github.com/Celestial-0/OpenTier)
 
 **The high-performance foundation for scalable AI knowledge infrastructure.**
 

@@ -57,6 +57,10 @@ CREATE TABLE IF NOT EXISTS ingestion_jobs (
     completed_at TIMESTAMPTZ
 );
 
+-- Ensure params column exists on existing databases where ingestion_jobs was created prior to v1.1.0
+ALTER TABLE ingestion_jobs ADD COLUMN IF NOT EXISTS params JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE ingestion_jobs ALTER COLUMN params TYPE JSONB USING params::jsonb;
+
 CREATE INDEX IF NOT EXISTS idx_ingestion_jobs_user_id ON ingestion_jobs(user_id);
 CREATE INDEX IF NOT EXISTS idx_ingestion_jobs_status ON ingestion_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_ingestion_jobs_status_started ON ingestion_jobs(status, started_at);

@@ -150,6 +150,9 @@ export const SessionSchema = z.object({
     expires_at: z.string(),
     ip_address: z.string().nullable().optional(),
     user_agent: z.string().nullable().optional(),
+    device_name: z.string().nullable().optional(),
+    device_type: z.string().nullable().optional(),
+    is_current: z.boolean().optional(),
     created_at: z.string(),
 });
 

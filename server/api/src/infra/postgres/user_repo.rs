@@ -3,7 +3,7 @@
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::users::{Session, UserAdminView, UserResponse};
+use crate::users::{UserAdminView, UserResponse};
 
 pub async fn get_user_by_id(db: &PgPool, user_id: Uuid) -> Result<UserResponse, sqlx::Error> {
     sqlx::query_as!(
@@ -140,18 +140,28 @@ pub async fn soft_delete(
     Ok(())
 }
 
-pub async fn list_sessions(db: &PgPool, user_id: Uuid) -> Result<Vec<Session>, sqlx::Error> {
-    sqlx::query_as!(
-        Session,
+#[derive(Debug, sqlx::FromRow)]
+pub struct SessionRow {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub session_token_hash: Option<String>,
+    pub expires_at: chrono::DateTime<chrono::Utc>,
+    pub ip_address: Option<String>,
+    pub user_agent: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+pub async fn list_sessions(db: &PgPool, user_id: Uuid) -> Result<Vec<SessionRow>, sqlx::Error> {
+    sqlx::query_as::<_, SessionRow>(
         r#"
-        SELECT id, user_id, expires_at,
-               ip_address::TEXT as "ip_address?", user_agent, created_at
+        SELECT id, user_id, session_token_hash, expires_at,
+               ip_address::TEXT as ip_address, user_agent, created_at
         FROM sessions
         WHERE user_id = $1 AND expires_at > NOW()
         ORDER BY created_at DESC
         "#,
-        user_id
     )
+    .bind(user_id)
     .fetch_all(db)
     .await
 }
@@ -162,14 +172,37 @@ pub async fn revoke_session(
     session_id: Uuid,
     user_id: Uuid,
 ) -> Result<u64, sqlx::Error> {
-    let result = sqlx::query!(
-        "DELETE FROM sessions WHERE id = $1 AND user_id = $2",
-        session_id,
-        user_id
-    )
-    .execute(db)
-    .await?;
+    let result = sqlx::query("DELETE FROM sessions WHERE id = $1 AND user_id = $2")
+        .bind(session_id)
+        .bind(user_id)
+        .execute(db)
+        .await?;
     Ok(result.rows_affected())
+}
+
+/// Backfill session user agent and IP if missing
+pub async fn backfill_session_metadata(
+    db: &PgPool,
+    user_id: Uuid,
+    user_agent: Option<&str>,
+    ip_address: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    let _ = sqlx::query(
+        r#"
+        UPDATE sessions
+        SET user_agent = COALESCE(user_agent, $1),
+            ip_address = COALESCE(ip_address, $2::inet)
+        WHERE user_id = $3
+          AND (user_agent IS NULL OR ip_address IS NULL)
+          AND expires_at > NOW()
+        "#,
+    )
+    .bind(user_agent)
+    .bind(ip_address)
+    .bind(user_id)
+    .execute(db)
+    .await;
+    Ok(())
 }
 
 // ============================================================================

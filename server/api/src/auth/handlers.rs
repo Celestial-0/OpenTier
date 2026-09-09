@@ -49,7 +49,15 @@ pub async fn signin(
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
 
-    let ip_address = Some(IpNetwork::from(addr.ip()));
+    let ip_address = headers
+        .get("cf-connecting-ip")
+        .or_else(|| headers.get("x-real-ip"))
+        .or_else(|| headers.get("x-forwarded-for"))
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.split(',').next())
+        .and_then(|s| s.trim().parse::<std::net::IpAddr>().ok())
+        .map(IpNetwork::from)
+        .or_else(|| Some(IpNetwork::from(addr.ip())));
 
     let response = service::signin(&app_state.db, payload, ip_address, user_agent).await?;
     Ok(Json(response))

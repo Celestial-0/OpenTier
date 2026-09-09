@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import {
   Sidebar,
   SidebarContent,
@@ -43,11 +43,9 @@ import {
   Activity,
   LineChart,
   Search,
-  Sparkles,
   ArrowUpRight,
   Zap,
   ChevronsUpDown,
-  Check,
   Plus,
   Sun,
   Moon,
@@ -84,7 +82,7 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
   const handleNavClick = (view: DashboardView, adminTab?: string) => {
     setActiveDashboardView(view);
     if (adminTab) {
-      setAdminActiveTab(adminTab as any);
+      setAdminActiveTab(adminTab);
     }
     if (isMobile) {
       setOpenMobile(false);
@@ -209,11 +207,6 @@ export const DashboardSidebar: React.FC<DashboardSidebarProps> = ({
                   <Coins className="size-4 text-muted-foreground group-hover/menu-button:text-sidebar-foreground group-data-[active=true]/menu-button:text-primary" />
                   <span>Credits & Billing</span>
                 </SidebarMenuButton>
-                {summary && (
-                  <SidebarMenuBadge className="text-xs font-mono font-semibold text-primary">
-                    {Number(summary.balance).toFixed(2)} cr
-                  </SidebarMenuBadge>
-                )}
               </SidebarMenuItem>
 
               {/* Sessions & Security */}

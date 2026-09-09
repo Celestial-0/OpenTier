@@ -1,4 +1,5 @@
-import { Database, FileText, Trash2 } from "lucide-react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Database01Icon, File01Icon, Delete02Icon } from "@hugeicons/core-free-icons";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -13,16 +14,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TabsContent } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
 import { IngestionQueue } from "../ingestion-queue";
+import { AddResourceDialog } from "./add-resource-dialog";
 import type { AdminResourcesTabProps } from "./types";
 import { getStatusColor } from "./utils";
 
@@ -39,255 +35,32 @@ export const AdminResourcesTab = ({
     onDeleteResource,
 }: AdminResourcesTabProps) => {
     return (
-        <TabsContent value="resources" className="space-y-4">
+        <TabsContent value="resources" className="flex flex-col gap-4">
             <IngestionQueue />
 
             <Card>
-                <CardHeader className="flex flex-col items-start justify-between gap-3 pb-4 sm:flex-row sm:items-center sm:space-y-0">
-                    <div className="space-y-1">
+                <CardHeader className="flex flex-col items-start justify-between gap-3 pb-4 sm:flex-row sm:items-center">
+                    <div className="flex flex-col gap-1">
                         <CardTitle>Knowledge Base Resources</CardTitle>
                         <CardDescription>Manage ingested resources and their processing status</CardDescription>
                     </div>
-                    <Sheet open={isAddResourceOpen} onOpenChange={setIsAddResourceOpen}>
-                        <SheetTrigger render={<Button className="w-full sm:w-auto" />}>
-                            <Database className="mr-2 h-4 w-4" />
-                            Add Resource
-                        </SheetTrigger>
-                        <SheetContent className="w-full sm:max-w-2xl overflow-y-auto p-4">
-                            <SheetHeader>
-                                <SheetTitle>Add Knowledge Resource</SheetTitle>
-                                <SheetDescription>Add a URL or text content to the knowledge base for AI retrieval</SheetDescription>
-                            </SheetHeader>
-
-                            <div className="space-y-6 py-6">
-                                <div className="space-y-2">
-                                    <Label htmlFor="resource-type">Resource Type</Label>
-                                    <Select
-                                        value={resourceForm.resource_type}
-                                        onValueChange={(value: string | null) => {
-                                            if (!value) {
-                                                return;
-                                            }
-
-                                            setResourceForm((prev) => ({
-                                                ...prev,
-                                                resource_type: value,
-                                            }));
-                                        }}
-                                    >
-                                        <SelectTrigger id="resource-type">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="url">URL / Website</SelectItem>
-                                            <SelectItem value="text">Plain Text</SelectItem>
-                                            <SelectItem value="markdown">Markdown</SelectItem>
-                                            <SelectItem value="code">Code</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label htmlFor="content">{resourceForm.resource_type === "url" ? "URL" : "Content"}</Label>
-                                    <Textarea
-                                        id="content"
-                                        placeholder={
-                                            resourceForm.resource_type === "url" ? "https://example.com" : "Enter your content here..."
-                                        }
-                                        value={resourceForm.content}
-                                        onChange={(e) => {
-                                            const nextContent = e.target.value;
-                                            setResourceForm((prev) => ({
-                                                ...prev,
-                                                content: nextContent,
-                                            }));
-                                        }}
-                                        rows={resourceForm.resource_type === "url" ? 2 : 8}
-                                        className="resize-none"
-                                    />
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label htmlFor="title">Title (Optional)</Label>
-                                    <Input
-                                        id="title"
-                                        placeholder="Give this resource a memorable name"
-                                        value={resourceForm.title}
-                                        onChange={(e) => {
-                                            const nextTitle = e.target.value;
-                                            setResourceForm((prev) => ({
-                                                ...prev,
-                                                title: nextTitle,
-                                            }));
-                                        }}
-                                    />
-                                </div>
-
-                                <div className="space-y-4">
-                                    <div className="flex items-center justify-between border-b pb-4 mb-2">
-                                        <div className="space-y-0.5">
-                                            <Label htmlFor="is-global">Global Visibility</Label>
-                                            <p className="text-xs text-muted-foreground">Make this resource accessible to all users</p>
-                                        </div>
-                                        <Switch
-                                            id="is-global"
-                                            checked={resourceForm.is_global}
-                                            onCheckedChange={(checked) =>
-                                                setResourceForm((prev) => ({
-                                                    ...prev,
-                                                    is_global: checked,
-                                                }))
-                                            }
-                                        />
-                                    </div>
-
-                                    <h4 className="text-sm font-medium">Processing Configuration</h4>
-
-                                    {resourceForm.resource_type === "url" && (
-                                        <>
-                                            <div className="flex items-center justify-between">
-                                                <div className="space-y-0.5">
-                                                    <Label htmlFor="follow-links">Follow Links</Label>
-                                                    <p className="text-xs text-muted-foreground">Crawl linked pages</p>
-                                                </div>
-                                                <Switch
-                                                    id="follow-links"
-                                                    checked={resourceForm.config.follow_links}
-                                                    onCheckedChange={(checked) =>
-                                                        setResourceForm((prev) => ({
-                                                            ...prev,
-                                                            config: {
-                                                                ...prev.config,
-                                                                follow_links: checked,
-                                                            },
-                                                        }))
-                                                    }
-                                                />
-                                            </div>
-
-                                            {resourceForm.config.follow_links && (
-                                                <div className="space-y-2">
-                                                    <Label htmlFor="depth">Crawl Depth</Label>
-                                                    <Input
-                                                        id="depth"
-                                                        type="number"
-                                                        min="1"
-                                                        max="5"
-                                                        value={resourceForm.config.depth}
-                                                        onChange={(e) => {
-                                                            const nextDepth = parseInt(e.target.value, 10) || 2;
-                                                            setResourceForm((prev) => ({
-                                                                ...prev,
-                                                                config: {
-                                                                    ...prev.config,
-                                                                    depth: nextDepth,
-                                                                },
-                                                            }));
-                                                        }}
-                                                    />
-                                                </div>
-                                            )}
-                                        </>
-                                    )}
-
-                                    <div className="flex items-center justify-between">
-                                        <div className="space-y-0.5">
-                                            <Label htmlFor="generate-embeddings">Generate Embeddings</Label>
-                                            <p className="text-xs text-muted-foreground">Enable semantic search</p>
-                                        </div>
-                                        <Switch
-                                            id="generate-embeddings"
-                                            checked={resourceForm.config.generate_embeddings}
-                                            onCheckedChange={(checked) =>
-                                                setResourceForm((prev) => ({
-                                                    ...prev,
-                                                    config: {
-                                                        ...prev.config,
-                                                        generate_embeddings: checked,
-                                                    },
-                                                }))
-                                            }
-                                        />
-                                    </div>
-
-                                    <div className="flex items-center justify-between">
-                                        <div className="space-y-0.5">
-                                            <Label htmlFor="auto-clean">Auto Clean</Label>
-                                            <p className="text-xs text-muted-foreground">Remove boilerplate content</p>
-                                        </div>
-                                        <Switch
-                                            id="auto-clean"
-                                            checked={resourceForm.config.auto_clean}
-                                            onCheckedChange={(checked) =>
-                                                setResourceForm((prev) => ({
-                                                    ...prev,
-                                                    config: {
-                                                        ...prev.config,
-                                                        auto_clean: checked,
-                                                    },
-                                                }))
-                                            }
-                                        />
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <Label htmlFor="chunk-size">Chunk Size</Label>
-                                            <Input
-                                                id="chunk-size"
-                                                type="number"
-                                                min="100"
-                                                max="4000"
-                                                step="100"
-                                                value={resourceForm.config.chunk_size}
-                                                onChange={(e) => {
-                                                    const nextChunkSize = parseInt(e.target.value, 10) || 1000;
-                                                    setResourceForm((prev) => ({
-                                                        ...prev,
-                                                        config: {
-                                                            ...prev.config,
-                                                            chunk_size: nextChunkSize,
-                                                        },
-                                                    }));
-                                                }}
-                                            />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label htmlFor="chunk-overlap">Chunk Overlap</Label>
-                                            <Input
-                                                id="chunk-overlap"
-                                                type="number"
-                                                min="0"
-                                                max="500"
-                                                step="50"
-                                                value={resourceForm.config.chunk_overlap}
-                                                onChange={(e) => {
-                                                    const nextChunkOverlap = parseInt(e.target.value, 10) || 200;
-                                                    setResourceForm((prev) => ({
-                                                        ...prev,
-                                                        config: {
-                                                            ...prev.config,
-                                                            chunk_overlap: nextChunkOverlap,
-                                                        },
-                                                    }));
-                                                }}
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <SheetFooter>
-                                <Button variant="outline" onClick={() => setIsAddResourceOpen(false)} disabled={isSubmittingResource}>
-                                    Cancel
-                                </Button>
-                                <Button onClick={onAddResource} disabled={!resourceForm.content.trim() || isSubmittingResource}>
-                                    {isSubmittingResource ? "Adding..." : "Add Resource"}
-                                </Button>
-                            </SheetFooter>
-                        </SheetContent>
-                    </Sheet>
+                    <Button
+                        onClick={() => setIsAddResourceOpen(true)}
+                        className="w-full sm:w-auto"
+                    >
+                        <HugeiconsIcon icon={Database01Icon} className="mr-2 size-4" strokeWidth={2} />
+                        Add Resource
+                    </Button>
                 </CardHeader>
+
+                <AddResourceDialog
+                    open={isAddResourceOpen}
+                    onOpenChange={setIsAddResourceOpen}
+                    resourceForm={resourceForm}
+                    setResourceForm={setResourceForm}
+                    isSubmitting={isSubmittingResource}
+                    onSubmit={onAddResource}
+                />
                 <CardContent>
                     <div className="overflow-x-auto">
                     <Table className="min-w-190">
@@ -318,7 +91,7 @@ export const AdminResourcesTab = ({
                             ) : resources.length === 0 ? (
                                 <TableRow>
                                     <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
-                                        <Database className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                                        <HugeiconsIcon icon={Database01Icon} className="size-8 mx-auto mb-2 opacity-30" strokeWidth={1.5} />
                                         <p className="font-medium text-sm">No info</p>
                                         <p className="text-xs mt-1">No resources found</p>
                                     </TableCell>
@@ -331,7 +104,7 @@ export const AdminResourcesTab = ({
                                         </TableCell>
                                         <TableCell>
                                             <Badge variant="outline">
-                                                <FileText className="mr-1 h-3 w-3" />
+                                                <HugeiconsIcon icon={File01Icon} className="mr-1 size-3" strokeWidth={2} />
                                                 {resource.type || "No info"}
                                             </Badge>
                                         </TableCell>
@@ -355,7 +128,7 @@ export const AdminResourcesTab = ({
                                         <TableCell className="text-right">
                                             <AlertDialog>
                                                 <AlertDialogTrigger render={<Button variant="ghost" size="sm" />}>
-                                                    <Trash2 className="h-4 w-4" />
+                                                    <HugeiconsIcon icon={Delete02Icon} className="size-4" strokeWidth={2} />
                                                 </AlertDialogTrigger>
                                                 <AlertDialogContent>
                                                     <AlertDialogHeader>

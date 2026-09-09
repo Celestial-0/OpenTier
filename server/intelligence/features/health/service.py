@@ -1,4 +1,4 @@
-﻿"""Health domain service: uptime and status tracking."""
+"""Health domain service: uptime and status tracking."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ class HealthStatus:
 
 
 class HealthServiceLogic:
-    def __init__(self, version: str = "v1.1.0", start_time: float | None = None) -> None:
+    def __init__(self, version: str = "v1.1.1", start_time: float | None = None) -> None:
         self.version = version
         self.start_time = start_time or _START_TIME
 

@@ -31,7 +31,7 @@ const navbar = (
         />
         <b className="text-base">OpenTier Docs</b>
         <span className="rounded-md bg-neutral-200/60 dark:bg-neutral-800 px-1.5 py-0.5 text-xs font-mono text-muted-foreground border border-neutral-300 dark:border-neutral-700">
-          v1.1.0
+          v1.1.1
         </span>
       </div>
     }

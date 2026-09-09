@@ -3,6 +3,7 @@ use oauth2::{
     AuthorizationCode, CsrfToken, PkceCodeChallenge, PkceCodeVerifier, Scope, TokenResponse,
 };
 use sqlx::PgPool;
+use sqlx::types::ipnetwork::IpNetwork;
 
 use super::{Provider, build_oauth_client, discord, github, google, microsoft, x};
 use crate::auth::{AuthError, session, tokens};
@@ -82,6 +83,8 @@ pub async fn handle_callback(
     code: String,
     state: String,
     config: &OAuthConfig,
+    ip_address: Option<IpNetwork>,
+    user_agent: Option<String>,
 ) -> Result<OAuthCallbackResponse, AuthError> {
     let client = build_oauth_client(provider, config).map_err(|_| AuthError::Internal)?;
 
@@ -279,7 +282,7 @@ pub async fn handle_callback(
 
     // Create session with user's role
     let (session_token, expires_at) =
-        session::create_session(db, user_id, user_role, None, None).await?;
+        session::create_session(db, user_id, user_role, ip_address, user_agent).await?;
 
     let oauth_code = tokens::generate_token();
     let oauth_code_expiry = Utc::now() + chrono::Duration::minutes(2);

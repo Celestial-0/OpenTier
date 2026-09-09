@@ -9,6 +9,9 @@ export interface Session {
     expires_at: string;
     ip_address?: string | null;
     user_agent?: string | null;
+    device_name?: string | null;
+    device_type?: string | null;
+    is_current?: boolean;
     created_at: string;
 }
 

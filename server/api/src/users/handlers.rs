@@ -1,9 +1,10 @@
 use axum::{
     Extension, Json,
-    extract::{Path, Query, State},
-    http::HeaderMap,
+    extract::{ConnectInfo, Path, Query, State},
+    http::{HeaderMap, header},
 };
 use sqlx::PgPool;
+use std::net::SocketAddr;
 use uuid::Uuid;
 
 use super::errors::UserError;
@@ -78,9 +79,42 @@ pub async fn delete_account(
 /// List active sessions for current user
 pub async fn list_sessions(
     State(db): State<PgPool>,
+    headers: HeaderMap,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Extension(user_id): Extension<Uuid>,
 ) -> Result<Json<SessionListResponse>, UserError> {
-    let response = service::get_user_sessions(&db, user_id).await?;
+    // Backfill any active sessions for this user that currently have NULL user_agent or ip_address
+    let user_agent = headers
+        .get(header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    let ip_address = headers
+        .get("cf-connecting-ip")
+        .or_else(|| headers.get("x-real-ip"))
+        .or_else(|| headers.get("x-forwarded-for"))
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.split(',').next())
+        .and_then(|s| s.trim().parse::<std::net::IpAddr>().ok())
+        .map(|ip| ip.to_string())
+        .or_else(|| Some(addr.ip().to_string()));
+
+    let _ = crate::infra::postgres::user_repo::backfill_session_metadata(
+        &db,
+        user_id,
+        user_agent.as_deref(),
+        ip_address.as_deref(),
+    )
+    .await;
+
+    // Extract current session token hash from Authorization header
+    let current_token_hash = headers
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|h| h.strip_prefix("Bearer "))
+        .map(crate::auth::tokens::hash_token);
+
+    let response = service::get_user_sessions(&db, user_id, current_token_hash.as_deref()).await?;
     Ok(Json(response))
 }
 

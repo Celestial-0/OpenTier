@@ -59,6 +59,9 @@ pub struct Session {
     pub expires_at: DateTime<Utc>,
     pub ip_address: Option<String>,
     pub user_agent: Option<String>,
+    pub device_name: Option<String>,
+    pub device_type: Option<String>,
+    pub is_current: bool,
     pub created_at: DateTime<Utc>,
 }
 

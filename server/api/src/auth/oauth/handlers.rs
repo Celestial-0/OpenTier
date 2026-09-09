@@ -2,11 +2,13 @@
 
 use axum::{
     Json,
-    extract::{Path, Query, State},
-    http::StatusCode,
+    extract::{ConnectInfo, Path, Query, State},
+    http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Redirect},
 };
 use serde::{Deserialize, Serialize};
+use sqlx::types::ipnetwork::IpNetwork;
+use std::net::SocketAddr;
 use url::form_urlencoded::Serializer;
 
 use super::{Provider, service};
@@ -66,6 +68,8 @@ pub struct OAuthCallbackQuery {
 /// Handle OAuth provider callback
 pub async fn oauth_callback(
     State(app_state): State<AppState>,
+    headers: HeaderMap,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Path(provider_str): Path<String>,
     Query(params): Query<OAuthCallbackQuery>,
 ) -> Result<impl IntoResponse, StatusCode> {
@@ -103,12 +107,29 @@ pub async fn oauth_callback(
     let code = params.code.ok_or(StatusCode::BAD_REQUEST)?;
     let state = params.state.ok_or(StatusCode::BAD_REQUEST)?;
 
+    let user_agent = headers
+        .get(header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+
+    let ip_address = headers
+        .get("cf-connecting-ip")
+        .or_else(|| headers.get("x-real-ip"))
+        .or_else(|| headers.get("x-forwarded-for"))
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.split(',').next())
+        .and_then(|s| s.trim().parse::<std::net::IpAddr>().ok())
+        .map(IpNetwork::from)
+        .or_else(|| Some(IpNetwork::from(addr.ip())));
+
     let callback_result = service::handle_callback(
         &app_state.db,
         provider,
         code,
         state,
         &app_state.config.oauth,
+        ip_address,
+        user_agent,
     )
     .await;
 

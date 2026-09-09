@@ -44,13 +44,14 @@ export function Sessions() {
         setRevokingId(null);
     };
 
-    const getDeviceIcon = (userAgent: string | null | undefined) => {
-        const ua = userAgent?.toLowerCase() || "";
-        if (ua.includes("mobile") || ua.includes("android") || ua.includes("iphone")) {
-            return <Smartphone className="h-4 w-4" />;
+    const getDeviceIcon = (deviceType?: string | null) => {
+        if (deviceType === "mobile") {
+            return <Smartphone className="h-4 w-4 text-muted-foreground" />;
         }
-        return <Laptop className="h-4 w-4" />;
+        return <Laptop className="h-4 w-4 text-muted-foreground" />;
     };
+
+    const currentSession = sessions.find((s) => s.is_current) || sessions[0];
 
     return (
         <div className="space-y-6">
@@ -77,15 +78,13 @@ export function Sessions() {
                 <MetricCard
                     title="Current Device"
                     subtitle={
-                        sessions.length > 0 && sessions[0]?.ip_address
-                            ? `IP: ${sessions[0].ip_address}`
+                        currentSession?.ip_address
+                            ? `IP: ${currentSession.ip_address}`
                             : "Primary authenticated session"
                     }
                     value={
-                        sessions.length > 0
-                            ? sessions[0]?.user_agent?.includes("Mozilla")
-                                ? "Web Browser"
-                                : "Client App"
+                        currentSession
+                            ? currentSession.device_name || "Web Browser"
                             : "No active sessions"
                     }
                     progressValue={sessions.length > 0 ? 100 : 0}
@@ -117,22 +116,32 @@ export function Sessions() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {sessions.map((session: DashboardSession) => (
-                                    <TableRow key={session.id}>
-                                        <TableCell className="font-medium py-4">
-                                            <div className="flex items-center gap-2">
-                                                {getDeviceIcon(session.user_agent)}
-                                                <span className="truncate max-w-48" title={session.user_agent || "Unknown"}>
-                                                    {session.user_agent ? (session.user_agent.includes("Mozilla") ? "Web Browser" : session.user_agent) : "Unknown Device"}
-                                                </span>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell className="py-4">
-                                            <div className="flex items-center gap-2">
-                                                <Globe className="h-4 w-4 text-muted-foreground" />
-                                                {session.ip_address || "Unknown"}
-                                            </div>
-                                        </TableCell>
+                                {sessions.map((session: DashboardSession) => {
+                                    const isCurrent = Boolean(session.is_current);
+                                    const deviceName = session.device_name || (session.user_agent ? "Web Browser" : "Unknown Device");
+                                    return (
+                                        <TableRow key={session.id}>
+                                            <TableCell className="font-medium py-4">
+                                                <div className="flex items-center gap-2">
+                                                    {getDeviceIcon(session.device_type)}
+                                                    <span className="truncate max-w-48 font-medium" title={session.user_agent || deviceName}>
+                                                        {deviceName}
+                                                    </span>
+                                                    {isCurrent && (
+                                                        <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 font-normal bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800">
+                                                            This Device
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell className="py-4">
+                                                <div className="flex items-center gap-2">
+                                                    <Globe className="h-4 w-4 text-muted-foreground" />
+                                                    <span className="font-mono text-xs">
+                                                        {session.ip_address || "Unknown"}
+                                                    </span>
+                                                </div>
+                                            </TableCell>
                                         <TableCell className="py-4">
                                             {format(new Date(session.created_at), "MMM d, yyyy HH:mm")}
                                         </TableCell>
@@ -165,7 +174,8 @@ export function Sessions() {
                                             </AlertDialog>
                                         </TableCell>
                                     </TableRow>
-                                ))}
+                                    );
+                                })}
                             </TableBody>
                         </Table>
                     )}
