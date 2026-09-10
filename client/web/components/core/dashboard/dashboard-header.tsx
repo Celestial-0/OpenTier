@@ -37,9 +37,11 @@ import {
   LogOut,
 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { DashboardView } from "@/types/dashboard";
 
 export const DashboardHeader: React.FC = () => {
+  const router = useRouter();
   const { user, logout } = useAuth();
   const { setActiveDashboardView } = useUi();
   const { notifications, markNotificationAsRead } = useUserStore();
@@ -59,34 +61,34 @@ export const DashboardHeader: React.FC = () => {
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 w-full items-center justify-between border-b border-border/50 bg-background/95 px-4 backdrop-blur-md transition-all">
+    <header className="sticky top-0 z-30 flex h-12 sm:h-14 w-full items-center justify-between border-b border-border/50 bg-background/95 px-3 sm:px-4 backdrop-blur-md transition-all">
       {/* Left: Sidebar Trigger (only when sidebar is closed/mobile) & Workspace Indicator */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
         {(!open || isMobile) && (
           <>
-            <SidebarTrigger className="-ml-1 text-muted-foreground hover:text-foreground" />
-            <Separator orientation="vertical" className="h-4" />
+            <SidebarTrigger className="-ml-1 size-8 text-muted-foreground hover:text-foreground shrink-0 cursor-pointer" />
+            <Separator orientation="vertical" className="hidden sm:block h-4 shrink-0" />
           </>
         )}
 
         {/* User Account Workspace */}
-        <div className="flex items-center gap-2 px-1 text-xs font-semibold text-foreground">
-          <span className="truncate max-w-80">
+        <div className="flex items-center min-w-0 px-0.5 sm:px-1 text-xs font-semibold text-foreground">
+          <span className="truncate max-w-[120px] xs:max-w-[170px] sm:max-w-xs md:max-w-80">
             {user?.name ? `${user.name}'s Workspace` : "Personal Workspace"}
           </span>
         </div>
       </div>
 
       {/* Right: Actions, Notifications, Theme, User Avatar */}
-      <div className="flex items-center gap-2 sm:gap-3">
-        {/* Quick CTA */}
-        <Link href="/chat">
+      <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+        {/* Quick CTA - hidden on mobile to keep top bar compact */}
+        <Link href="/chat" className="hidden sm:inline-flex">
           <Button
             size="sm"
-            className="h-8 gap-1.5 text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 shadow-xs"
+            className="h-8 gap-1.5 text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 shadow-xs cursor-pointer"
           >
             <Plus className="size-3.5" />
-            <span className="hidden sm:inline">New Chat</span>
+            <span>New Chat</span>
           </Button>
         </Link>
 
@@ -97,7 +99,7 @@ export const DashboardHeader: React.FC = () => {
               <Button
                 variant="ghost"
                 size="icon"
-                className="relative size-8 text-muted-foreground hover:text-foreground"
+                className="relative size-8 text-muted-foreground hover:text-foreground cursor-pointer"
                 aria-label="Notifications"
               >
                 <Bell className="size-4" />
@@ -144,11 +146,11 @@ export const DashboardHeader: React.FC = () => {
           </PopoverContent>
         </Popover>
 
-        {/* Theme Toggle Button */}
+        {/* Theme Toggle Button - hidden on mobile since it is inside the profile dropdown */}
         <Button
           variant="ghost"
           size="icon"
-          className="size-8 text-muted-foreground hover:text-foreground"
+          className="hidden sm:inline-flex size-8 text-muted-foreground hover:text-foreground cursor-pointer"
           onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
           aria-label="Toggle theme"
         >
@@ -156,76 +158,101 @@ export const DashboardHeader: React.FC = () => {
           <Moon className="absolute size-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
         </Button>
 
-        {/* User Profile Avatar Dropdown */}
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-8 rounded-full ring-1 ring-border/60 hover:ring-primary/50 transition-all"
-              >
-                <Avatar className="size-8">
-                  <AvatarImage src={user?.avatar_url || ""} alt={user?.name || "User"} />
-                  <AvatarFallback className="text-xs font-semibold bg-muted text-foreground">
-                    {getInitials(user?.name)}
-                  </AvatarFallback>
-                </Avatar>
-              </Button>
-            }
-          />
-          <DropdownMenuContent align="end" className="w-56 text-xs">
-            <DropdownMenuGroup>
-              <DropdownMenuLabel className="font-normal p-3 pb-2">
-                <div className="flex flex-col space-y-1">
-                  <div className="flex items-center justify-between">
-                    <p className="font-semibold leading-none text-foreground">
-                      {user?.name || "Anonymous User"}
+        {/* User Profile Avatar Dropdown (only when sidebar is closed/mobile to avoid duplicate profile toggles) */}
+        {(!open || isMobile) && (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8 rounded-full ring-1 ring-border/60 hover:ring-primary/50 transition-all cursor-pointer"
+                >
+                  <Avatar className="size-8">
+                    <AvatarImage src={user?.avatar_url || ""} alt={user?.name || "User"} />
+                    <AvatarFallback className="text-xs font-semibold bg-muted text-foreground">
+                      {getInitials(user?.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end" className="w-56 text-xs">
+              <DropdownMenuGroup>
+                <DropdownMenuLabel className="font-normal p-3 pb-2">
+                  <div className="flex flex-col space-y-1">
+                    <div className="flex items-center justify-between">
+                      <p className="font-semibold leading-none text-foreground">
+                        {user?.name || "Anonymous User"}
+                      </p>
+                      <Badge variant="outline" className="text-xs capitalize">
+                        {user?.role || "user"}
+                      </Badge>
+                    </div>
+                    <p className="text-xs leading-none text-muted-foreground truncate">
+                      {user?.email || "No email"}
                     </p>
-                    <Badge variant="outline" className="text-xs capitalize">
-                      {user?.role || "user"}
-                    </Badge>
                   </div>
-                  <p className="text-xs leading-none text-muted-foreground truncate">
-                    {user?.email || "No email"}
-                  </p>
-                </div>
-              </DropdownMenuLabel>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
+                </DropdownMenuLabel>
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuItem
+                  onClick={() => router.push("/chat")}
+                  className="gap-2 cursor-pointer"
+                >
+                  <Plus className="size-3.5" />
+                  <span>New Chat</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                  className="gap-2 cursor-pointer"
+                >
+                  {theme === "dark" ? (
+                    <>
+                      <Sun className="size-3.5" />
+                      <span>Light Mode</span>
+                    </>
+                  ) : (
+                    <>
+                      <Moon className="size-3.5" />
+                      <span>Dark Mode</span>
+                    </>
+                  )}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setActiveDashboardView("profile")}
+                  className="gap-2 cursor-pointer"
+                >
+                  <User className="size-3.5" />
+                  <span>Profile</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setActiveDashboardView("credits")}
+                  className="gap-2 cursor-pointer"
+                >
+                  <Coins className="size-3.5 text-muted-foreground" />
+                  <span>Credits & Billing</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setActiveDashboardView("settings")}
+                  className="gap-2 cursor-pointer"
+                >
+                  <Settings className="size-3.5" />
+                  <span>Settings</span>
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
               <DropdownMenuItem
-                onClick={() => setActiveDashboardView("profile")}
-                className="gap-2 cursor-pointer"
+                onClick={() => logout()}
+                className="gap-2 cursor-pointer text-destructive focus:text-destructive"
               >
-                <User className="size-3.5" />
-                <span>Profile</span>
+                <LogOut className="size-3.5" />
+                <span>Sign Out</span>
               </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => setActiveDashboardView("credits")}
-                className="gap-2 cursor-pointer"
-              >
-                <Coins className="size-3.5 text-muted-foreground" />
-                <span>Credits & Billing</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => setActiveDashboardView("settings")}
-                className="gap-2 cursor-pointer"
-              >
-                <Settings className="size-3.5" />
-                <span>Settings</span>
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() => logout()}
-              className="gap-2 cursor-pointer text-destructive focus:text-destructive"
-            >
-              <LogOut className="size-3.5" />
-              <span>Sign Out</span>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
     </header>
   );

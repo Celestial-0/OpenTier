@@ -253,9 +253,9 @@ export const Admin = () => {
     };
 
     return (
-        <div className="space-y-6">
+        <div className="flex flex-col gap-6">
             <div className="pb-3 border-b border-border/50">
-                <h1 className="text-2xl font-bold tracking-tight text-foreground">
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
                     {activeTab === "stats" && "Platform Telemetry"}
                     {activeTab === "users" && "User Directory"}
                     {activeTab === "resources" && "Knowledge Resources"}
@@ -264,10 +264,12 @@ export const Admin = () => {
                     {activeTab === "monitoring" && "System Health & Monitoring"}
                 </h1>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                    Administrative configuration and controls managed via sidebar navigation
+                    {activeTab === "models"
+                        ? "Configure LLM providers, model specifications, embeddings, and routing."
+                        : "Administrative configuration and platform controls."}
                 </p>
             </div>
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col gap-4">
 
                 <AdminStatsTab stats={stats} isLoadingStats={isLoadingStats} />
 
